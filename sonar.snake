@@ -1,0 +1,24 @@
+# IMPORT MODULES
+import re
+import os
+import pprint
+import sys
+import yaml
+
+
+# DEBUGGING
+## use as DEBUG(variable) for debugging at runtime
+pp = pprint.PrettyPrinter(indent=4)
+DEBUG = pp.pprint
+
+
+# CONFIG
+REF_FASTA = "/home/stephan/Documents/scripts/covsonar/resources/NC_045512.2.fasta"
+
+
+# RULES
+rule all:
+    input:
+        "/home/stephan/Documents/sonar_test/test.iupac_consensus.fasta.mafft"
+
+include: "rules/run_mafft.smk"

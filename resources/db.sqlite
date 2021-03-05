@@ -1,0 +1,72 @@
+PRAGMA foreign_keys = OFF;
+
+CREATE TABLE IF NOT EXISTS sequence (
+  seqID INTEGER PRIMARY KEY,
+  seq TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS genome (
+  genomeID INTEGER PRIMARY KEY,
+  accession VARCHAR(100) NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  seqID INTEGER NOT NULL,
+  FOREIGN KEY (seqID)
+     REFERENCES sequence (seqID)
+        ON DELETE CASCADE
+        ON UPDATE NO ACTION
+);
+
+CREATE TABLE IF NOT EXISTS variant (
+  varID INTEGER PRIMARY KEY,
+  refpos INT NOT NULL,
+  ref VARCHAR(1000) NOT NULL,
+  alt VARCHAR(1000) NOT NULL,
+  level VARCHAR(3) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS seq2var (
+  varID INTEGER,
+  seqID INTEGER,
+  UNIQUE (seqID, varID),
+  FOREIGN KEY (seqID)
+    REFERENCES sequence (seqID)
+      ON DELETE CASCADE
+      ON UPDATE NO ACTION,
+  FOREIGN KEY (varID)
+    REFERENCES variant (varID)
+      ON DELETE CASCADE
+      ON UPDATE NO ACTION
+);
+
+CREATE TABLE IF NOT EXISTS lineage (
+  seqID INTEGER PRIMARY KEY,
+  lineage VARCHAR(45) NOT NULL,
+  pangolin_version VARCHAR(45) NOT NULL,
+  pangolearn_version VARCHAR(45) NOT NULL,
+  FOREIGN KEY (seqID)
+    REFERENCES sequence (seqID)
+      ON DELETE CASCADE
+      ON UPDATE NO ACTION
+);
+
+CREATE VIEW IF NOT EXISTS global
+AS
+SELECT
+	genome.genomeID,
+	accession,
+	description,
+  sequence.seqID,
+  seq,
+  variant.varID,
+  refpos,
+  ref,
+  alt,
+  level
+FROM
+	genome
+LEFT JOIN sequence USING (seqID)
+LEFT JOIN lineage USING (seqID)
+LEFT JOIN seq2var USING (seqID)
+LEFT JOIN variant USING (varID);
+
+PRAGMA foreign_keys = ON;
