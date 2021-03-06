@@ -8,6 +8,7 @@ import sys
 import argparse
 import sqlite3
 from sqlite3 import Error
+from Bio.SeqUtils.CheckSum import seguid as bioseguid
 
 def dict_factory(cursor, row):
     d = {}
@@ -32,6 +33,15 @@ class sonarDB():
 		if self.__conn:
 			self.__conn.close()
 
+	@property
+	def conn(self):
+		if not self.__conn:
+			self.__conn = self.connect()
+		return self.__conn
+
+	@staticmethod
+	def seguid(seq):
+		return bioseguid(seq)
 
 	def connect(self):
 		try:
@@ -41,50 +51,26 @@ class sonarDB():
 			exit(e)
 		return conn
 
-	@property
-	def conn(self):
-		if not self.__conn:
-			self.__conn = self.connect()
-		return self.__conn
-
-	def get_seqID(self, seq, acc=None):
-		if seq:
-			sql = "SELECT seqID from sequence WHERE seq = '" + seq + "'"
-		elif acc:
-			sql = "SELECT seqID from genome WHERE acc = '" + acc + "'"
-		else:
-			return None
-		return self.conn.cursor().execute(sql).fetchone()
+	def insert_sequence(self, seguid):
+		cursor = self.conn.cursor()
+		cursor.execute('INSERT OR IGNORE INTO sequence(seguid) VALUES(?)', (seguid, ))
 
 	def get_genome_data(self, acc):
 		sql = "SELECT * from genome WHERE accession = '" + acc + "'"
 		return self.conn.cursor().execute(sql).fetchone()
 
-	def insert_sequence(self, seq):
-		seqID = self.get_seqID(seq)
-		if seqID is None:
-			cursor = self.conn.cursor()
-			cursor.execute('INSERT INTO sequence VALUES (?, ?)', (None, seq))
-			seqID = cursor.lastrowid
-		else:
-			seqID = seqID['seqID']
-		return seqID
-
-	def insert_genome(self, acc, descr, seq, nuc_vars=None, aa_vars=None):
+	def insert_genome(self, acc, descr, seq):
 		genome_data = self.get_genome_data(acc)
+		seguid = sonarDB.seguid(seq)
 		if genome_data:
-			if genome_data['descr'] != descr or acc_seqID != self.get_seqID(seq=seq):
+			if genome_data['descr'] != descr or genome_data['seguid'] != seguid:
 				sys.exit("error: data collision for " + acc + " use update to change data of an existing genome accession.")
-			return genome_data['genomeID']
 		else:
-			seqID = self.insert_sequence(seq)
-			vals = [acc, descr, seqID]
+			self.insert_sequence(seguid)
 			cursor = self.conn.cursor()
-			cursor.execute('INSERT INTO genome VALUES (?, ?, ?, ?)', (None, acc, descr, seqID))
-			genomeID = cursor.lastrowid
-			return genomeID
+			cursor.execute('INSERT INTO genome(accession, description, seguid) VALUES (?, ?, ?)', (acc, descr, seguid))
 
-	def iter_genomes(self, table):
+	def iter_rows(self, table):
 		sql = "SELECT * FROM " + table
 		try:
 			rows = self.conn.cursor().execute(sql)
@@ -116,7 +102,7 @@ if __name__ == "__main__":
 		#print(db.insert_sequence("ATG"))
 		#print(db.insert_sequence("ATC"))
 		db.insert_genome("test1", "a test", "ATG")
-		for row in db.iter_genomes("global"):
+		for row in db.iter_rows("dna_view"):
 			print(row)
 		#db.exec("INSERT INTO sequence(seq) VALUES('ATG')")
 		#print(db.show_all("sequence"))

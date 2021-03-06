@@ -1,72 +1,81 @@
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS sequence (
-  seqID INTEGER PRIMARY KEY,
-  seq TEXT NOT NULL
+  seguid VARCHAR(40) NOT NULL PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS genome (
-  genomeID INTEGER PRIMARY KEY,
-  accession VARCHAR(100) NOT NULL UNIQUE,
+  accession VARCHAR(100) NOT NULL PRIMARY KEY,
   description TEXT NOT NULL,
-  seqID INTEGER NOT NULL,
-  FOREIGN KEY (seqID)
-     REFERENCES sequence (seqID)
-        ON DELETE CASCADE
-        ON UPDATE NO ACTION
+  seguid VARCHAR(40) NOT NULL,
+  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
 );
 
-CREATE TABLE IF NOT EXISTS variant (
-  varID INTEGER PRIMARY KEY,
-  refpos INT NOT NULL,
+CREATE TABLE IF NOT EXISTS dna (
+  varid INTEGER PRIMARY KEY,
+  seguid VARCHAR(40) NOT NULL,
+  pos INTEGER NOT NULL,
   ref VARCHAR(1000) NOT NULL,
   alt VARCHAR(1000) NOT NULL,
-  level VARCHAR(3) NOT NULL
+  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
 );
 
-CREATE TABLE IF NOT EXISTS seq2var (
-  varID INTEGER,
-  seqID INTEGER,
-  UNIQUE (seqID, varID),
-  FOREIGN KEY (seqID)
-    REFERENCES sequence (seqID)
-      ON DELETE CASCADE
-      ON UPDATE NO ACTION,
-  FOREIGN KEY (varID)
-    REFERENCES variant (varID)
-      ON DELETE CASCADE
-      ON UPDATE NO ACTION
+CREATE TABLE IF NOT EXISTS prot (
+  varid INTEGER PRIMARY KEY,
+  seguid VARCHAR(40) NOT NULL,
+  protein VARCHAR(45) NOT NULL,
+  pos INTEGER NOT NULL,
+  ref VARCHAR(1000) NOT NULL,
+  alt VARCHAR(1000) NOT NULL,
+  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
 );
 
 CREATE TABLE IF NOT EXISTS lineage (
-  seqID INTEGER PRIMARY KEY,
+  seguid VARCHAR(40) NOT NULL,
   lineage VARCHAR(45) NOT NULL,
   pangolin_version VARCHAR(45) NOT NULL,
   pangolearn_version VARCHAR(45) NOT NULL,
-  FOREIGN KEY (seqID)
-    REFERENCES sequence (seqID)
-      ON DELETE CASCADE
-      ON UPDATE NO ACTION
+  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
 );
 
-CREATE VIEW IF NOT EXISTS global
+CREATE INDEX IF NOT EXISTS idx_dna ON dna (pos, ref, alt);
+CREATE INDEX IF NOT EXISTS idx_prot ON prot(pos, ref, alt);
+
+CREATE VIEW IF NOT EXISTS dna_view
 AS
 SELECT
-	genome.genomeID,
 	accession,
 	description,
-  sequence.seqID,
-  seq,
-  variant.varID,
-  refpos,
+  genome.seguid,
+  pos,
   ref,
   alt,
-  level
+  lineage,
+  pangolin_version,
+  pangolearn_version
 FROM
 	genome
-LEFT JOIN sequence USING (seqID)
-LEFT JOIN lineage USING (seqID)
-LEFT JOIN seq2var USING (seqID)
-LEFT JOIN variant USING (varID);
+LEFT JOIN sequence USING (seguid)
+LEFT JOIN dna USING (seguid)
+LEFT JOIN lineage USING (seguid);
+
+CREATE VIEW IF NOT EXISTS prot_view
+AS
+SELECT
+	accession,
+	description,
+  genome.seguid,
+  protein,
+  pos,
+  ref,
+  alt,
+  lineage,
+  pangolin_version,
+  pangolearn_version
+FROM
+	genome
+LEFT JOIN sequence USING (seguid)
+LEFT JOIN prot USING (seguid)
+LEFT JOIN lineage USING (seguid);
 
 PRAGMA foreign_keys = ON;
