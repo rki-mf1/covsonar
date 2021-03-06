@@ -49,5 +49,5 @@ if __name__ == "__main__":
 	#add sequences
 	if args.tool == "add":
 		snr.add(*args.fasta, paranoid=args.paranoid)
-		for row in snr.iter_genomes():
-			print(row)
+		#for row in snr.iter_genomes():
+		#	print(row)
