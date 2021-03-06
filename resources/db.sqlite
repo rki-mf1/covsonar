@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS sequence (
 );
 
 CREATE TABLE IF NOT EXISTS genome (
-  accession VARCHAR(100) NOT NULL PRIMARY KEY,
-  description TEXT NOT NULL,
+  accession VARCHAR(150) NOT NULL PRIMARY KEY,
+  description TEXT,
   seguid VARCHAR(40) NOT NULL,
   FOREIGN KEY(seguid) REFERENCES sequence(seguid)
 );
