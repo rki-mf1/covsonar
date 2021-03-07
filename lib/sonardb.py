@@ -29,8 +29,14 @@ class sonarDB():
 		self.dbdir = os.path.abspath(db)
 		self.vfile = os.path.join(self.dbdir, ".version")
 		self.dbfile = os.path.join(self.dbdir, "sonar.db")
+		self.configfile = os.path.join(self.dbdir, "config.smk")
 		self.datadir = os.path.join(self.dbdir, "data")
 		self.seqdir = os.path.join(self.datadir, "seqs")
+		self.algndir = os.path.join(self.datadir, "algn")
+		self.lindir = os.path.join(self.datadir, "lin")
+		self.pangodir = os.path.join(self.dbdir, "pangodir")
+		self.pangoenv = os.path.join(self.dbdir, "pangoenv")
+		self.modulebase = os.path.dirname(os.path.realpath(__file__))
 		self.__max_supported_prev_version = "0.0.9"
 		self.__conn = None
 
@@ -56,7 +62,7 @@ class sonarDB():
 	def check_dir(self):
 		if not os.path.isdir(self.dbdir) or len(os.listdir(self.dbdir)) == 0:
 			self.create_dirs()
-		elif not os.path.isdir(self.seqdir) or not os.path.isfile(self.vfile) or not os.path.isfile(self.dbfile):
+		elif not os.path.isdir(self.seqdir) or not os.path.isfile(self.vfile) or not os.path.isfile(self.dbfile) or not os.path.isfile(self.configfile):
 			sys.exit("error: invalid sonar database directory")
 		else:
 			self.check_compatibility()
@@ -70,12 +76,32 @@ class sonarDB():
 		if version.parse(dir_version) > version.parse(module_version):
 			sys.exit("version conflict: please update sonar (current version: " + module_version + ") to fit your database (version: " + dir_version + ").")
 
+	def relativize_path(self, path):
+		return path.replace(self.dbdir, "").lstrip("\/")
+
+	def create_smk_config(self):
+		with open(self.configfile, "w") as handle:
+			handle.write("input: " + self.relativize_path(self.seqdir) + "\n")
+			handle.write("algn: " + self.relativize_path(self.algndir) + "\n")
+			handle.write("lin: " + self.relativize_path(self.lindir) + "\n")
+			handle.write("pangodir: " + self.relativize_path(self.pangodir) + "\n")
+			handle.write("pangoenv: " + self.relativize_path(self.pangoenv))
+
 	def create_dirs(self):
 		try:
+			# dirs
 			os.makedirs(self.seqdir, exist_ok=True)
+
+			# db file
 			open(self.dbfile, "w").close()
+
+			# version file
 			with open(self.vfile, "w") as handle:
 				handle.write(sonarDB.get_version())
+
+			#smk config file
+			self.create_smk_config()
+
 		except Error as e:
 			shutil.rmtree(self.dbdir)
 			exit(e)
