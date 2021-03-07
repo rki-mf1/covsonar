@@ -1,9 +1,9 @@
 # IMPORT MODULES
-import re
 import os
 import pprint
 import sys
 import yaml
+from lib import sonardb
 
 
 # DEBUGGING
@@ -12,13 +12,17 @@ pp = pprint.PrettyPrinter(indent=4)
 DEBUG = pp.pprint
 
 
-# CONFIG
-REF_FASTA = "/home/stephan/Documents/scripts/covsonar/resources/NC_045512.2.fasta"
-
+# INIT
+snr = sonardb.sonarDB(config['db'], check_db=False)
+config['seqdir'] = snr.seqdir
+config['algndir'] = snr.algndir
+config['lindir'] = snr.lindir
+config['pangoenv'] = snr.pangoenv
 
 # RULES
 rule all:
-    input:
-        "/home/stephan/Documents/sonar_test/test.iupac_consensus.fasta.mafft"
+	input:
+		expand(os.path.join(config['algndir'], "{query}.done"), query=[os.path.basename(x) for x in os.listdir(config['seqdir'])])
 
-include: "rules/run_mafft.smk"
+include: "rules/pairwise_align.smk"
+include: "rules/inspect_align.smk"

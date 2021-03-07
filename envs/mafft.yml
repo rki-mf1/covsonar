@@ -7,4 +7,3 @@ dependencies:
   - _libgcc_mutex=0.1=main
   - libgcc-ng=9.1.0=hdf63c60_0
   - mafft=7.475=h516909a_0
-prefix: /home/stephan/.miniconda3/envs/mafft

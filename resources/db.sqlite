@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS genome (
 CREATE TABLE IF NOT EXISTS dna (
   varid INTEGER PRIMARY KEY,
   seguid VARCHAR(40) NOT NULL,
-  pos INTEGER NOT NULL,
+  start INTEGER NOT NULL,
+	end INTEGER,
   ref VARCHAR(1000) NOT NULL,
   alt VARCHAR(1000) NOT NULL,
   FOREIGN KEY(seguid) REFERENCES sequence(seguid)
@@ -24,7 +25,8 @@ CREATE TABLE IF NOT EXISTS prot (
   varid INTEGER PRIMARY KEY,
   seguid VARCHAR(40) NOT NULL,
   protein VARCHAR(45) NOT NULL,
-  pos INTEGER NOT NULL,
+  start INTEGER NOT NULL,
+	end INTEGER,
   ref VARCHAR(1000) NOT NULL,
   alt VARCHAR(1000) NOT NULL,
   FOREIGN KEY(seguid) REFERENCES sequence(seguid)
@@ -38,8 +40,8 @@ CREATE TABLE IF NOT EXISTS lineage (
   FOREIGN KEY(seguid) REFERENCES sequence(seguid)
 );
 
-CREATE INDEX IF NOT EXISTS idx_dna ON dna (pos, ref, alt);
-CREATE INDEX IF NOT EXISTS idx_prot ON prot(pos, ref, alt);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dna ON dna (seguid, start, end, ref, alt);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(seguid, protein, start, end, ref, alt);
 
 CREATE VIEW IF NOT EXISTS dna_view
 AS
@@ -47,7 +49,8 @@ SELECT
 	accession,
 	description,
   genome.seguid,
-  pos,
+  start,
+	end,
   ref,
   alt,
   lineage,
@@ -66,7 +69,8 @@ SELECT
 	description,
   genome.seguid,
   protein,
-  pos,
+  start,
+	end,
   ref,
   alt,
   lineage,
