@@ -56,6 +56,9 @@ if __name__ == "__main__":
 	#view data
 	if args.tool == "view":
 		rows = [x for x in snr.db.iter_rows(args.branch + "_view")]
-		writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
-		writer.writeheader()
-		writer.writerows(snr.db.iter_rows(args.branch + "_view"))
+		if len(rows) == 0:
+			print("*** no data ***")
+		else:
+			writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
+			writer.writeheader()
+			writer.writerows(snr.db.iter_rows(args.branch + "_view"))
