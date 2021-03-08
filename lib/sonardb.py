@@ -263,6 +263,13 @@ class sonarDB():
 			varid = self.cursor.lastrowid
 		self.cursor.execute('INSERT OR IGNORE INTO sequence2dna(seqhash, varid) VALUES (?, ?)', (seqhash, varid))
 
+	def insert_prot_var(self, seqhash, start, end, ref, alt, protein):
+		varid = self.get_varid(start, end, ref, alt, protein)
+		if not varid:
+			self.cursor.execute('INSERT INTO prot(start, end, ref, alt) VALUES (?, ?, ?, ?, ?)', (protein, start, end, ref, alt))
+			varid = self.cursor.lastrowid
+		self.cursor.execute('INSERT OR IGNORE INTO sequence2prot(seqhash, varid) VALUES (?, ?)', (seqhash, varid))
+
 	def iter_rows(self, table):
 		sql = "SELECT * FROM " + table
 		for row in self.conn.cursor().execute(sql):
