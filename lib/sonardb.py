@@ -249,7 +249,7 @@ class sonarDB():
 		if protein is None:
 			res = self.cursor.execute('SELECT varid from dna WHERE start = ? AND end = ? AND ref = ? AND alt = ?', (start, end, ref, alt))
 		else:
-			res = self.cursor.execute('SELECT varid from protein WHERE protein = ? AND start = ? AND end = ? AND ref = ? AND alt = ?', (protein, start, end, ref, alt))
+			res = self.cursor.execute('SELECT varid from prot WHERE protein = ? AND start = ? AND end = ? AND ref = ? AND alt = ?', (protein, start, end, ref, alt))
 		row = res.fetchone()
 		if not row:
 			return False

@@ -94,7 +94,7 @@ SELECT
 FROM
 	genome
 LEFT JOIN sequence USING (seqhash)
-LEFT JOIN sequence2protein USING (seqhash)
+LEFT JOIN sequence2prot USING (seqhash)
 LEFT JOIN prot USING (varid)
 LEFT JOIN lineage USING (seqhash);
 
