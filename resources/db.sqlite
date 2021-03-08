@@ -1,54 +1,68 @@
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS sequence (
-  seguid VARCHAR(40) NOT NULL PRIMARY KEY
+  seqhash VARCHAR(40) NOT NULL PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS genome (
   accession VARCHAR(150) NOT NULL PRIMARY KEY,
   description TEXT,
-  seguid VARCHAR(40) NOT NULL,
-  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
+  seqhash VARCHAR(40) NOT NULL,
+  FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
+);
+
+CREATE TABLE IF NOT EXISTS sequence2dna (
+  seqhash VARCHAR(40) NOT NULL,
+	varid INTEGER NOT NULL,
+	PRIMARY KEY(seqhash, varid),
+	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash),
+	FOREIGN KEY(varid) REFERENCES dna(varid)
+);
+
+CREATE TABLE IF NOT EXISTS sequence2prot (
+  seqhash VARCHAR(40) NOT NULL,
+	varid INTEGER NOT NULL,
+	PRIMARY KEY(seqhash, varid),
+	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash),
+	FOREIGN KEY(varid) REFERENCES prot(varid)
 );
 
 CREATE TABLE IF NOT EXISTS dna (
   varid INTEGER PRIMARY KEY,
-  seguid VARCHAR(40) NOT NULL,
   start INTEGER NOT NULL,
 	end INTEGER,
   ref VARCHAR(1000) NOT NULL,
   alt VARCHAR(1000) NOT NULL,
-  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
+	FOREIGN KEY(varid) REFERENCES sequence2dna(varid)
 );
 
 CREATE TABLE IF NOT EXISTS prot (
   varid INTEGER PRIMARY KEY,
-  seguid VARCHAR(40) NOT NULL,
   protein VARCHAR(45) NOT NULL,
   start INTEGER NOT NULL,
 	end INTEGER,
   ref VARCHAR(1000) NOT NULL,
   alt VARCHAR(1000) NOT NULL,
-  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
+	FOREIGN KEY(varid) REFERENCES sequence2prot(varid)
 );
 
 CREATE TABLE IF NOT EXISTS lineage (
-  seguid VARCHAR(40) NOT NULL,
+  seqhash VARCHAR(40) NOT NULL,
   lineage VARCHAR(45) NOT NULL,
   pangolin_version VARCHAR(45) NOT NULL,
   pangolearn_version VARCHAR(45) NOT NULL,
-  FOREIGN KEY(seguid) REFERENCES sequence(seguid)
+  FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dna ON dna (seguid, start, end, ref, alt);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(seguid, protein, start, end, ref, alt);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dna ON dna (start, end, ref, alt);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(protein, start, end, ref, alt);
 
 CREATE VIEW IF NOT EXISTS dna_view
 AS
 SELECT
 	accession,
 	description,
-  genome.seguid,
+  genome.seqhash,
   start,
 	end,
   ref,
@@ -58,16 +72,17 @@ SELECT
   pangolearn_version
 FROM
 	genome
-LEFT JOIN sequence USING (seguid)
-LEFT JOIN dna USING (seguid)
-LEFT JOIN lineage USING (seguid);
+LEFT JOIN sequence USING (seqhash)
+LEFT JOIN sequence2dna USING (seqhash)
+LEFT JOIN dna USING (varid)
+LEFT JOIN lineage USING (seqhash);
 
 CREATE VIEW IF NOT EXISTS prot_view
 AS
 SELECT
 	accession,
 	description,
-  genome.seguid,
+  genome.seqhash,
   protein,
   start,
 	end,
@@ -78,8 +93,9 @@ SELECT
   pangolearn_version
 FROM
 	genome
-LEFT JOIN sequence USING (seguid)
-LEFT JOIN prot USING (seguid)
-LEFT JOIN lineage USING (seguid);
+LEFT JOIN sequence USING (seqhash)
+LEFT JOIN sequence2protein USING (seqhash)
+LEFT JOIN prot USING (varid)
+LEFT JOIN lineage USING (seqhash);
 
 PRAGMA foreign_keys = ON;

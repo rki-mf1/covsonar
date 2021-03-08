@@ -12,9 +12,10 @@ from Bio.SeqUtils.CheckSum import seguid
 from packaging import version
 import shutil
 import base64
+from collections import OrderedDict
 
 def dict_factory(cursor, row):
-    d = {}
+    d = OrderedDict()
     for idx, col in enumerate(cursor.description):
         d[col[0]] = row[idx]
     return d
@@ -24,7 +25,6 @@ class sonarDB():
 		self.dbdir = os.path.abspath(db)
 		self.vfile = os.path.join(self.dbdir, ".version")
 		self.dbfile = os.path.join(self.dbdir, "sonar.db")
-		self.configfile = os.path.join(self.dbdir, "config.smk")
 		self.datadir = os.path.join(self.dbdir, "data")
 		self.seqdir = os.path.join(self.datadir, "seqs")
 		self.algndir = os.path.join(self.datadir, "algn")
@@ -32,11 +32,14 @@ class sonarDB():
 		self.pangodir = os.path.join(self.dbdir, "pangodir")
 		self.pangoenv = os.path.join(self.dbdir, "pangoenv")
 		self.modulebase = os.path.dirname(os.path.realpath(__file__))
-		self.reffile = os.path.join(self.modulebase, "ref.fna")
+		self.reffna = os.path.join(self.modulebase, "ref.fna")
+		self.refgff = os.path.join(self.modulebase, "ref.gff3")
 		self.__max_supported_prev_version = "0.0.9"
 		self.__conn = None
+		self.__cursor = None
 		self.__refseq = None
 		self.__iupac_nuc_code = None
+		self.__annotation = None
 		self.__indel_regex = re.compile(".-+")
 		if check_db:
 			self.check_dir()
@@ -53,14 +56,34 @@ class sonarDB():
 
 	@property
 	def cursor(self):
-		return self.conn.cursor()
+		if not self.__cursor:
+			self.__cursor = self.conn.cursor()
+		return self.__cursor
 
 	@property
 	def refseq(self):
 		if not self.__refseq:
-			with open(self.reffile, "r") as handle:
+			with open(self.reffna, "r") as handle:
 				self.__refseq = "".join([x.strip().upper() for x in handle.readlines()[1:]])
 		return self.__refseq
+
+	@property
+	def cds(self):
+		if self.__annotation is None:
+			gene_regex = re.compile("gene=([^;]+)(?:;|$)")
+			with open(self.refgff, "r") as handle:
+				self.__annotation = {}
+				for line in handle:
+					if not line.startswith("#"):
+						continue
+					fields = line.strip().split("\t")
+					if fields[2] == "CDS":
+						strand = fields[6]
+						s = fields[3]
+						e = fields[4]
+						gene = gene_regex.search(fields[-1]).groups(1)
+						self.__annotation[gene] = (gene, s, e, strand)
+		return self.__annotation
 
 	@property
 	def iupac_nuc_code(self):
@@ -107,17 +130,6 @@ class sonarDB():
 		if version.parse(dir_version) > version.parse(module_version):
 			sys.exit("version conflict: please update sonar (current version: " + module_version + ") to fit your database (version: " + dir_version + ").")
 
-	def relativize_path(self, path):
-		return path.replace(self.dbdir, "").lstrip("\/")
-
-	def create_smk_config(self):
-		with open(self.configfile, "w") as handle:
-			handle.write("input: " + self.relativize_path(self.seqdir) + "\n")
-			handle.write("algn: " + self.relativize_path(self.algndir) + "\n")
-			handle.write("lin: " + self.relativize_path(self.lindir) + "\n")
-			handle.write("pangodir: " + self.relativize_path(self.pangodir) + "\n")
-			handle.write("pangoenv: " + self.relativize_path(self.pangoenv))
-
 	def create_dirs(self):
 		try:
 			# dirs
@@ -129,18 +141,19 @@ class sonarDB():
 			# version file
 			with open(self.vfile, "w") as handle:
 				handle.write(sonarDB.get_version())
+
 		except Error as e:
 			shutil.rmtree(self.dbdir)
 			exit(e)
 
 	# data management
 
-	def slugify_seq_fname(self, seqhash):
-		return os.path.join(self.seqdir, base64.urlsafe_b64encode(seqhash.encode('UTF-8') ).decode('UTF-8') + ".fna")
+	def slugify_fname(self, fname):
+		return os.path.join(self.seqdir, base64.urlsafe_b64encode(fname.encode('UTF-8') ).decode('UTF-8') + ".fna")
 
 	def add_genome(self, acc, descr, seq, paranoid=False):
 		seqhash = sonarDB.hash(seq)
-		fname = self.slugify_seq_fname(seqhash)
+		fname = self.slugify_fname(seqhash)
 		if not os.path.isfile(fname):
 			with open(fname, "w") as handle:
 				handle.write(">" + seqhash + "\n" + seq.strip().upper() + "\n")
@@ -209,11 +222,15 @@ class sonarDB():
 			exit(e)
 		return conn
 
+	def close(self):
+		if self.__conn:
+			self.__conn.close()
+
 	def commit(self):
 		self.conn.commit()
 
-	def insert_sequence(self, seguid):
-		self.cursor.execute('INSERT OR IGNORE INTO sequence(seguid) VALUES(?)', (seguid, ))
+	def insert_sequence(self, seqhash):
+		self.cursor.execute('INSERT OR IGNORE INTO sequence(seqhash) VALUES(?)', (seqhash, ))
 
 	def get_genome_data(self, acc):
 		sql = "SELECT * from genome WHERE accession = '" + acc + "'"
@@ -222,14 +239,29 @@ class sonarDB():
 	def insert_genome(self, acc, descr, seqhash):
 		genome_data = self.get_genome_data(acc)
 		if genome_data:
-			if genome_data['description'] != descr or genome_data['seguid'] != seqhash:
+			if genome_data['description'] != descr or genome_data['seqhash'] != seqhash:
 				sys.exit("error: data collision for " + acc + " use update to change data of an existing genome accession.")
 		else:
 			self.insert_sequence(seqhash)
-			self.cursor.execute('INSERT INTO genome(accession, description, seguid) VALUES (?, ?, ?)', (acc, descr, seqhash))
+			self.cursor.execute('INSERT INTO genome(accession, description, seqhash) VALUES (?, ?, ?)', (acc, descr, seqhash))
 
-	def insert_dna_var(self, seguid, start, end, ref, alt):
-		self.cursor.execute('INSERT INTO dna(seguid, start, end, ref, alt) VALUES (?, ?, ?, ?, ?)', (seguid, start, end, ref, alt))
+	def get_varid(self, start, end, ref, alt, protein=None):
+		if protein is None:
+			res = self.cursor.execute('SELECT varid from dna WHERE start = ? AND end = ? AND ref = ? AND alt = ?', (start, end, ref, alt))
+		else:
+			res = self.cursor.execute('SELECT varid from protein WHERE protein = ? AND start = ? AND end = ? AND ref = ? AND alt = ?', (protein, start, end, ref, alt))
+		row = res.fetchone()
+		if not row:
+			return False
+		else:
+			return row['varid']
+
+	def insert_dna_var(self, seqhash, start, end, ref, alt):
+		varid = self.get_varid(start, end, ref, alt)
+		if not varid:
+			self.cursor.execute('INSERT INTO dna(start, end, ref, alt) VALUES (?, ?, ?, ?)', (start, end, ref, alt))
+			varid = self.cursor.lastrowid
+		self.cursor.execute('INSERT OR IGNORE INTO sequence2dna(seqhash, varid) VALUES (?, ?)', (seqhash, varid))
 
 	def iter_rows(self, table):
 		sql = "SELECT * FROM " + table

@@ -8,6 +8,7 @@ import sys
 import argparse
 from lib import sonardb
 from Bio import SeqIO
+import csv
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -54,5 +55,7 @@ if __name__ == "__main__":
 
 	#view data
 	if args.tool == "view":
-		for row in snr.db.iter_rows(args.branch + "_view"):
-			print(row)
+		rows = [x for x in snr.db.iter_rows(args.branch + "_view")]
+		writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
+		writer.writeheader()
+		writer.writerows(snr.db.iter_rows(args.branch + "_view"))
