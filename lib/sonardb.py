@@ -9,19 +9,175 @@ import argparse
 import sqlite3
 from sqlite3 import Error
 from Bio.SeqUtils.CheckSum import seguid
+from Bio.Seq import Seq
+from Bio import Align
+from Bio import SeqIO
+from Bio.Align import substitution_matrices
 from packaging import version
 import shutil
 import base64
 from collections import OrderedDict
 
-def dict_factory(cursor, row):
-    d = OrderedDict()
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
+class sonarCDS(object):
+	def __init__(self, symbol, start, end, strand, seq, locus=None, translation_table=1):
+		self.symbol = symbol
+		self.locus = locus
+		self.start = start
+		self.end = end
+		self.strand = "+" if strand == "+" or int(strand) == 1 else "-"
+		self.dna = seq
+		self.translation_table = translation_table
+		self.__aa = None
 
-class sonarDB():
-	def __init__(self, db, check_db=True):
+	@property
+	def aa(self):
+		if self.__aa is None:
+			self.__aa = str(Seq.translate(self.dna, table=self.translation_table, to_stop=True))
+		return self.__aa
+
+	@property
+	def coords(self):
+		return self.start, self.end
+
+	@property
+	def range(self):
+		return range(self.start, self.end)
+
+class sonarGFF(object):
+	def __init__(self, gff3, genomeseq, translation_table=1):
+		self.translation_table = translation_table
+		self.cds = self.process_gff3(gff3, genomeseq)
+
+	def process_gff3(self, gff_fname, genomeseq):
+		symbol_regex = re.compile("gene=([^;]+)(?:;|$)")
+		locus_regex = re.compile("locus_tag=([^;]+)(?:;|$)")
+
+		with open(gff_fname, "r") as handle:
+			cds = set()
+			for line in handle:
+				if line.startswith("#") or len(line.strip()) == 0:
+					continue
+				fields = line.rstrip("\r\n").split("\t")
+				if fields[2] == "CDS":
+					symbol = symbol_regex.search(fields[-1])
+					symbol = symbol.groups(1)[0] if symbol else None
+					locus = locus_regex.search(fields[-1])
+					locus = locus.groups(1)[0] if locus else None
+					strand = fields[6]
+					s = int(fields[3])-1
+					e = int(fields[4])
+					dna = genomeseq[s:e]
+					if strand == "-":
+						dna = str(Seq.reverse_complement(dna))
+					cds.add(sonarCDS(symbol, s, e, strand, dna, locus, self.translation_table))
+		return cds
+
+class sonarALIGN(object):
+	def __init__(self, query, target, sonarGFFObj = None):
+		self.aligned_query, self.aligned_target = self.align_dna(query, target)
+		self.gff = sonarGFFObj if sonarGFFObj else None
+		self.indel_regex = re.compile(".-+")
+		self.__dnadiff = None
+		self.__aadiff = None
+		self.__target_coords_matrix = None
+
+	@property
+	def dnadiff(self):
+		if self.__dnadiff is None:
+			self.__dnadiff = [ x for x in self.iter_dna_vars() ]
+		return self.__dnadiff
+
+	@property
+	def aadiff(self):
+		if self.__aadiff is None:
+			self.__aadiff = [ x for x in self.iter_aa_vars() ]
+		return self.__aadiff
+
+	@property
+	def target_coords_matrix(self):
+		if self.__target_coords_matrix is None:
+			self.__target_coords_matrix = [len(x.group()) for x in re.finditer(".-*", self.aligned_target)]
+		return self.__target_coords_matrix
+
+	def align_dna(self, query, target):
+		aligner = Align.PairwiseAligner()
+		aligner.mode = 'global'
+		aligner.open_gap_score = -10
+		aligner.extend_gap_score = -0.5
+		aligner.target_end_gap_score = 0.0
+		aligner.query_end_gap_score = 0.0
+		alignment = str(sorted(aligner.align(query, target), key=lambda x: x.score, reverse=True)[0]).split("\n")
+		return alignment[0], alignment[2]
+
+	def align_aa(self, query, target):
+		aligner = Align.PairwiseAligner()
+		aligner.substitution_matrix = substitution_matrices.load("PAM250")
+		aligner.mode = 'global'
+		aligner.open_gap_score = -10
+		aligner.extend_gap_score = -0.5
+		aligner.target_end_gap_score = 0.0
+		aligner.query_end_gap_score = 0.0
+		alignment = str(sorted(aligner.align(query, target), key=lambda x: x.score, reverse=True)[0]).split("\n")
+		return alignment[0], alignment[2]
+
+	def real_pos(self, x):
+		return x - self.aligned_target[:x+1].count("-")
+
+	def align_pos(self, x):
+		return sum(self.target_coords_matrix[:x])
+
+	def compare_aligned_seqs(self, query, target):
+		target = target.upper()
+		query = query.upper()
+
+		# insertions
+		for match in self.indel_regex.finditer(target):
+			s = match.start() - target[:match.start()].count("-")
+			yield match.group()[0], query[match.start():match.end()], s, None
+
+		# deletions
+		for match in self.indel_regex.finditer(query):
+			s = match.start() - query[:match.start()].count("-")
+			e = s + len(match.group())
+			yield target[match.start():match.end()], match.group()[0], s, e
+
+		# sn/aps
+		i = -1
+		for pair in zip(target, query):
+			if pair[1] == "-":
+				i += 1
+			elif pair[0] == pair[1]:
+				i += 1
+			elif pair[0] != "-":
+				i += 1
+				yield pair[0], pair[1], i, None
+
+	def iter_dna_vars(self):
+		for t, q, s, e in self.compare_aligned_seqs(self.aligned_query, self.aligned_target):
+			s = self.real_pos(s)
+			if not e is None:
+				e = self.real_pos(e)
+			yield t, q, s, e
+
+	def iter_aa_vars(self):
+		if self.gff:
+			for cds in self.gff.cds:
+				if cds.strand == "+":
+					x = self.align_pos(cds.start)
+					qdna = self.aligned_query[x:].replace("-", "")
+				else:
+					x = self.align_pos(cds.end)
+					qdna = str(Seq.reverse_complement(self.aligned_query[:x].replace("-", "")))
+				qaa = str(Seq.translate(qdna, table=self.gff.translation_table, to_stop=True))
+
+				aligned_query_aa, aligned_target_aa = self.align_aa(qaa, cds.aa)
+
+				for t, q, s, e in self.compare_aligned_seqs(aligned_query_aa, aligned_target_aa):
+					yield cds.symbol, cds.locus, t, q, s, e
+
+
+class sonarDB(object):
+	def __init__(self, db, translation_table = 1, check_db=True):
 		self.dbdir = os.path.abspath(db)
 		self.vfile = os.path.join(self.dbdir, ".version")
 		self.dbfile = os.path.join(self.dbdir, "sonar.db")
@@ -34,13 +190,14 @@ class sonarDB():
 		self.modulebase = os.path.dirname(os.path.realpath(__file__))
 		self.reffna = os.path.join(self.modulebase, "ref.fna")
 		self.refgff = os.path.join(self.modulebase, "ref.gff3")
+		self.translation_table = translation_table
 		self.__max_supported_prev_version = "0.0.9"
-		self.__conn = None
-		self.__cursor = None
 		self.__refseq = None
 		self.__iupac_nuc_code = None
 		self.__annotation = None
-		self.__indel_regex = re.compile(".-+")
+		self.__rocon = None
+		self.__refgffObj = None
+
 		if check_db:
 			self.check_dir()
 
@@ -49,16 +206,11 @@ class sonarDB():
 			self.__conn.close()
 
 	@property
-	def conn(self):
-		if not self.__conn:
-			self.__conn = self.connect()
-		return self.__conn
-
-	@property
-	def cursor(self):
-		if not self.__cursor:
-			self.__cursor = self.conn.cursor()
-		return self.__cursor
+	def rocon(self):
+		if self.__rocon is None:
+			self.__rocon = sqlite3.connect(self.dbfile, uri=True)
+			self.__rocon.row_factory = sonarDB.dict_factory
+		return self.__rocon
 
 	@property
 	def refseq(self):
@@ -68,22 +220,10 @@ class sonarDB():
 		return self.__refseq
 
 	@property
-	def cds(self):
-		if self.__annotation is None:
-			gene_regex = re.compile("gene=([^;]+)(?:;|$)")
-			with open(self.refgff, "r") as handle:
-				self.__annotation = {}
-				for line in handle:
-					if not line.startswith("#"):
-						continue
-					fields = line.strip().split("\t")
-					if fields[2] == "CDS":
-						strand = fields[6]
-						s = fields[3]
-						e = fields[4]
-						gene = gene_regex.search(fields[-1]).groups(1)
-						self.__annotation[gene] = (gene, s, e, strand)
-		return self.__annotation
+	def refgffObj(self):
+		if not self.__refgffObj:
+			self.__refgffObj = sonarGFF(self.refgff, self.refseq, self.translation_table)
+		return self.__refgffObj
 
 	@property
 	def iupac_nuc_code(self):
@@ -111,7 +251,7 @@ class sonarDB():
 	def hash(seq):
 		return seguid(seq)
 
-	# directory management
+	# directory and file management
 
 	def check_dir(self):
 		if not os.path.isdir(self.dbdir) or len(os.listdir(self.dbdir)) == 0:
@@ -146,150 +286,107 @@ class sonarDB():
 			shutil.rmtree(self.dbdir)
 			exit(e)
 
-	# data management
-
 	def slugify_fname(self, fname):
 		return os.path.join(self.seqdir, base64.urlsafe_b64encode(fname.encode('UTF-8') ).decode('UTF-8') + ".fna")
 
-	def add_genome(self, acc, descr, seq, paranoid=False):
-		seqhash = sonarDB.hash(seq)
-		fname = self.slugify_fname(seqhash)
-		if not os.path.isfile(fname):
-			with open(fname, "w") as handle:
-				handle.write(">" + seqhash + "\n" + seq.strip().upper() + "\n")
-		elif paranoid:
-			with open(fname, "r") as handle:
-				handle.readline()
-				if seq.upper() != handle.readline().strip():
-					sys.exit("error: hash collision for " + hashval)
-		self.insert_genome(acc, descr, seqhash)
-
-	def compare_nucs(self, ref_nuc, qry_nuc):
-		if qry_nuc in self.iupac_nuc_code[ref_nuc]:
-			return True
-		else:
-			return False
-
-	def add_alignment(self, aligned_target_seq, aligned_ref_seq, seqhash = None):
-		if not seqhash:
-			seqhash = sonarDB.hash(aligned_target_seq.replace("-", ""))
-		vars = []
-
-		# find insertions
-
-		for match in self.__indel_regex.finditer(aligned_ref_seq):
-			s = match.start()
-			e = match.end()
-			r = aligned_ref_seq[s]
-			q = aligned_target_seq[s:e]
-			gaps = aligned_ref_seq[:e].count("-")
-			vars.append((s+1-gaps, None, r, q))
-
-		## find deletions
-
-		for match in self.__indel_regex.finditer(aligned_target_seq):
-			s = match.start()
-			e = match.end()
-			r = aligned_ref_seq[s:e]
-			q = aligned_target_seq[s]
-			gaps = aligned_ref_seq[:e].count("-")
-			vars.append((s+1-gaps, e-gaps, r, q))
-
-		## find snps
-
-		i = 0
-		for r, q in zip(aligned_ref_seq, aligned_target_seq):
-			if r == "-":
-				continue
-			elif self.compare_nucs(r, q) or q == "-":
-				i += 1
-				continue
-			i += 1
-			vars.append((i, None, r, q))
-
-
-		# import to db
-		for var in vars:
-			self.insert_dna_var(seqhash, *var)
-
 	# db management
 
-	def connect(self):
-		try:
-			conn = sqlite3.connect(self.dbfile)
-			conn.row_factory = dict_factory
-		except Error as e:
-			exit(e)
-		return conn
+	@staticmethod
+	def dict_factory(cursor, row):
+	    d = OrderedDict()
+	    for idx, col in enumerate(cursor.description):
+	        d[col[0]] = row[idx]
+	    return d
 
-	def close(self):
-		if self.__conn:
-			self.__conn.close()
+	def add_genome_from_fasta(self, fname):
+		record = SeqIO.read(fname, "fasta")
+		acc = record.id
+		descr = record.description
+		seq = str(record.seq.upper())
+		seqhash = sonarDB.hash(seq)
 
-	def commit(self):
-		self.conn.commit()
-
-	def insert_sequence(self, seqhash):
-		self.cursor.execute('INSERT OR IGNORE INTO sequence(seqhash) VALUES(?)', (seqhash, ))
-
-	def get_genome_data(self, acc):
-		sql = "SELECT * from genome WHERE accession = '" + acc + "'"
-		return self.cursor.execute(sql).fetchone()
-
-	def insert_genome(self, acc, descr, seqhash):
-		genome_data = self.get_genome_data(acc)
-		if genome_data:
-			if genome_data['description'] != descr or genome_data['seqhash'] != seqhash:
-				sys.exit("error: data collision for " + acc + " use update to change data of an existing genome accession.")
+		if not self.sequence_exists(seqhash):
+			alignment = sonarALIGN(seq, self.refseq, self.refgffObj)
 		else:
-			self.insert_sequence(seqhash)
-			self.cursor.execute('INSERT INTO genome(accession, description, seqhash) VALUES (?, ?, ?)', (acc, descr, seqhash))
+			alignment = None
 
-	def get_varid(self, start, end, ref, alt, protein=None):
-		if protein is None:
-			res = self.cursor.execute('SELECT varid from dna WHERE start = ? AND end = ? AND ref = ? AND alt = ?', (start, end, ref, alt))
-		else:
-			res = self.cursor.execute('SELECT varid from prot WHERE protein = ? AND start = ? AND end = ? AND ref = ? AND alt = ?', (protein, start, end, ref, alt))
-		row = res.fetchone()
-		if not row:
-			return False
-		else:
+		with sqlite3.connect(self.dbfile) as con:
+			if not self.genome_exists(acc, descr, seqhash):
+				self.insert_genome(acc, descr, seqhash, con)
+			if alignment:
+				self.insert_sequence(seqhash, con)
+				for ref, alt, s, e in alignment.iter_dna_vars():
+					varid = self.get_dna_varid(ref, alt, s, e)
+					if varid is None:
+						varid = self.insert_dna_var(ref, alt, s, e, con)
+					self.insert_sequence2dna(seqhash, varid, con)
+
+				for protein, locus, ref, alt, s, e in alignment.iter_aa_vars():
+					varid = self.get_prot_varid(protein, locus, ref, alt, s, e)
+					if varid is None:
+						varid = self.insert_prot_var(protein, locus, ref, alt, s, e, con)
+					self.insert_sequence2prot(seqhash, varid, con)
+
+	def insert_genome(self, acc, descr, seqhash, con):
+		cursor = con.execute('INSERT INTO genome(accession, description, seqhash) VALUES (?, ?, ?)', (acc, descr, seqhash))
+		return cursor.lastrowid
+
+	def insert_sequence(self, seqhash, con):
+		cursor = con.execute('INSERT INTO sequence(seqhash) VALUES(?)', (seqhash, ))
+		return cursor.lastrowid
+
+	def insert_dna_var(self, ref, alt, start, end, con):
+		cursor = con.execute('INSERT INTO dna(varid, ref, alt, start, end) VALUES(?, ?, ?, ?, ?)', (None, ref, alt, start, end))
+		return cursor.lastrowid
+
+	def insert_sequence2dna(self, seqhash, varid, con):
+		con.execute('INSERT INTO sequence2dna(seqhash, varid) VALUES(?, ?)', (seqhash, varid))
+
+	def insert_prot_var(self, protein, locus, ref, alt, start, end, con):
+		cursor = con.execute('INSERT INTO prot(varid, protein, locus, ref, alt, start, end) VALUES(?, ?, ?, ?, ?, ?, ?)', (None, protein, locus, ref, alt, start, end))
+		return cursor.lastrowid
+
+	def insert_sequence2prot(self, seqhash, varid, con):
+		con.execute('INSERT INTO sequence2prot(seqhash, varid) VALUES(?, ?)', (seqhash, varid))
+
+	def get_genome_data(self, *acc):
+		sql = "SELECT * from genome WHERE " + " OR ".join(["accession = ?" for x in acc])
+		return self.rocon.execute(sql, acc).fetchall()
+
+	def genome_exists(self, acc, descr, seqhash):
+		row = self.get_genome_data(acc)
+		if row and row[0]['description'] == descr and row[0]['seqhash'] == seqhash:
+			return True
+		return False
+
+	def sequence_exists(self, seqhash):
+		sql = "SELECT COUNT(*) from sequence WHERE seqhash = ?"
+		return self.rocon.execute(sql, (seqhash, )).fetchone()['COUNT(*)'] > 0
+
+	def get_dna_varid(self, ref, alt, start, end):
+		sql = "SELECT varid from dna WHERE ref = ? AND alt = ? AND start = ? and end = ?"
+		row = self.rocon.execute(sql, (ref, alt, start, end)).fetchone()
+		if row:
 			return row['varid']
+		return None
 
-	def insert_dna_var(self, seqhash, start, end, ref, alt):
-		varid = self.get_varid(start, end, ref, alt)
-		if not varid:
-			self.cursor.execute('INSERT INTO dna(start, end, ref, alt) VALUES (?, ?, ?, ?)', (start, end, ref, alt))
-			varid = self.cursor.lastrowid
-		self.cursor.execute('INSERT OR IGNORE INTO sequence2dna(seqhash, varid) VALUES (?, ?)', (seqhash, varid))
-
-	def insert_prot_var(self, seqhash, start, end, ref, alt, protein):
-		varid = self.get_varid(start, end, ref, alt, protein)
-		if not varid:
-			self.cursor.execute('INSERT INTO prot(start, end, ref, alt) VALUES (?, ?, ?, ?, ?)', (protein, start, end, ref, alt))
-			varid = self.cursor.lastrowid
-		self.cursor.execute('INSERT OR IGNORE INTO sequence2prot(seqhash, varid) VALUES (?, ?)', (seqhash, varid))
+	def get_prot_varid(self, protein, locus, ref, alt, start, end):
+		sql = "SELECT varid from prot WHERE protein = ? AND locus = ? AND ref = ? AND alt = ? AND start = ? and end = ?"
+		row = self.rocon.execute(sql, (protein, locus, ref, alt, start, end)).fetchone()
+		if row:
+			return row['varid']
+		return None
 
 	def iter_rows(self, table):
 		sql = "SELECT * FROM " + table
-		for row in self.conn.cursor().execute(sql):
+		for row in self.rocon.execute(sql):
 			yield row
-
-	def exec(self, sql):
-		try:
-			self.conn.cursor().execute(sql)
-		except Error as e:
-			exit(e)
-
-	def multiexec(self, multisql):
-		for sql in multisql.split(";"):
-			self.exec(sql)
 
 	def create_tables(self):
 		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "resources", "db.sqlite"), 'r') as handle:
 			sql = handle.read()
-		self.multiexec(sql)
-		self.commit()
+		with sqlite3.connect(self.dbfile) as con:
+			con.executescript(sql)
 
 	@staticmethod
 	def get_version():

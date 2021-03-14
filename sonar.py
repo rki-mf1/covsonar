@@ -5,10 +5,13 @@
 VERSION = "0.0.9"
 import os
 import sys
+import csv
 import argparse
 from lib import sonardb
 from Bio import SeqIO
-import csv
+import numpy as np
+import ray
+import tempfile
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -17,16 +20,17 @@ def parse_args():
 	subparsers.required = True
 
 	#parent parser: db input
-	db_parser = argparse.ArgumentParser(add_help=False)
-	db_parser.add_argument('--db', metavar="DB_DIR", help="sonar database directory", type=str, required=True)
+	general_parser = argparse.ArgumentParser(add_help=False)
+	general_parser.add_argument('--db', metavar="DB_DIR", help="sonar database directory", type=str, required=True)
+	general_parser.add_argument('--cpus', metavar="int", help="number of cpus to use (default: 1)", type=int, default=1)
 
 	# create the parser for the "add" command
-	parser_add = subparsers.add_parser('add', parents=[db_parser], help='add genome sequences to the database.')
+	parser_add = subparsers.add_parser('add', parents=[general_parser], help='add genome sequences to the database.')
 	parser_add.add_argument('-f', '--fasta', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+")
 	parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
 
 	# create the parser for the "view" command
-	parser_add = subparsers.add_parser('view', parents=[db_parser], help='view database content.')
+	parser_add = subparsers.add_parser('view', parents=[general_parser], help='view database content.')
 	parser_add.add_argument('-b', '--branch', metavar="FILE", help="data branch (default: dna)", choices=['dna', 'prot'], default="dna")
 
 	# version
@@ -35,30 +39,56 @@ def parse_args():
 	return parser.parse_args()
 
 class sonar():
-	def __init__(self, db):
-		self.db = sonardb.sonarDB(db)
+	def __init__(self, db, gff=None):
+		self.db = db
+		self.dbobj = sonardb.sonarDB(self.db)
+		self.gff = None
 
-	def add_genome(self, *fnames, paranoid=False):
-		for fname in fnames:
-			for record in SeqIO.parse(fname, "fasta"):
-				self.db.add_genome(record.id, record.description, str(record.seq), paranoid)
-		snr.db.commit()
+	def writefile(self, fname, *content):
+		with open(fname, "w") as handle:
+			handle.write("".join(content))
 
+	def add(self, *fnames):
+
+		# split fasta files to single entry files
+
+		with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdirname:
+			i = 0
+			entry = []
+			for fname in fnames:
+				with open(fname, "r") as inhandle:
+					for line in inhandle:
+						if line.startswith(">"):
+							if entry:
+								self.writefile(os.path.join(tmpdirname, str(i) + ".fasta"), *entry)
+								i += 1
+							entry = [line]
+						else:
+							entry.append(line)
+			if entry:
+				self.writefile(os.path.join(tmpdirname, str(i) + ".fasta"), *entry)
+
+			db = sonardb.sonarDB(self.db)
+
+			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
+			for fname in fnames:
+				db.add_genome_from_fasta(fname)
 
 if __name__ == "__main__":
 	args = parse_args()
 	snr = sonar(args.db)
+	# ray.init(num_cpus=args.cpus, include_dashboard=False)
 
 	#add sequences
 	if args.tool == "add":
-		snr.add_genome(*args.fasta, paranoid=args.paranoid)
+		snr.add(*args.fasta)
 
 	#view data
 	if args.tool == "view":
-		rows = [x for x in snr.db.iter_rows(args.branch + "_view")]
+		rows = [x for x in snr.dbobj.iter_rows(args.branch + "_view")]
 		if len(rows) == 0:
 			print("*** no data ***")
 		else:
 			writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
 			writer.writeheader()
-			writer.writerows(snr.db.iter_rows(args.branch + "_view"))
+			writer.writerows(snr.dbobj.iter_rows(args.branch + "_view"))

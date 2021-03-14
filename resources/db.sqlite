@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS dna (
 CREATE TABLE IF NOT EXISTS prot (
   varid INTEGER PRIMARY KEY,
   protein VARCHAR(45) NOT NULL,
+	locus VARCHAR(45) NOT NULL,
   start INTEGER NOT NULL,
 	end INTEGER,
   ref VARCHAR(1000) NOT NULL,
@@ -55,7 +56,7 @@ CREATE TABLE IF NOT EXISTS lineage (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dna ON dna (start, end, ref, alt);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(protein, start, end, ref, alt);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(protein, locus, start, end, ref, alt);
 
 CREATE VIEW IF NOT EXISTS dna_view
 AS
