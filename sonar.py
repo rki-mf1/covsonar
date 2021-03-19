@@ -12,6 +12,7 @@ from Bio import SeqIO
 import numpy as np
 import tempfile
 from collections import defaultdict
+from joblib import Parallel, delayed
 
 
 def parse_args():
@@ -57,7 +58,7 @@ class sonar():
 		with open(fname, "w") as handle:
 			handle.write("".join(content))
 
-	def add(self, *fnames):
+	def add(self, *fnames, cpus=1):
 
 		# split fasta files to single entry files
 
@@ -80,8 +81,9 @@ class sonar():
 			db = sonardb.sonarDB(self.db)
 
 			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
-			for fname in fnames:
-				db.add_genome_from_fasta(fname)
+			r = Parallel(n_jobs=cpus, verbose=10)(delayed(db.add_genome_from_fasta)(fname) for fname in fnames)
+			#for fname in fnames:
+			#	db.add_genome_from_fasta(fname)
 
 	def show(self, profiles=None, accessions=None, lineages=None, exclusive=False):
 		where = []
@@ -126,7 +128,7 @@ if __name__ == "__main__":
 
 	#add sequences
 	if args.tool == "add":
-		snr.add(*args.fasta)
+		snr.add(*args.fasta, cpus=args.cpus)
 
 	#show
 	if args.tool == "show":
