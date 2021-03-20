@@ -35,14 +35,12 @@ def parse_args():
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
 	parser_match.add_argument('--profile', metavar="STR", help="match genomes sharing a given mutation profile", type=str, nargs="+", default=None)
-	parser_match.add_argument('--pos', metavar="STR", help="match genomes with any variation at the given position", type=str, nargs="+", default=None)
 	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of a given pangolin lineage only", type=str, nargs="+", default=None)
 	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acessions only", type=str, nargs="+", default=None)
 	parser_match.add_argument('--exclusive', help="do not allow additional mutations", action="store_true")
-	parser_match.add_argument('--gappy', help="allow extended deletions", action="store_true")
 	parser_match.add_argument('--count', help="count only matching genomes", action="store_true")
 	parser_match.add_argument('--logic', help="decide between OR or AND  logic when matching profile mutations (default: AND logic)", choices=["OR", "or", "AND", "and"], default="AND")
-	parser_match.add_argument('--verbose', help="show genomes NOT matching the mutation profile", action="store_true")
+	parser_match.add_argument('--negate', help="show genomes NOT matching the mutation profile", action="store_true")
 
 	# create the parser for the "view" command
 	parser_add = subparsers.add_parser('view', parents=[general_parser], help='view database content.')
@@ -120,7 +118,7 @@ class sonar():
 			#for fname in fnames:
 			#	db.add_genome_from_fasta(fname)
 
-	def show(self, profiles=None, accessions=None, lineages=None, exclusive=False, profile_logic="AND", show_sql=False):
+	def match(self, profiles=None, accessions=None, lineages=None, exclusive=False, profile_logic="AND", negate=False, show_sql=True):
 		profile_logic = " " + profile_logic.upper() + " "
 		b = "()" if profile_logic != " OR " else ("", "")
 
@@ -169,13 +167,16 @@ class sonar():
 
 		if accessions:
 			where.append("accession IN '(" + " ,".join(accessions) + ")'")
-			vals.extend(accessions)
 		if lineages:
 			where.append("lineages IN '(" + " ,".join(lineages) + ")'")
-			vals.extend(lineages)
-		print(where)
+
 		where = " AND ".join(where)
 		rows = [x for x in self.dbobj.select("essence", whereClause=where, valList=vals, show_sql=show_sql)]
+		if negate:
+			where = "accession NOT IN (" + " ,".join(['?'] * len(rows)) + ")"
+			vals = [ x['accession'] for x in rows ]
+			rows = [x for x in self.dbobj.select("essence", whereClause=where, valList=vals, show_sql=show_sql)]
+
 		self.rows_to_csv(rows)
 
 	def rows_to_csv(self, rows):
@@ -197,7 +198,7 @@ if __name__ == "__main__":
 
 	#show
 	if args.tool == "match":
-		snr.show(profiles=args.profile, lineages=args.lineage, accessions=args.acc, profile_logic=args.logic, exclusive=args.exclusive)
+		snr.match(profiles=args.profile, lineages=args.lineage, accessions=args.acc, profile_logic=args.logic, exclusive=args.exclusive, negate=args.negate)
 
 	#view data
 	if args.tool == "view":
