@@ -102,15 +102,16 @@ class sonar():
 		for m in match:
 			options.append(code[m])
 		orig_stat = mutation[:-len(match)]
-		return set([ orig_stat + "".join(x) for x in itertools.product(*options) ])
+		return set([mutation] + [ orig_stat + "".join(x) for x in itertools.product(*options) ])
 
-	def filter_ambig(self, profile, explicit_code):
-		keep = []
+	def filter_ambig(self, profile, explicit_code, keep=set()):
+		out = []
+		keep = set(keep)
 		for mutation in list(filter(None, profile.split(" "))):
 			match = self.__terminal_letters_regex.search(mutation)
-			if match is None or match.group(0) in explicit_code:
-				keep.append(mutation)
-		return " ".join(keep)
+			if match is None or match.group(0) in explicit_code or mutation in keep:
+				out.append(mutation)
+		return " ".join(out)
 
 	def add(self, *fnames, cpus=1):
 
@@ -154,20 +155,20 @@ class sonar():
 			## sanity checks of options set
 			if exclusive and dna_profiles and aa_profiles:
 				sys.exit("input error: --exclusive option can not applied when profile contains explicit nucleotide mutation information.")
-			if exclusive and or_op:
+			if exclusive and profile_logic == " OR ":
 				sys.exit("input error: --excusive and --or are mutually eclusive options")
 
 			## assembling dna profiles
 			for dna_profile in dna_profiles:
-				if len(dna_profile) == 0:
-					where.append("dna_profile LIKE '% " + dna_profile + " %'")
+				if len(dna_profile) == 1:
+					where.append("dna_profile LIKE '% " + dna_profile[0] + " %'")
 				else:
 					where.append(b[0] + " OR ".join(["dna_profile LIKE '% " + x + " %'" for x in dna_profile]) + b[1])
 
 			## assembling aa profiles
 			for aa_profile in aa_profiles:
-				if len(dna_profile) == 0:
-					where.append("aa_profile LIKE '% " + aa_profile + " %'")
+				if len(aa_profile) == 1:
+					where.append("aa_profile LIKE '% " + aa_profile[0] + " %'")
 				else:
 					where.append(b[0] + " OR ".join(["aa_profile LIKE '% " + x + " %'" for x in aa_profile]) + b[1])
 
@@ -199,9 +200,11 @@ class sonar():
 			rows = [x for x in self.dbobj.select("essence", whereClause=where, valList=vals, show_sql=show_sql)]
 
 		if not ambig:
+			keep_dna = set([item for sublist in dna_profiles for item in sublist])
+			keep_aa = set([item for sublist in aa_profiles for item in sublist])
 			for i in range(len(rows)):
-				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code)
-				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code)
+				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code, keep_dna)
+				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code, keep_aa)
 
 		self.rows_to_csv(rows)
 
