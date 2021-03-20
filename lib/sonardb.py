@@ -227,7 +227,6 @@ class sonarDB(object):
 		self.translation_table = translation_table
 		self.__max_supported_prev_version = "0.0.9"
 		self.__refseq = None
-		self.__iupac_nuc_code = None
 		self.__annotation = None
 		self.__rocon = None
 		self.__refgffObj = None
@@ -258,28 +257,6 @@ class sonarDB(object):
 		if not self.__refgffObj:
 			self.__refgffObj = sonarGFF(self.refgff, self.refseq, self.translation_table)
 		return self.__refgffObj
-
-	@property
-	def iupac_nuc_code(self):
-		if not self.__iupac_nuc_code:
-			self.__iupac_nuc_code = {
-						"A": set("A"),
-						"C": set("C"),
-						"G": set("G"),
-						"T": set("T"),
-						"R": set("AG"),
-						"Y": set("CT"),
-						"S": set("GC"),
-						"W": set("AT"),
-						"K": set("GT"),
-						"M": set("AC"),
-						"B": set("CGT"),
-						"D": set("AGT"),
-						"H": set("ACT"),
-						"V": set("ACG"),
-						"N": set("ATGC")
-					}
-		return self.__iupac_nuc_code
 
 	@staticmethod
 	def hash(seq):
@@ -390,10 +367,12 @@ class sonarDB(object):
 		protein = protein + ":" if protein else ""
 		return protein + ref + coord + alt
 
-	def select(self, table, fieldList=['*'], whereClause=None, valList=None):
+	def select(self, table, fieldList=['*'], whereClause=None, valList=None, show_sql=True):
 		sql = "SELECT " + "".join(fieldList) + " FROM " + table
 		if whereClause:
 			sql += " WHERE " + whereClause
+		if show_sql:
+			print(sql)
 		return self.rocon.execute(sql, valList).fetchall()
 
 	def get_dna_profiles(self, *acc):
