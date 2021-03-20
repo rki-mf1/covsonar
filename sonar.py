@@ -224,7 +224,7 @@ if __name__ == "__main__":
 
 	#show
 	if args.tool == "match":
-		snr.match(profiles=args.profile, lineages=args.lineage, accessions=args.acc, profile_logic=args.logic, exclusive=args.exclusive, negate=args.negate)
+		snr.match(profiles=args.profile, lineages=args.lineage, accessions=args.acc, profile_logic=args.logic, exclusive=args.exclusive, negate=args.negate, ambig=args.ambig)
 
 	#view data
 	if args.tool == "view":
