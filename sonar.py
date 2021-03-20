@@ -41,6 +41,7 @@ def parse_args():
 	parser_match.add_argument('--count', help="count only matching genomes", action="store_true")
 	parser_match.add_argument('--logic', help="decide between OR or AND  logic when matching profile mutations (default: AND logic)", choices=["OR", "or", "AND", "and"], default="AND")
 	parser_match.add_argument('--negate', help="show genomes NOT matching the mutation profile", action="store_true")
+	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
 	# create the parser for the "view" command
 	parser_add = subparsers.add_parser('view', parents=[general_parser], help='view database content.')
@@ -58,6 +59,8 @@ class sonar():
 		self.gff = None
 		self.__iupac_nt_code = None
 		self.__iupac_aa_code = None
+		self.__iupac_explicit_nt_code = None
+		self.__iupac_explicit_aa_code = None
 		self.__terminal_letters_regex = re.compile("[A-Z]+$")
 
 	def writefile(self, fname, *content):
@@ -71,6 +74,12 @@ class sonar():
 		return self.__iupac_nt_code
 
 	@property
+	def iupac_explicit_nt_code(self):
+		if self.__iupac_explicit_nt_code is None:
+ 			self.__iupac_explicit_nt_code = set([ x for x in self.iupac_nt_code if len(self.iupac_nt_code[x]) == 1 ])
+		return self.__iupac_explicit_nt_code
+
+	@property
 	def iupac_aa_code(self):
 		if self.__iupac_aa_code is None:
 			self.__iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O") }
@@ -78,9 +87,13 @@ class sonar():
 			self.__iupac_aa_code.update({"B": set("DN"), "Z": set("EQ"), "J": set("IL"), "Φ": set("VILFWYM"), "Ω": set("FWYH"), "Ψ": set("VILM"), "π": set("PGAS"), "ζ": set("STHNQEDKR"), "+": set("KRH"), "-": set("DE") })
 		return self.__iupac_aa_code
 
+	@property
+	def iupac_explicit_aa_code(self):
+		if self.__iupac_explicit_aa_code is None:
+ 			self.__iupac_explicit_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) == 1 ])
+		return self.__iupac_explicit_aa_code
+
 	def pinpoint_mutation(self, mutation, code):
-		if mutation.startswith("del:"):
-			return mutation
 		match = self.__terminal_letters_regex.search(mutation)
 		if not match:
 			return mutation
@@ -90,6 +103,14 @@ class sonar():
 			options.append(code[m])
 		orig_stat = mutation[:-len(match)]
 		return set([ orig_stat + "".join(x) for x in itertools.product(*options) ])
+
+	def filter_ambig(self, profile, explicit_code):
+		keep = []
+		for mutation in list(filter(None, profile.split(" "))):
+			match = self.__terminal_letters_regex.search(mutation)
+			if match is None or match.group(0) in explicit_code:
+				keep.append(mutation)
+		return " ".join(keep)
 
 	def add(self, *fnames, cpus=1):
 
@@ -118,7 +139,7 @@ class sonar():
 			#for fname in fnames:
 			#	db.add_genome_from_fasta(fname)
 
-	def match(self, profiles=None, accessions=None, lineages=None, exclusive=False, profile_logic="AND", negate=False, show_sql=True):
+	def match(self, profiles=None, accessions=None, lineages=None, exclusive=False, profile_logic="AND", negate=False, ambig=False, show_sql=True):
 		profile_logic = " " + profile_logic.upper() + " "
 		b = "()" if profile_logic != " OR " else ("", "")
 
@@ -176,6 +197,11 @@ class sonar():
 			where = "accession NOT IN (" + " ,".join(['?'] * len(rows)) + ")"
 			vals = [ x['accession'] for x in rows ]
 			rows = [x for x in self.dbobj.select("essence", whereClause=where, valList=vals, show_sql=show_sql)]
+
+		if not ambig:
+			for i in range(len(rows)):
+				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code)
+				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code)
 
 		self.rows_to_csv(rows)
 
