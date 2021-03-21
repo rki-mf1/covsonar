@@ -48,7 +48,7 @@ class sonarGFF(object):
 		self.translation_table = translation_table
 		self.cds = self.process_gff3(gff3, genomeseq)
 		self.coords = { x.symbol: (x.start, x.end) for x in self.cds }
-		self.symbols = [ x.symbol for x in self.cds ]
+		self.symbols = [x.symbol for x in self.cds ]
 
 	def iscds(self, x):
 		for start, end in self.coords.values():
@@ -228,7 +228,7 @@ class sonarDB(object):
 		self.translation_table = translation_table
 		self.__max_supported_prev_version = "0.0.9"
 		self.__refseq = None
-		self.__annotation = None
+		self.__refdescr = None
 		self.__rocon = None
 		self.__refgffObj = None
 
@@ -252,6 +252,13 @@ class sonarDB(object):
 			with open(self.reffna, "r") as handle:
 				self.__refseq = "".join([x.strip().upper() for x in handle.readlines()[1:]])
 		return self.__refseq
+
+	@property
+	def refdescr(self):
+		if not self.__refdescr:
+			with open(self.reffna, "r") as handle:
+				self.__refdescr = handle.readline().strip()[1:]
+		return self.__refdescr
 
 	@property
 	def refgffObj(self):
@@ -361,17 +368,19 @@ class sonarDB(object):
 	@staticmethod
 	def format_var(ref, alt, start, end, protein=None, locus=None):
 		if end is None:
-			coord = str(start)
+			coord = str(start+1)
 		else:
 			ref = "del:"
-			coord = str(start) + "" + str(end)
+			coord = str(start+1) + ":" + str(end-start)
 		protein = protein + ":" if protein else ""
 		return protein + ref + coord + alt
 
-	def select(self, table, fieldList=['*'], whereClause=None, valList=None, show_sql=True):
+	def select(self, table, fieldList=['*'], whereClause=None, valList=None, show_sql=True, orderby=None):
 		sql = "SELECT " + "".join(fieldList) + " FROM " + table
 		if whereClause:
 			sql += " WHERE " + whereClause
+		if orderby:
+			sql += " ORDER BY " + orderby
 		if show_sql:
 			print(sql)
 		return self.rocon.execute(sql, valList).fetchall()

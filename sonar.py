@@ -43,6 +43,11 @@ def parse_args():
 	parser_match.add_argument('--logic', help="decide between OR or AND  logic when matching profile mutations (default: AND logic)", choices=["OR", "or", "AND", "and"], default="AND")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
+	# create the parser for the "match" command
+	parser_match = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence (alignment) for a given accession.')
+	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs = "+", required=True)
+	parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
+
 	# create the parser for the "view" command
 	parser_add = subparsers.add_parser('view', parents=[general_parser], help='view database content.')
 	parser_add.add_argument('-v', metavar="FILE", help="complete data view (default: dna)", choices=['dna', 'prot', 'profiles'], default="profiles")
@@ -63,9 +68,10 @@ class sonar():
 		self.__iupac_explicit_aa_code = None
 		self.__iupac_ambig_nt_code = None
 		self.__iupac_ambig_aa_code = None
-		self.__terminal_letters_regex = re.compile("[A-Z]+$")
+		self.__terminal_letters_regex = re.compile("[A-Z]$")
 		self.__dna_var_regex = None
 		self.__aa_var_regex = None
+		self.__del_regex = None
 
 	def writefile(self, fname, *content):
 		with open(fname, "w") as handle:
@@ -91,6 +97,15 @@ class sonar():
 			allowed_letters = "[" + "".join(self.iupac_aa_code.keys()).replace("-", "") + "-" + "]"
 			self.__aa_var_regex = re.compile("^" + allowed_symbols + ":(?:(?:del:[0-9]+:[0-9]+)|(?:" + allowed_letters + "[0-9]+" + allowed_letters + "+))$")
 		return self.__aa_var_regex
+
+	@property
+	def del_regex(self):
+		'''
+		Provides a regex matching to valid protein variant expressions.
+		'''
+		if self.__del_regex is None:
+			self.__del_regex = re.compile(":?del:[0-9]+:[0-9]+$")
+		return self.__del_regex
 
 	@property
 	def iupac_nt_code(self):
@@ -182,12 +197,16 @@ class sonar():
 		out = []
 		keep = set(keep) if keep else set()
 		for mutation in list(filter(None, profile.split(" "))):
-			match = self.__terminal_letters_regex.search(mutation)
-			if match and match.group(0) not in explicit_code or mutation in keep:
+			if mutation in keep or self.del_regex.search(mutation):
 				out.append(mutation)
+				continue
+			match = self.__terminal_letters_regex.search(mutation)
+			if match and len(match.group(0)) == 1 and  match.group(0) not in explicit_code:
+				continue
+			out.append(mutation)
 		return " ".join(out)
 
-	def add(self, *fnames, cpus=1):
+	def add(self, *fnames, cpus=1, paranoid=True):
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		'''
@@ -212,6 +231,17 @@ class sonar():
 			db = sonardb.sonarDB(self.db)
 			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
 			r = Parallel(n_jobs=cpus, verbose=10)(delayed(db.add_genome_from_fasta)(fname) for fname in fnames)
+			if paranoid:
+				r = Parallel(n_jobs=cpus, verbose=10)(delayed(self.paranoid_check)(fname) for fname in fnames)
+
+	def paranoid_check(self, fname):
+		record = SeqIO.read(fname, "fasta")
+		acc = record.id
+		descr = record.description
+		seq = str(record.seq.upper())
+		restored_seq = self.restore([acc], aligned=False, seq_return=True)
+		if seq != restored_seq:
+			sys.exit("'good that I am paranoid' error: " + acc + " origninal and those restored from the database do not match.")
 
 	def create_profile_clause(self, profile, dna=True, exclusive=False, negate=False):
 		'''
@@ -277,10 +307,19 @@ class sonar():
 			return True
 		return False
 
+		def isdel(self, var):
+			'''
+			Returns True if a variant definition is a valid aa variant expression.
+			'''
+			match = self.aa_var_regex.match(var)
+			if match:
+				return True
+			return False
+
 	def isvalidvar(self):
 		pass
 
-	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, exclusive=False, ambig=False, show_sql=True):
+	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, exclusive=False, ambig=False, show_sql=False):
 		'''
 		Provides mutation profile matching against sequences in the database.
 		'''
@@ -342,6 +381,27 @@ class sonar():
 
 		self.rows_to_csv(rows)
 
+	def restore(self, accs, aligned=False, seq_return=False):
+		rows = [x for x in self.dbobj.select("dna_view", whereClause=" ".join(["accession = ?"] * len(accs)), valList=accs, orderby="start DESC")] # it's crucial to sort in desc to safely insert potential insertions
+		if rows:
+			gap = "-" if aligned else ""
+			refseq = list(self.dbobj.refseq)
+			qryseq = refseq[:]
+			for row in rows:
+				s = row['start']
+				if row['ref'] != refseq[s]:
+					sys.exit("data error: data is inconsistence (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
+				qryseq[s] = gap if not row['alt'] else row['alt']
+				if aligned and len(row['alt']) > 1:
+					refseq[s] +=  "-" * (len(row['alt'])-1)
+			if seq_return:
+				return "".join(qryseq)
+			if aligned:
+				print(">" + self.dbobj.refdescr)
+				print("".join(refseq))
+			print(">" + rows[0]['description'])
+			print("".join(qryseq))
+
 	def rows_to_csv(self, rows):
 		if len(rows) == 0:
 			print("*** no data ***")
@@ -361,6 +421,10 @@ if __name__ == "__main__":
 	#show
 	if args.tool == "match":
 		snr.match(include_profiles=args.include, exclude_profiles=args.exclude, lineages=args.lineage, accessions=args.acc, exclusive=args.exclusive, ambig=args.ambig)
+
+	#restore alignment
+	if args.tool == "restore":
+		snr.restore(args.acc, args.align)
 
 	#view data
 	if args.tool == "view":
