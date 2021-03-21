@@ -395,8 +395,8 @@ class sonarDB(object):
 		return cursor.lastrowid
 
 	def insert_sequence(self, seqhash, con):
-		cursor = con.execute('INSERT INTO sequence(seqhash) VALUES(?)', (seqhash, ))
-		return cursor.lastrowid
+		cursor = con.execute('INSERT OR IGNORE INTO sequence(seqhash) VALUES(?)', (seqhash, ))
+		return seqhash
 
 	def insert_profile(self, seqhash, dna_profile, aa_profile, con):
 		dna_profile = " " + dna_profile.strip() + dna_profile
