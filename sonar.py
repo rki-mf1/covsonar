@@ -34,13 +34,13 @@ def parse_args():
 
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
-	parser_match.add_argument('--profile', metavar="STR", help="match genomes sharing a given mutation profile", type=str, nargs="+", default=None)
-	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of a given pangolin lineage only", type=str, nargs="+", default=None)
-	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acessions only", type=str, nargs="+", default=None)
+	parser_match.add_argument('--include', '-i', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=None)
+	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=None)
+	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=None)
+	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=None)
 	parser_match.add_argument('--exclusive', help="do not allow additional mutations", action="store_true")
 	parser_match.add_argument('--count', help="count only matching genomes", action="store_true")
 	parser_match.add_argument('--logic', help="decide between OR or AND  logic when matching profile mutations (default: AND logic)", choices=["OR", "or", "AND", "and"], default="AND")
-	parser_match.add_argument('--negate', help="show genomes NOT matching the mutation profile", action="store_true")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
 	# create the parser for the "view" command
@@ -61,26 +61,73 @@ class sonar():
 		self.__iupac_aa_code = None
 		self.__iupac_explicit_nt_code = None
 		self.__iupac_explicit_aa_code = None
+		self.__iupac_ambig_nt_code = None
+		self.__iupac_ambig_aa_code = None
 		self.__terminal_letters_regex = re.compile("[A-Z]+$")
+		self.__dna_var_regex = None
+		self.__aa_var_regex = None
 
 	def writefile(self, fname, *content):
 		with open(fname, "w") as handle:
 			handle.write("".join(content))
 
 	@property
+	def dna_var_regex(self):
+		'''
+		Provides a regex matching to valid dna variant expressions.
+		'''
+		if self.__dna_var_regex is None:
+			allowed_letters = "[" + "".join(self.iupac_nt_code.keys()) + "]"
+			self.__dna_var_regex = re.compile("^(?:(?:del:[0-9]+:[0-9]+)|(?:" + allowed_letters + "[0-9]+" + allowed_letters + "+))$")
+		return self.__dna_var_regex
+
+	@property
+	def aa_var_regex(self):
+		'''
+		Provides a regex matching to valid protein variant expressions.
+		'''
+		if self.__aa_var_regex is None:
+			allowed_symbols = "(?:(?:" + ")|(?:".join(self.dbobj.refgffObj.symbols) + "))"
+			allowed_letters = "[" + "".join(self.iupac_aa_code.keys()).replace("-", "") + "-" + "]"
+			self.__aa_var_regex = re.compile("^" + allowed_symbols + ":(?:(?:del:[0-9]+:[0-9]+)|(?:" + allowed_letters + "[0-9]+" + allowed_letters + "+))$")
+		return self.__aa_var_regex
+
+	@property
 	def iupac_nt_code(self):
+		'''
+		Provides a dict of all IUPAC nucleotide one letter codes
+		(key: one letter code, value: set of assigned one letter explicit codes).
+		'''
 		if self.__iupac_nt_code is None:
  			self.__iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AG"), "Y": set("CT"), "S": set("GC"), "W": set("AT"), "K": set("GT"), "M": set("AC"), "B": set("CGT"), "D": set("AGT"), "H": set("ACT"), "V": set("ACG"), "N": set("ATGC") }
 		return self.__iupac_nt_code
 
 	@property
 	def iupac_explicit_nt_code(self):
+		'''
+		Provides a dict of the IUPAC nucleotide one letter codes only containing letters coding for exactly one nucleotide
+		(key: one letter code, value: set of assigned one letter explicit codes).
+		'''
 		if self.__iupac_explicit_nt_code is None:
  			self.__iupac_explicit_nt_code = set([ x for x in self.iupac_nt_code if len(self.iupac_nt_code[x]) == 1 ])
 		return self.__iupac_explicit_nt_code
 
 	@property
+	def iupac_ambig_nt_code(self):
+		'''
+		Provides a dict of the IUPAC nucleotide one letter codes only containing letters coding for more than one nucleotides
+		(key: one letter code, value: set of assigned one letter explicit codes).
+		'''
+		if self.__iupac_ambig_nt_code is None:
+ 			self.__iupac_ambig_nt_code = set([ x for x in self.iupac_nt_code if len(self.iupac_nt_code[x]) > 1 ])
+		return self.__iupac_ambig_nt_code
+
+	@property
 	def iupac_aa_code(self):
+		'''
+		Provides a dict of all IUPAC amino acid one letter codes
+		(key: one letter code, value: set of assigned one letter explicit codes).
+		'''
 		if self.__iupac_aa_code is None:
 			self.__iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O") }
 			self.__iupac_aa_code['X'] = set(self.__iupac_aa_code.keys())
@@ -89,34 +136,62 @@ class sonar():
 
 	@property
 	def iupac_explicit_aa_code(self):
+		'''
+		Provides a dict of the IUPAC amino acid one letter codes only containing letters coding for exactly one amino acid
+		(key: one letter code, value: set of assigned one letter explicit codes).
+		'''
 		if self.__iupac_explicit_aa_code is None:
  			self.__iupac_explicit_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) == 1 ])
 		return self.__iupac_explicit_aa_code
 
+	@property
+	def iupac_ambig_aa_code(self):
+		'''
+		Provides a dict of the IUPAC amino acid one letter codes only containing letters coding for more than one amino acid
+		(key: one letter code, value: set of assigned one letter explicit codes).
+		'''
+		if self.__iupac_ambig_aa_code is None:
+ 			self.__iupac_ambig_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) > 1 ])
+		return self.__iupac_ambig_aa_code
+
 	def pinpoint_mutation(self, mutation, code):
+		'''
+		Returns a set of explicit mutations based on the given, possibly ambiguous mutation definition.
+		The mutation definition must follow the covsonar nomenclature system.
+		'''
+		# extract ALT call from mutation profile
 		match = self.__terminal_letters_regex.search(mutation)
 		if not match:
 			return mutation
 		match = match.group(0)
+
+		# resolve ambiguities
 		options = []
 		for m in match:
 			options.append(code[m])
+
+		# generate the set of explicit mutations
 		orig_stat = mutation[:-len(match)]
 		return set([mutation] + [ orig_stat + "".join(x) for x in itertools.product(*options) ])
 
-	def filter_ambig(self, profile, explicit_code, keep=set()):
+	def filter_ambig(self, profile, explicit_code, keep=None):
+		'''
+		Returns a mutation profile that do not include any ambiguous SNP anymore.
+		Mutations listed in keep will be not excluded.
+		'''
 		out = []
-		keep = set(keep)
+		keep = set(keep) if keep else set()
 		for mutation in list(filter(None, profile.split(" "))):
 			match = self.__terminal_letters_regex.search(mutation)
-			if match is None or match.group(0) in explicit_code or mutation in keep:
+			if match and match.group(0) not in explicit_code or mutation in keep:
 				out.append(mutation)
 		return " ".join(out)
 
 	def add(self, *fnames, cpus=1):
-
-		# split fasta files to single entry files
-
+		'''
+		Adds genome sequence(s) from the given FASTA file(s) to the database.
+		'''
+		# split fasta files to single entry temporary files
 		with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdirname:
 			i = 0
 			entry = []
@@ -133,78 +208,137 @@ class sonar():
 			if entry:
 				self.writefile(os.path.join(tmpdirname, str(i) + ".fasta"), *entry)
 
+			# execute adding method of the database module on the generated files
 			db = sonardb.sonarDB(self.db)
-
 			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
 			r = Parallel(n_jobs=cpus, verbose=10)(delayed(db.add_genome_from_fasta)(fname) for fname in fnames)
-			#for fname in fnames:
-			#	db.add_genome_from_fasta(fname)
 
-	def match(self, profiles=None, accessions=None, lineages=None, exclusive=False, profile_logic="AND", negate=False, ambig=False, show_sql=True):
-		profile_logic = " " + profile_logic.upper() + " "
-		b = "()" if profile_logic != " OR " else ("", "")
+	def create_profile_clause(self, profile, dna=True, exclusive=False, negate=False):
+		'''
+		Adds genome sequence(s) from the given FASTA file(s) to the database.
+		'''
+		# configuring
+		condition = " " if not negate else " NOT "
+		config = {
+				   "dna": {
+							"field": "dna_profile",
+					  		"code": self.iupac_nt_code,
+					  		"explicit_code": self.iupac_explicit_nt_code
+						  },
+					"aa": {
+					        "field": "aa_profile",
+					        "code": self.iupac_aa_code,
+					        "explicit_code": self.iupac_explicit_aa_code
+					}
+				  }
 
-		where = []
+		# generating clause
+		clause = []
+		vars = set(profile)
+		dna_profile_length = 1
+		aa_profile_length = 1
+		for var in vars:
+			if self.isdnavar(var):
+				dna_profile_length += 1 + len(var)
+				conf = config['dna']
+			else:
+				aa_profile_length += 1 + len(var)
+				conf = config['aa']
+			for v in self.pinpoint_mutation(var, conf['code']):
+				clause.append(conf['field'] + condition + "LIKE '% " + v + " %'")
+
+		clause = " AND ".join(clause)
+
+		# add exclusiveness condition not allowing additional mutations
+		if exclusive:
+			if dna_profile_length > 1 and aa_profile_length > 1:
+				sys.exit("input error: exclusive profiles must be defined on dna OR protein level only.")
+			if dna_profile_length > 0:
+				clause += " AND length(" + conf['field'] + ") = " + str(dna_profile_length)
+			elif aa_profile_length > 0:
+				clause += " AND length(" + conf['field'] + ") = " + str(aa_profile_length)
+		return clause
+
+	def isdnavar(self, var):
+		'''
+		Returns True if a variant definition is a valid dna variant expression.
+		'''
+		match = self.dna_var_regex.match(var)
+		if match:
+			return True
+		return False
+
+	def isaavar(self, var):
+		'''
+		Returns True if a variant definition is a valid aa variant expression.
+		'''
+		match = self.aa_var_regex.match(var)
+		if match:
+			return True
+		return False
+
+	def isvalidvar(self):
+		pass
+
+	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, exclusive=False, ambig=False, show_sql=True):
+		'''
+		Provides mutation profile matching against sequences in the database.
+		'''
+
+		# For developers:
+		# Aim is to bring all profile definitions and filters to one and the same
+		# sqllite query to let the database do the actual work
+
+		clause = []
 		vals =[]
 
-		# adding profile condition to where clause
-		if profiles:
-			dna_profiles = [self.pinpoint_mutation(x, self.iupac_nt_code) for x in profiles if ":" not in x ]
-			aa_profiles = [self.pinpoint_mutation(x, self.iupac_aa_code) for x in profiles if ":" in x ]
+		#sanity check:
+		check = []
+		if include_profiles:
+			check += [item for sublist in include_profiles for item in sublist]
+		if exclude_profiles:
+			check += [item for sublist in exclude_profiles for item in sublist]
+		nonvalid = [ x for x in check if not self.isdnavar(x) and not self.isaavar(x) ]
+		if nonvalid:
+			sys.exit("input error: Non-valid variant expression(s) entered: " + ", ".join(nonvalid))
 
-			## sanity checks of options set
-			if exclusive and dna_profiles and aa_profiles:
-				sys.exit("input error: --exclusive option can not applied when profile contains explicit nucleotide mutation information.")
-			if exclusive and profile_logic == " OR ":
-				sys.exit("input error: --excusive and --or are mutually eclusive options")
+		# adding conditions of profiles to include to where clause
+		if include_profiles:
+			includes = []
+			for profile in include_profiles:
+				includes.append(self.create_profile_clause(profile, exclusive=exclusive, negate=False))
+			if len(includes) > 1:
+				includes = [ "(" + x + ")" if " AND " in x else x for x in includes ]
+			clause.append(" OR ".join(includes))
+			if len(includes) > 1:
+				clause[-1] = "(" + clause[-1] + ")"
 
-			## assembling dna profiles
-			for dna_profile in dna_profiles:
-				if len(dna_profile) == 1:
-					where.append("dna_profile LIKE '% " + dna_profile[0] + " %'")
-				else:
-					where.append(b[0] + " OR ".join(["dna_profile LIKE '% " + x + " %'" for x in dna_profile]) + b[1])
+		# adding conditions of profiles to exclude to where clause
+		if exclude_profiles:
+			excludes = []
+			for profile in exclude_profiles:
+				excludes.append(self.create_profile_clause(profile, exclusive=exclusive, negate=True))
+			excludes = [ "(" + x + ")" if " AND " in x else x for x in excludes ]
+			clause.append(" AND ".join(excludes))
 
-			## assembling aa profiles
-			for aa_profile in aa_profiles:
-				if len(aa_profile) == 1:
-					where.append("aa_profile LIKE '% " + aa_profile[0] + " %'")
-				else:
-					where.append(b[0] + " OR ".join(["aa_profile LIKE '% " + x + " %'" for x in aa_profile]) + b[1])
-
-			## generating logic-dependent syntax
-			where = [profile_logic.join(where)]
-
-			if profile_logic == " OR " and not where[0].endswith(")") and any((accessions, lineages)):
-				where[0] = "(" + where[0] + ")"
-
-			## adding condition for exclusive matching to where clause
-			if dna_profiles and exclusive:
-				where.append("length(dna_profile) = ?")
-				vals.append(len(" " + " ".join([ x[0] for x in dna_profiles ]) + " "))
-
-			if aa_profiles and exclusive:
-				where.append("length(aa_profile) = ?")
-				vals.append(len(" " + " ".join(aa_profiles) + " "))
-
+		# adding accession and lineage based conditions
 		if accessions:
-			where.append("accession IN '(" + " ,".join(accessions) + ")'")
+			clause.append("accession IN (" + " , ".join(['?'] * len(accessions)) + ")")
+			vals.extend(accessions)
 		if lineages:
-			where.append("lineages IN '(" + " ,".join(lineages) + ")'")
+			clause.append("lineages IN (" + " ,".join(['?'] * len(lineages))  + ")")
+			vals.extend(lineages)
 
-		where = " AND ".join(where)
-		rows = [x for x in self.dbobj.select("essence", whereClause=where, valList=vals, show_sql=show_sql)]
-		if negate:
-			where = "accession NOT IN (" + " ,".join(['?'] * len(rows)) + ")"
-			vals = [ x['accession'] for x in rows ]
-			rows = [x for x in self.dbobj.select("essence", whereClause=where, valList=vals, show_sql=show_sql)]
+		# executing the query and storing results
+		clause = " AND ".join(clause)
+		rows = [x for x in self.dbobj.select("essence", whereClause=clause, valList=vals, show_sql=show_sql)]
 
+		# remove ambiguities from database profiles if wished
 		if not ambig:
-			keep_dna = set([item for sublist in dna_profiles for item in sublist])
-			keep_aa = set([item for sublist in aa_profiles for item in sublist])
+			keep = [item for sublist in include_profiles for item in sublist] if include_profiles else None
 			for i in range(len(rows)):
-				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code, keep_dna)
-				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code, keep_aa)
+				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code, keep)
+				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code, keep)
 
 		self.rows_to_csv(rows)
 
@@ -219,7 +353,6 @@ class sonar():
 if __name__ == "__main__":
 	args = parse_args()
 	snr = sonar(args.db)
-	# ray.init(num_cpus=args.cpus, include_dashboard=False)
 
 	#add sequences
 	if args.tool == "add":
@@ -227,7 +360,7 @@ if __name__ == "__main__":
 
 	#show
 	if args.tool == "match":
-		snr.match(profiles=args.profile, lineages=args.lineage, accessions=args.acc, profile_logic=args.logic, exclusive=args.exclusive, negate=args.negate, ambig=args.ambig)
+		snr.match(include_profiles=args.include, exclude_profiles=args.exclude, lineages=args.lineage, accessions=args.acc, exclusive=args.exclusive, ambig=args.ambig)
 
 	#view data
 	if args.tool == "view":

@@ -48,6 +48,7 @@ class sonarGFF(object):
 		self.translation_table = translation_table
 		self.cds = self.process_gff3(gff3, genomeseq)
 		self.coords = { x.symbol: (x.start, x.end) for x in self.cds }
+		self.symbols = [ x.symbol for x in self.cds ]
 
 	def iscds(self, x):
 		for start, end in self.coords.values():
