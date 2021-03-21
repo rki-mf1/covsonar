@@ -375,7 +375,7 @@ class sonarDB(object):
 		protein = protein + ":" if protein else ""
 		return protein + ref + coord + alt
 
-	def select(self, table, fieldList=['*'], whereClause=None, valList=None, show_sql=True, orderby=None):
+	def select(self, table, fieldList=['*'], whereClause=None, valList=None, show_sql=False, orderby=None):
 		sql = "SELECT " + "".join(fieldList) + " FROM " + table
 		if whereClause:
 			sql += " WHERE " + whereClause
