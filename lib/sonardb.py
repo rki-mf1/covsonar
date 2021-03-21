@@ -401,7 +401,7 @@ class sonarDB(object):
 	def insert_profile(self, seqhash, dna_profile, aa_profile, con):
 		dna_profile = " " + dna_profile.strip() + dna_profile
 		aa_profile = " " + aa_profile.strip() + aa_profile
-		cursor = con.execute('INSERT INTO profile(seqhash, dna_profile, aa_profile) VALUES(?, ?, ?)', (seqhash, dna_profile, aa_profile))
+		cursor = con.execute('INSERT OR IGNORE INTO profile(seqhash, dna_profile, aa_profile) VALUES(?, ?, ?)', (seqhash, dna_profile, aa_profile))
 		return cursor.lastrowid
 
 	def insert_dna_var(self, ref, alt, start, end, con):
