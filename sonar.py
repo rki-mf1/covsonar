@@ -15,6 +15,7 @@ from collections import defaultdict
 from joblib import Parallel, delayed
 import itertools
 import re
+from tqdm import tqdm
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -58,9 +59,9 @@ def parse_args():
 	return parser.parse_args()
 
 class sonar():
-	def __init__(self, db, gff=None):
+	def __init__(self, db, gff=None, check_db=True):
 		self.db = db
-		self.dbobj = sonardb.sonarDB(self.db)
+		self.dbobj = sonardb.sonarDB(self.db, check_db=check_db)
 		self.gff = None
 		self.__iupac_nt_code = None
 		self.__iupac_aa_code = None
@@ -210,8 +211,9 @@ class sonar():
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		'''
+		print("preparing ...")
 		# split fasta files to single entry temporary files
-		with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmpdirname:
+		with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".covsonar_import_tmpdir_") as tmpdirname:
 			i = 0
 			entry = []
 			for fname in fnames:
@@ -228,20 +230,23 @@ class sonar():
 				self.writefile(os.path.join(tmpdirname, str(i) + ".fasta"), *entry)
 
 			# execute adding method of the database module on the generated files
-			db = sonardb.sonarDB(self.db)
 			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
-			r = Parallel(n_jobs=cpus, verbose=10)(delayed(db.add_genome_from_fasta)(fname) for fname in fnames)
-			if paranoid:
-				r = Parallel(n_jobs=cpus, verbose=10)(delayed(self.paranoid_check)(fname) for fname in fnames)
+			print("importing ...")
+			r = Parallel(n_jobs=cpus)(delayed(self.add_worker)(fnames[x], self.db, paranoid) for x in tqdm(range(len(fnames))))
+	
+	def add_worker(self, fname, db, paranoid=True):
+		sonardb.sonarDB(db, check_db=False).add_genome_from_fasta(fname)
+		if True: #paranoid:
+			sonar(db).paranoia(fname)
 
-	def paranoid_check(self, fname):
+	def paranoia(self, fname):
 		record = SeqIO.read(fname, "fasta")
 		acc = record.id
 		descr = record.description
 		seq = str(record.seq.upper())
-		restored_seq = self.restore([acc], aligned=False, seq_return=True)
+		restored_seq = self.restore(acc, aligned=False, seq_return=True)
 		if seq != restored_seq:
-			sys.exit("'good that I am paranoid' error: " + acc + " origninal and those restored from the database do not match.")
+			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match.")
 
 	def create_profile_clause(self, profile, dna=True, exclusive=False, negate=False):
 		'''
@@ -256,9 +261,9 @@ class sonar():
 					  		"explicit_code": self.iupac_explicit_nt_code
 						  },
 					"aa": {
-					        "field": "aa_profile",
-					        "code": self.iupac_aa_code,
-					        "explicit_code": self.iupac_explicit_aa_code
+							"field": "aa_profile",
+							"code": self.iupac_aa_code,
+							"explicit_code": self.iupac_explicit_aa_code
 					}
 				  }
 
@@ -381,8 +386,8 @@ class sonar():
 
 		self.rows_to_csv(rows)
 
-	def restore(self, accs, aligned=False, seq_return=False):
-		rows = [x for x in self.dbobj.select("dna_view", whereClause=" ".join(["accession = ?"] * len(accs)), valList=accs, orderby="start DESC")] # it's crucial to sort in desc to safely insert potential insertions
+	def restore(self, acc, aligned=False, seq_return=False):
+		rows = [x for x in self.dbobj.select("dna_view", whereClause="accession = ?", valList=[acc], orderby="start DESC")] # it's crucial to sort in desc to safely insert potential insertions
 		if rows:
 			gap = "-" if aligned else ""
 			refseq = list(self.dbobj.refseq)
@@ -390,7 +395,7 @@ class sonar():
 			for row in rows:
 				s = row['start']
 				if row['ref'] != refseq[s]:
-					sys.exit("data error: data is inconsistence (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
+					sys.exit("data error: data inconsistency found (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
 				qryseq[s] = gap if not row['alt'] else row['alt']
 				if aligned and len(row['alt']) > 1:
 					refseq[s] +=  "-" * (len(row['alt'])-1)
@@ -424,7 +429,8 @@ if __name__ == "__main__":
 
 	#restore alignment
 	if args.tool == "restore":
-		snr.restore(args.acc, args.align)
+		for acc in args.accs:
+			snr.restore(acc, args.align)
 
 	#view data
 	if args.tool == "view":
