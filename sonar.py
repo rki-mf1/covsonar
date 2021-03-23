@@ -16,6 +16,7 @@ from joblib import Parallel, delayed
 import itertools
 import re
 from tqdm import tqdm
+import difflib
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -211,12 +212,12 @@ class sonar():
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		'''
-		print("[1/3] preparing ...")
+		msg = "[step 1 of 3] preparing ..."
 		# split fasta files to single entry temporary files
 		with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".covsonar_import_tmpdir_") as tmpdirname:
 			i = 0
 			entry = []
-			for fname in fnames:
+			for fname in tqdm(range(len(fnames)), desc = msg):
 				with open(fname, "r") as inhandle:
 					for line in inhandle:
 						if line.startswith(">"):
@@ -231,28 +232,40 @@ class sonar():
 
 			# execute adding method of the database module on the generated files
 			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
-			print("[2/3] processing ...")
-			r = Parallel(n_jobs=cpus)(delayed(self.process_genome)(fnames[x], fnames[x] + ".pickle") for x in tqdm(range(len(fnames))))
+			msg = "[step 2 of 3] processing ..."
+			r = Parallel(n_jobs=cpus)(delayed(self.process_genome)(fnames[x], fnames[x] + ".pickle") for x in tqdm(range(len(fnames)), desc = msg))
 
-			print("[3/3] importing ...")
-			r = Parallel(n_jobs=cpus)(delayed(self.import_genome)(fnames[x], fnames[x] + ".pickle", paranoid) for x in tqdm(range(len(fnames))))
-
+			msg = "[step 3 of 3] importing ..."
+			for i in tqdm(range(len(fnames)), desc = msg):
+				self.import_genome(fnames[i], fnames[i] + ".pickle", paranoid)
 
 	def process_genome(self, fname, cache=None):
 		self.dbobj.add_genome_from_fasta(fname, cache)
 
-	def import_genome(self, fname, cache, paranoid=True)
-		self.dbobj.import_genome_from_cache(cache):
+	def import_genome(self, fname, cache, paranoid=True):
+		self.dbobj.import_genome_from_cache(cache)
 		if True: # for now let's be always paranoid
-			self.be_paranoid(fname, cache)
+			self.be_paranoid(fname, True)
+			
+	def show_seq_diffs(self, seq1, seq2, stderr=False): 
+		target = sys.stderr if stderr else None
+		for i,s in enumerate(difflib.ndiff(seq2, seq1)):
+			if s[0]==' ': continue
+			elif s[0]=='-':
+				print(u'wrong "{}" at position {}'.format(s[-1],i), file = target)
+			elif s[0]=='+':
+				print(u'missing "{}" at position {}'.format(s[-1],i), file = target) 
 
-	def be_paranoid(self, fname):
+	def be_paranoid(self, fname, auto_delete=False):
 		record = SeqIO.read(fname, "fasta")
 		acc = record.id
 		descr = record.description
 		seq = str(record.seq.upper())
 		restored_seq = self.restore(acc, aligned=False, seq_return=True)
 		if seq != restored_seq:
+			if auto_delete:
+				self.dbobj.delete_accession(acc)
+			self.show_seq_diffs(seq, restored_seq, True)
 			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match.")
 
 	def create_profile_clause(self, profile, dna=True, exclusive=False, negate=False):
@@ -400,12 +413,13 @@ class sonar():
 			refseq = list(self.dbobj.refseq)
 			qryseq = refseq[:]
 			for row in rows:
-				s = row['start']
-				if row['ref'] != refseq[s]:
-					sys.exit("data error: data inconsistency found (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
-				qryseq[s] = gap if not row['alt'] else row['alt']
-				if aligned and len(row['alt']) > 1:
-					refseq[s] +=  "-" * (len(row['alt'])-1)
+				if not row['start'] is None:
+					s = row['start']
+					if row['ref'] != refseq[s]:
+						sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
+					qryseq[s] = gap if not row['alt'] else row['alt']
+					if aligned and len(row['alt']) > 1:
+						refseq[s] +=  "-" * (len(row['alt'])-1)
 			if seq_return:
 				return "".join(qryseq)
 			if aligned:
@@ -441,5 +455,5 @@ if __name__ == "__main__":
 
 	#view data
 	if args.tool == "view":
-		rows = [x for x in snr.dbobj.iter_rows(args.branch + "_view")]
+		rows = [x for x in snr.dbobj.iter_rows(args.v + "_view")]
 		snr.rows_to_csv(rows)

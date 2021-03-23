@@ -338,7 +338,7 @@ class sonarDB(object):
 		acc = record.id
 		descr = record.description
 		seq = str(record.seq.upper())
-		seqhash = sonarDB.hash(seq)
+		seqhash = self.hash(seq)
 		seq_exists = self.sequence_exists(seqhash)
 		if not seq_exists:
 			alignment = sonarALIGN(seq, self.refseq, self.refgffObj)
@@ -346,36 +346,43 @@ class sonarDB(object):
 			aadiff = alignment.aadiff
 			dna_profile = self.create_profile(*dnadiff)
 			prot_profile = self.create_profile(*aadiff)
+		else:
+			alignment = None
+			dnadiff = None
+			aadiff = None
+			dna_profile = None
+			prot_profile = None
 
 		if cache:
 			with open(cache, "wb") as handle:
 				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
 		else:
-			self.import_genome(acc, descr, seqhash, dna_profile, prot_profile, dnadiff, aadiff)
+			self.import_genome(acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile)
 
 	def import_genome_from_cache(self, cache):
 		with open(cache, 'rb') as handle:
 			self.import_genome(*pickle.load(handle))
 
-	def import_genome(self, acc, descr, seqhash, dna_profile, prot_profile, dnadiff, aadiff):
-		with sqlite3.connect(self.dbfile, timeout=60, isolation_level=None) as con:
+	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile):
+		with sqlite3.connect(self.dbfile) as con:
 			if not self.genome_exists(acc, descr, seqhash):
 				self.insert_genome(acc, descr, seqhash, con)
-			if not seq_exists:
+			if not self.sequence_exists(seqhash):
 				self.insert_sequence(seqhash, con)
 				self.insert_profile(seqhash, dna_profile, prot_profile, con)
 
-				for ref, alt, s, e, _, __ in alignment.dnadiff:
+				for ref, alt, s, e, _, __ in dnadiff:
 					varid = self.get_dna_varid(ref, alt, s, e)
 					if varid is None:
 						varid = self.insert_dna_var(ref, alt, s, e, con)
 					self.insert_sequence2dna(seqhash, varid, con)
 
-				for ref, alt, s, e, protein, locus in alignment.aadiff:
+				for ref, alt, s, e, protein, locus in aadiff:
 					varid = self.get_prot_varid(protein, locus, ref, alt, s, e)
 					if varid is None:
 						varid = self.insert_prot_var(protein, locus, ref, alt, s, e, con)
-					self.insert_sequence2prot(seqhash, varid, con)
+					self.insert_sequence2prot(seqhash, varid, con)	
+			con.commit()
 
 	def create_profile(self, *vars):
 		if len(vars) == 0:
@@ -403,7 +410,13 @@ class sonarDB(object):
 			coord = str(start+1) + ":" + str(end-start)
 		protein = protein + ":" if protein else ""
 		return protein + ref + coord + alt
-
+		
+	def delete_accession(self, *accs):
+		with sqlite3.connect(self.dbfile) as con:
+			sql = "DELETE FROM genome WHERE accession in (" + ", ".join(["?"] * len(accs)) + ")"
+			con.execute(sql, accs)
+			con.commit()
+				
 	def select(self, table, fieldList=['*'], whereClause=None, valList=None, show_sql=False, orderby=None):
 		sql = "SELECT " + "".join(fieldList) + " FROM " + table
 		if whereClause:
