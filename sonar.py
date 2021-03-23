@@ -211,7 +211,7 @@ class sonar():
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		'''
-		print("preparing ...")
+		print("[1/3] preparing ...")
 		# split fasta files to single entry temporary files
 		with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".covsonar_import_tmpdir_") as tmpdirname:
 			i = 0
@@ -231,15 +231,22 @@ class sonar():
 
 			# execute adding method of the database module on the generated files
 			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
-			print("importing ...")
-			r = Parallel(n_jobs=cpus)(delayed(self.add_worker)(fnames[x], self.db, paranoid) for x in tqdm(range(len(fnames))))
-	
-	def add_worker(self, fname, db, paranoid=True):
-		sonardb.sonarDB(db, check_db=False).add_genome_from_fasta(fname)
-		if True: #paranoid:
-			sonar(db).paranoia(fname)
+			print("[2/3] processing ...")
+			r = Parallel(n_jobs=cpus)(delayed(self.process_genome)(fnames[x], fnames[x] + ".pickle") for x in tqdm(range(len(fnames))))
 
-	def paranoia(self, fname):
+			print("[3/3] importing ...")
+			r = Parallel(n_jobs=cpus)(delayed(self.import_genome)(fnames[x], fnames[x] + ".pickle", paranoid) for x in tqdm(range(len(fnames))))
+
+
+	def process_genome(self, fname, cache=None):
+		self.dbobj.add_genome_from_fasta(fname, cache)
+
+	def import_genome(self, fname, cache, paranoid=True)
+		self.dbobj.import_genome_from_cache(cache):
+		if True: # for now let's be always paranoid
+			self.be_paranoid(fname, cache)
+
+	def be_paranoid(self, fname):
 		record = SeqIO.read(fname, "fasta")
 		acc = record.id
 		descr = record.description

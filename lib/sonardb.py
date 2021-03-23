@@ -17,6 +17,7 @@ from packaging import version
 import shutil
 import base64
 from collections import OrderedDict
+import pickle
 
 class sonarCDS(object):
 	def __init__(self, symbol, start, end, strand, seq, locus=None, translation_table=1):
@@ -35,7 +36,7 @@ class sonarCDS(object):
 			l = len(self.dna)
 			if l%3 == 1:
 				l = -1
-			elif l%3 == 2: 
+			elif l%3 == 2:
 				l = -2
 			self.__aa = str(Seq.translate(self.dna[:l], table=self.translation_table, to_stop=True))
 		return self.__aa
@@ -217,12 +218,12 @@ class sonarALIGN(object):
 					if qaa != taa:
 						e = None if len(qaa) == 1 else int(e/3)
 						yield taa, qaa, int(s/3), e, cds.symbol, cds.locus
-		
+
 	def translate(self, seq, translation_table):
 		l = len(seq)
 		if l%3 == 1:
 			l = -1
-		elif l%3 == 2: 
+		elif l%3 == 2:
 			l = -2
 		return str(Seq.translate(seq[:l], table=translation_table))
 
@@ -257,7 +258,7 @@ class sonarDB(object):
 	@property
 	def rocon(self):
 		if self.__rocon is None:
-			self.__rocon = sqlite3.connect(self.dbfile, uri=True, timeout=60)
+			self.__rocon = sqlite3.connect(self.dbfile, uri=True)
 			self.__rocon.row_factory = sonarDB.dict_factory
 		return self.__rocon
 
@@ -332,7 +333,7 @@ class sonarDB(object):
 			d[col[0]] = row[idx]
 		return d
 
-	def add_genome_from_fasta(self, fname, busy_time_out = None):
+	def add_genome_from_fasta(self, fname, cache = None):
 		record = SeqIO.read(fname, "fasta")
 		acc = record.id
 		descr = record.description
@@ -341,9 +342,22 @@ class sonarDB(object):
 		seq_exists = self.sequence_exists(seqhash)
 		if not seq_exists:
 			alignment = sonarALIGN(seq, self.refseq, self.refgffObj)
-			dna_profile = self.create_profile(*alignment.dnadiff)
-			prot_profile = self.create_profile(*alignment.aadiff)
+			dnadiff = alignment.dnadiff
+			aadiff = alignment.aadiff
+			dna_profile = self.create_profile(*dnadiff)
+			prot_profile = self.create_profile(*aadiff)
 
+		if cache:
+			with open(cache, "wb") as handle:
+				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
+		else:
+			self.import_genome(acc, descr, seqhash, dna_profile, prot_profile, dnadiff, aadiff)
+
+	def import_genome_from_cache(self, cache):
+		with open(cache, 'rb') as handle:
+			self.import_genome(*pickle.load(handle))
+
+	def import_genome(self, acc, descr, seqhash, dna_profile, prot_profile, dnadiff, aadiff):
 		with sqlite3.connect(self.dbfile, timeout=60, isolation_level=None) as con:
 			if not self.genome_exists(acc, descr, seqhash):
 				self.insert_genome(acc, descr, seqhash, con)
