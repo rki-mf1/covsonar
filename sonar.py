@@ -212,18 +212,18 @@ class sonar():
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		'''
-		msg = "[step 1 of 3] preparing ..."
+		msg = "[step 1 of 3] preparing ... "
 		# split fasta files to single entry temporary files
 		with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".covsonar_import_tmpdir_") as tmpdirname:
-			i = 0
 			entry = []
-			for fname in tqdm(range(len(fnames)), desc = msg):
-				with open(fname, "r") as inhandle:
+			j = 0
+			for i in tqdm(range(len(fnames)), desc = msg):
+				with open(fnames[i], "r") as inhandle:
 					for line in inhandle:
 						if line.startswith(">"):
 							if entry:
-								self.writefile(os.path.join(tmpdirname, str(i) + ".fasta"), *entry)
-								i += 1
+								self.writefile(os.path.join(tmpdirname, str(j) + ".fasta"), *entry)
+								j += 1
 							entry = [line]
 						else:
 							entry.append(line)
@@ -235,7 +235,7 @@ class sonar():
 			msg = "[step 2 of 3] processing ..."
 			r = Parallel(n_jobs=cpus)(delayed(self.process_genome)(fnames[x], fnames[x] + ".pickle") for x in tqdm(range(len(fnames)), desc = msg))
 
-			msg = "[step 3 of 3] importing ..."
+			msg = "[step 3 of 3] importing ... "
 			for i in tqdm(range(len(fnames)), desc = msg):
 				self.import_genome(fnames[i], fnames[i] + ".pickle", paranoid)
 
