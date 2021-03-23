@@ -217,21 +217,23 @@ class sonar():
 		with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".covsonar_import_tmpdir_") as tmpdirname:
 			entry = []
 			j = 0
+			ext = ".fasta"
 			for i in tqdm(range(len(fnames)), desc = msg):
 				with open(fnames[i], "r") as inhandle:
 					for line in inhandle:
 						if line.startswith(">"):
 							if entry:
-								self.writefile(os.path.join(tmpdirname, str(j) + ".fasta"), *entry)
+								self.writefile(os.path.join(tmpdirname, str(j) + ext), *entry)
 								j += 1
 							entry = [line]
 						else:
 							entry.append(line)
 			if entry:
-				self.writefile(os.path.join(tmpdirname, str(i) + ".fasta"), *entry)
+				self.writefile(os.path.join(tmpdirname, str(j) + ext), *entry)
+				j += 1
 
 			# execute adding method of the database module on the generated files
-			fnames = [ os.path.join(tmpdirname, x) for x in os.listdir(tmpdirname) if x.endswith(".fasta") ]
+			fnames = [ os.path.join(tmpdirname, str(x) + ext) for x in range(j) ]
 			msg = "[step 2 of 3] processing ..."
 			r = Parallel(n_jobs=cpus)(delayed(self.process_genome)(fnames[x], fnames[x] + ".pickle") for x in tqdm(range(len(fnames)), desc = msg))
 
@@ -245,7 +247,7 @@ class sonar():
 	def import_genome(self, fname, cache, paranoid=True):
 		self.dbobj.import_genome_from_cache(cache)
 		if True: # for now let's be always paranoid
-			self.be_paranoid(fname, True)
+			self.be_paranoid(fname, auto_delete=True)
 			
 	def show_seq_diffs(self, seq1, seq2, stderr=False): 
 		target = sys.stderr if stderr else None

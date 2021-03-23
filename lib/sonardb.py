@@ -389,17 +389,19 @@ class sonarDB(object):
 			return []
 		profile = []
 		vars = sorted(vars, key=lambda x: x[2])
-		for l in range(len(vars)-1):
-			this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[l]
-			next_ref, next_alt, next_start, next_end, next_protein, next_locus = vars[l+1]
-			if this_alt != "":
-				profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein))
-			elif this_alt == "" and this_start + len(this_ref) == next_start and this_protein == next_protein and this_locus == next_locus:
-				vars[l+1] = (this_ref + next_ref, vars[l+1][1], this_start, next_start, this_protein, this_locus)
-			else:
-				profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
-		profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
-		return " ".join(profile)
+		if vars:
+			for l in range(len(vars)-1):
+				this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[l]
+				next_ref, next_alt, next_start, next_end, next_protein, next_locus = vars[l+1]
+				if this_alt != "":
+					profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein))
+				elif this_alt == "" and this_start + len(this_ref) == next_start and this_protein == next_protein and this_locus == next_locus:
+					vars[l+1] = (this_ref + next_ref, vars[l+1][1], this_start, next_start, this_protein, this_locus)
+				else:
+					profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
+			profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
+			return " ".join(profile)
+		return ""
 
 	@staticmethod
 	def format_var(ref, alt, start, end, protein=None, locus=None):
