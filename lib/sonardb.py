@@ -18,6 +18,7 @@ import shutil
 import base64
 from collections import OrderedDict
 import pickle
+from tqdm import tqdm
 
 class sonarCDS(object):
 	def __init__(self, symbol, start, end, strand, seq, locus=None, translation_table=1):
@@ -359,37 +360,59 @@ class sonarDB(object):
 		else:
 			self.import_genome(acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile)
 
-	def import_genome_from_cache(self, cache):
-		with open(cache, 'rb') as handle:
-			self.import_genome(*pickle.load(handle))
+	def import_genome_from_cache(self, picklefile):
+		with open(picklefile, 'rb') as handle:
+			self.import_genome(*pickle.load(handle, encoding="bytes"))
+	
+	def mass_import(self, *fnames, picklefmt=False, msg=None):
+		with sqlite3.connect(self.dbfile, timeout=-1, isolation_level = None) as con:
+			con.row_factory = self.dict_factory
+			c = con.cursor()
+			self.__rocon = c
+			try:
+				c.execute("BEGIN TRANSACTION")
+				if msg:
+					rng = tqdm(range(len(fnames)), desc = msg)
+				else:
+					rng = range(len(fnames))
+				for i in rng:
+					with open(fnames[i], 'rb') as handle:
+						self.import_genome(*pickle.load(handle, encoding="bytes"), dbcursor=c)
+				c.execute("END TRANSACTION")
+				con.commit()
+			except Exception as e: 
+				print("warning:", file=sys.stderr)
+				print(e, file=sys.stderr)
+				print("rollback", file=sys.stderr)
+				con.rollback()
 
-	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile):
-		with sqlite3.connect(self.dbfile) as con:
-			if not self.genome_exists(acc, descr, seqhash):
-				self.insert_genome(acc, descr, seqhash, con)
-			if not self.sequence_exists(seqhash):
-				self.insert_sequence(seqhash, con)
-				self.insert_profile(seqhash, dna_profile, prot_profile, con)
+	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, dbcursor):
+		if not self.genome_exists(acc, descr, seqhash, dbcursor):
+			self.insert_genome(acc, descr, seqhash, dbcursor)
+		if not self.sequence_exists(seqhash, dbcursor):
+			self.insert_sequence(seqhash, dbcursor)
+			self.insert_profile(seqhash, dna_profile, prot_profile, dbcursor)
+			for ref, alt, s, e, _, __ in dnadiff:
+				varid = self.get_dna_varid(ref, alt, s, e)
+				if varid is None:
+					varid = self.insert_dna_var(ref, alt, s, e, dbcursor)
+					self.insert_sequence2dna(seqhash, varid, dbcursor)
 
-				for ref, alt, s, e, _, __ in dnadiff:
-					varid = self.get_dna_varid(ref, alt, s, e)
-					if varid is None:
-						varid = self.insert_dna_var(ref, alt, s, e, con)
-					self.insert_sequence2dna(seqhash, varid, con)
+			for ref, alt, s, e, protein, locus in aadiff:
+				varid = self.get_prot_varid(protein, locus, ref, alt, s, e, dbcursor)
+				if varid is None:
+					varid = self.insert_prot_var(protein, locus, ref, alt, s, e, dbcursor)
+				self.insert_sequence2prot(seqhash, varid, dbcursor)	
 
-				for ref, alt, s, e, protein, locus in aadiff:
-					varid = self.get_prot_varid(protein, locus, ref, alt, s, e)
-					if varid is None:
-						varid = self.insert_prot_var(protein, locus, ref, alt, s, e, con)
-					self.insert_sequence2prot(seqhash, varid, con)	
-			con.commit()
 
 	def create_profile(self, *vars):
 		if len(vars) == 0:
-			return []
+			return ""
 		profile = []
-		vars = sorted(vars, key=lambda x: x[2])
-		if vars:
+		if len(vars) == 1:
+			this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[0]
+		else:
+			vars = sorted(vars, key=lambda x: x[2])
 			for l in range(len(vars)-1):
 				this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[l]
 				next_ref, next_alt, next_start, next_end, next_protein, next_locus = vars[l+1]
@@ -399,9 +422,8 @@ class sonarDB(object):
 					vars[l+1] = (this_ref + next_ref, vars[l+1][1], this_start, next_start, this_protein, this_locus)
 				else:
 					profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
-			profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
-			return " ".join(profile)
-		return ""
+		profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
+		return " ".join(profile)
 
 	@staticmethod
 	def format_var(ref, alt, start, end, protein=None, locus=None):
@@ -434,47 +456,43 @@ class sonarDB(object):
 		rows = self.rocon.execute(sql, acc).fetchall()
 		return rows
 
-	def insert_genome(self, acc, descr, seqhash, con):
-		cursor = con.execute('INSERT INTO genome(accession, description, seqhash) VALUES (?, ?, ?)', (acc, descr, seqhash))
-		return cursor.lastrowid
+	def insert_genome(self, acc, descr, seqhash, dbcursor):
+		return dbcursor.execute('INSERT INTO genome(accession, description, seqhash) VALUES (?, ?, ?)', (acc, descr, seqhash)).lastrowid
+		
+	def insert_sequence(self, seqhash, dbcursor):
+		return dbcursor.execute('INSERT OR IGNORE INTO sequence(seqhash) VALUES(?)', (seqhash, )).lastrowid
 
-	def insert_sequence(self, seqhash, con):
-		cursor = con.execute('INSERT OR IGNORE INTO sequence(seqhash) VALUES(?)', (seqhash, ))
-		return seqhash
-
-	def insert_profile(self, seqhash, dna_profile, aa_profile, con):
+	def insert_profile(self, seqhash, dna_profile, aa_profile, dbcursor):
 		dna_profile = " " + dna_profile.strip() + dna_profile
-		aa_profile = " " + aa_profile.strip() + aa_profile
-		cursor = con.execute('INSERT OR IGNORE INTO profile(seqhash, dna_profile, aa_profile) VALUES(?, ?, ?)', (seqhash, dna_profile, aa_profile))
-		return cursor.lastrowid
+		aa_profile = " " + aa_profile.strip() + aa_profile	
+		return dbcursor.execute('INSERT OR IGNORE INTO profile(seqhash, dna_profile, aa_profile) VALUES(?, ?, ?)', (seqhash, dna_profile, aa_profile)).lastrowid
 
-	def insert_dna_var(self, ref, alt, start, end, con):
-		cursor = con.execute('INSERT INTO dna(varid, ref, alt, start, end) VALUES(?, ?, ?, ?, ?)', (None, ref, alt, start, end))
-		return cursor.lastrowid
+	def insert_dna_var(self, ref, alt, start, end, dbcursor):
+		return dbcursor.execute('INSERT INTO dna(varid, ref, alt, start, end) VALUES(?, ?, ?, ?, ?)', (None, ref, alt, start, end)).lastrowid
 
-	def insert_sequence2dna(self, seqhash, varid, con):
-		con.execute('INSERT INTO sequence2dna(seqhash, varid) VALUES(?, ?)', (seqhash, varid))
+	def insert_sequence2dna(self, seqhash, varid, dbcursor):
+		dbcursor.execute('INSERT INTO sequence2dna(seqhash, varid) VALUES(?, ?)', (seqhash, varid))
 
-	def insert_prot_var(self, protein, locus, ref, alt, start, end, con):
-		cursor = con.execute('INSERT INTO prot(varid, protein, locus, ref, alt, start, end) VALUES(?, ?, ?, ?, ?, ?, ?)', (None, protein, locus, ref, alt, start, end))
-		return cursor.lastrowid
+	def insert_prot_var(self, protein, locus, ref, alt, start, end, dbcursor):
+		return dbcursor.execute('INSERT INTO prot(varid, protein, locus, ref, alt, start, end) VALUES(?, ?, ?, ?, ?, ?, ?)', (None, protein, locus, ref, alt, start, end)).lastrowid
 
-	def insert_sequence2prot(self, seqhash, varid, con):
-		con.execute('INSERT INTO sequence2prot(seqhash, varid) VALUES(?, ?)', (seqhash, varid))
+	def insert_sequence2prot(self, seqhash, varid,dbcursor):
+		return dbcursor.execute('INSERT INTO sequence2prot(seqhash, varid) VALUES(?, ?)', (seqhash, varid)).lastrowid
 
-	def get_genome_data(self, *acc):
+	def get_genome_data(self, *acc, dbcursor):
 		sql = "SELECT * from genome WHERE " + " OR ".join(["accession = ?" for x in acc])
-		return self.rocon.execute(sql, acc).fetchall()
+		return dbcursor.execute(sql, acc).fetchall()
 
-	def genome_exists(self, acc, descr, seqhash):
-		row = self.get_genome_data(acc)
+	def genome_exists(self, acc, descr, seqhash, dbcursor):
+		row = self.get_genome_data(acc, dbcursor=dbcursor)
 		if row and row[0]['description'] == descr and row[0]['seqhash'] == seqhash:
 			return True
-		return False
+		else:
+			return False
 
-	def sequence_exists(self, seqhash):
+	def sequence_exists(self, seqhash, dbcursor):
 		sql = "SELECT COUNT(*) from sequence WHERE seqhash = ?"
-		return self.rocon.execute(sql, (seqhash, )).fetchone()['COUNT(*)'] > 0
+		return dbcursor.execute(sql, (seqhash, )).fetchone()['COUNT(*)'] > 0
 
 	def get_dna_varid(self, ref, alt, start, end):
 		sql = "SELECT varid from dna WHERE ref = ? AND alt = ? AND start = ? and end = ?"
@@ -483,9 +501,9 @@ class sonarDB(object):
 			return row['varid']
 		return None
 
-	def get_prot_varid(self, protein, locus, ref, alt, start, end):
+	def get_prot_varid(self, protein, locus, ref, alt, start, end, dbcursor):
 		sql = "SELECT varid from prot WHERE protein = ? AND locus = ? AND ref = ? AND alt = ? AND start = ? and end = ?"
-		row = self.rocon.execute(sql, (protein, locus, ref, alt, start, end)).fetchone()
+		row = dbcursor.execute(sql, (protein, locus, ref, alt, start, end)).fetchone()
 		if row:
 			return row['varid']
 		return None

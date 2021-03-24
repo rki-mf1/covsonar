@@ -17,6 +17,8 @@ import itertools
 import re
 from tqdm import tqdm
 import difflib
+import glob
+from time import sleep
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -31,7 +33,9 @@ def parse_args():
 
 	# create the parser for the "add" command
 	parser_add = subparsers.add_parser('add', parents=[general_parser], help='add genome sequences to the database.')
-	parser_add.add_argument('-f', '--fasta', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+")
+	parser_add.add_argument('-f', '--file', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+", default=[])
+	parser_add.add_argument('-d', '--dir', metavar="DIR", help="add all files with fasta/pickle extension from the given input directory", type=str, default=None)
+	parser_add.add_argument('-p', '--pickle', help="expect pre-processed pickle instead of fasta files", action="store_true")
 	parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
 
 	# create the parser for the "match" command
@@ -208,7 +212,7 @@ class sonar():
 			out.append(mutation)
 		return " ".join(out)
 
-	def add(self, *fnames, cpus=1, paranoid=True):
+	def add_fasta(self, *fnames, cpus=1, paranoid=True):
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		'''
@@ -238,16 +242,17 @@ class sonar():
 			r = Parallel(n_jobs=cpus)(delayed(self.process_genome)(fnames[x], fnames[x] + ".pickle") for x in tqdm(range(len(fnames)), desc = msg))
 
 			msg = "[step 3 of 3] importing ... "
-			for i in tqdm(range(len(fnames)), desc = msg):
-				self.import_genome(fnames[i], fnames[i] + ".pickle", paranoid)
+			self.add_pickle([ x + ".pickle" for x in fnames ], msg = msg)
+				
+	def add_pickle(self, *fnames, paranoid=True, msg = "importing ..."):
+		self.dbobj.mass_import(*fnames, msg=msg)
+			
+			#if True: # for now let's be always paranoid
+			#	self.be_paranoid(fnames[i][:-7], auto_delete=True)
+			#	sleep(0.05)
 
 	def process_genome(self, fname, cache=None):
 		self.dbobj.add_genome_from_fasta(fname, cache)
-
-	def import_genome(self, fname, cache, paranoid=True):
-		self.dbobj.import_genome_from_cache(cache)
-		if True: # for now let's be always paranoid
-			self.be_paranoid(fname, auto_delete=True)
 			
 	def show_seq_diffs(self, seq1, seq2, stderr=False): 
 		target = sys.stderr if stderr else None
@@ -267,7 +272,8 @@ class sonar():
 		if seq != restored_seq:
 			if auto_delete:
 				self.dbobj.delete_accession(acc)
-			self.show_seq_diffs(seq, restored_seq, True)
+			if restored_seq:
+				self.show_seq_diffs(seq, restored_seq, True)
 			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match.")
 
 	def create_profile_clause(self, profile, dna=True, exclusive=False, negate=False):
@@ -444,7 +450,20 @@ if __name__ == "__main__":
 
 	#add sequences
 	if args.tool == "add":
-		snr.add(*args.fasta, cpus=args.cpus)
+		files = []
+		ext = ".fasta" if not args.pickle else ".pickle"
+		if args.file:
+			files += args.fasta
+		if args.dir:
+			files += [x for x in glob.glob(os.path.join(args.dir, "*"  + ext))]
+		
+		if not files:
+			sys.exit("nothing to add.")
+
+		if not args.pickle:
+			snr.add_fasta(*files, cpus=args.cpus)
+		else:
+			snr.add_pickle(*files)	   
 
 	#show
 	if args.tool == "match":
