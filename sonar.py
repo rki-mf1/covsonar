@@ -243,25 +243,25 @@ class sonar():
 
 			msg = "[step 3 of 3] importing ... "
 			self.add_pickle([ x + ".pickle" for x in fnames ], msg = msg)
-				
+
 	def add_pickle(self, *fnames, paranoid=True, msg = "importing ..."):
 		self.dbobj.mass_import(*fnames, msg=msg)
-			
+
 			#if True: # for now let's be always paranoid
 			#	self.be_paranoid(fnames[i][:-7], auto_delete=True)
 			#	sleep(0.05)
 
 	def process_genome(self, fname, cache=None):
 		self.dbobj.add_genome_from_fasta(fname, cache)
-			
-	def show_seq_diffs(self, seq1, seq2, stderr=False): 
+
+	def show_seq_diffs(self, seq1, seq2, stderr=False):
 		target = sys.stderr if stderr else None
 		for i,s in enumerate(difflib.ndiff(seq2, seq1)):
 			if s[0]==' ': continue
 			elif s[0]=='-':
 				print(u'wrong "{}" at position {}'.format(s[-1],i), file = target)
 			elif s[0]=='+':
-				print(u'missing "{}" at position {}'.format(s[-1],i), file = target) 
+				print(u'missing "{}" at position {}'.format(s[-1],i), file = target)
 
 	def be_paranoid(self, fname, auto_delete=False):
 		record = SeqIO.read(fname, "fasta")
@@ -456,14 +456,14 @@ if __name__ == "__main__":
 			files += args.fasta
 		if args.dir:
 			files += [x for x in glob.glob(os.path.join(args.dir, "*"  + ext))]
-		
+
 		if not files:
 			sys.exit("nothing to add.")
 
 		if not args.pickle:
 			snr.add_fasta(*files, cpus=args.cpus)
 		else:
-			snr.add_pickle(*files)	   
+			snr.add_pickle(*files)
 
 	#show
 	if args.tool == "match":

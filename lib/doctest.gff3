@@ -1,0 +1,5 @@
+##sequence-region NC_TESTSEQ 1 22
+##species in silico bug
+NC_TESTSEQ	RefSeq	region	1	22	.	+	.	ID=NC_TESTSEQ:1..20;collection-date=MAR-2021;country=Germany;genome=genomic;mol_type=genomic DNA
+NC_TESTSEQ	RefSeq	gene	5	13	.	+	.	ID=gene1;Name=ORF1;gbkey=Gene;gene=ORF1;gene_biotype=protein_coding;locus_tag=testseq_0001
+NC_TESTSEQ	RefSeq	CDS	5	13	.	+	0	ID=gene1;Parent=testseq_0001;Note=for testing only;gene=ORF1;locus_tag=testseq_0001;product=ORF1 product
