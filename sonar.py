@@ -19,6 +19,8 @@ from tqdm import tqdm
 import difflib
 import glob
 from time import sleep
+import shutil
+import traceback
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -34,8 +36,9 @@ def parse_args():
 	# create the parser for the "add" command
 	parser_add = subparsers.add_parser('add', parents=[general_parser], help='add genome sequences to the database.')
 	parser_add.add_argument('-f', '--file', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+", default=[])
-	parser_add.add_argument('-d', '--dir', metavar="DIR", help="add all files with fasta/pickle extension from the given input directory", type=str, default=None)
-	parser_add.add_argument('-p', '--pickle', help="expect pre-processed pickle instead of fasta files", action="store_true")
+	parser_add.add_argument('-o', '--outdir', metavar="DIR", help="use this directory for intermediate files (if set, temporary files are not deleted after import)", type=str, default=None)
+	#parser_add.add_argument('-d', '--dir', metavar="DIR", help="add all files with fasta/pickle extension from the given input directory", type=str, default=None)
+	parser_add.add_argument('--cache', metavar="DIR", help="import data from a pre-processed sonar cache directory", type=str, default="None")
 	parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
 
 	# create the parser for the "match" command
@@ -64,385 +67,74 @@ def parse_args():
 	return parser.parse_args()
 
 class sonar():
-	def __init__(self, db, gff=None, check_db=True):
-		self.db = db
-		self.dbobj = sonardb.sonarDB(self.db, check_db=check_db)
-		self.gff = None
-		self.__iupac_nt_code = None
-		self.__iupac_aa_code = None
-		self.__iupac_explicit_nt_code = None
-		self.__iupac_explicit_aa_code = None
-		self.__iupac_ambig_nt_code = None
-		self.__iupac_ambig_aa_code = None
-		self.__terminal_letters_regex = re.compile("[A-Z]$")
-		self.__dna_var_regex = None
-		self.__aa_var_regex = None
-		self.__del_regex = None
+	def __init__(self, db, gff=None):
+		self.dbfile = db
+		self.db = sonardb.sonarDB(self.dbfile)
+		self.gff = gff
 
-	def writefile(self, fname, *content):
-		with open(fname, "w") as handle:
-			handle.write("".join(content))
-
-	@property
-	def dna_var_regex(self):
-		'''
-		Provides a regex matching to valid dna variant expressions.
-		'''
-		if self.__dna_var_regex is None:
-			allowed_letters = "[" + "".join(self.iupac_nt_code.keys()) + "]"
-			self.__dna_var_regex = re.compile("^(?:(?:del:[0-9]+:[0-9]+)|(?:" + allowed_letters + "[0-9]+" + allowed_letters + "+))$")
-		return self.__dna_var_regex
-
-	@property
-	def aa_var_regex(self):
-		'''
-		Provides a regex matching to valid protein variant expressions.
-		'''
-		if self.__aa_var_regex is None:
-			allowed_symbols = "(?:(?:" + ")|(?:".join(self.dbobj.refgffObj.symbols) + "))"
-			allowed_letters = "[" + "".join(self.iupac_aa_code.keys()).replace("-", "") + "-" + "]"
-			self.__aa_var_regex = re.compile("^" + allowed_symbols + ":(?:(?:del:[0-9]+:[0-9]+)|(?:" + allowed_letters + "[0-9]+" + allowed_letters + "+))$")
-		return self.__aa_var_regex
-
-	@property
-	def del_regex(self):
-		'''
-		Provides a regex matching to valid protein variant expressions.
-		'''
-		if self.__del_regex is None:
-			self.__del_regex = re.compile(":?del:[0-9]+:[0-9]+$")
-		return self.__del_regex
-
-	@property
-	def iupac_nt_code(self):
-		'''
-		Provides a dict of all IUPAC nucleotide one letter codes
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
-		if self.__iupac_nt_code is None:
- 			self.__iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AG"), "Y": set("CT"), "S": set("GC"), "W": set("AT"), "K": set("GT"), "M": set("AC"), "B": set("CGT"), "D": set("AGT"), "H": set("ACT"), "V": set("ACG"), "N": set("ATGC") }
-		return self.__iupac_nt_code
-
-	@property
-	def iupac_explicit_nt_code(self):
-		'''
-		Provides a dict of the IUPAC nucleotide one letter codes only containing letters coding for exactly one nucleotide
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
-		if self.__iupac_explicit_nt_code is None:
- 			self.__iupac_explicit_nt_code = set([ x for x in self.iupac_nt_code if len(self.iupac_nt_code[x]) == 1 ])
-		return self.__iupac_explicit_nt_code
-
-	@property
-	def iupac_ambig_nt_code(self):
-		'''
-		Provides a dict of the IUPAC nucleotide one letter codes only containing letters coding for more than one nucleotides
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
-		if self.__iupac_ambig_nt_code is None:
- 			self.__iupac_ambig_nt_code = set([ x for x in self.iupac_nt_code if len(self.iupac_nt_code[x]) > 1 ])
-		return self.__iupac_ambig_nt_code
-
-	@property
-	def iupac_aa_code(self):
-		'''
-		Provides a dict of all IUPAC amino acid one letter codes
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
-		if self.__iupac_aa_code is None:
-			self.__iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O") }
-			self.__iupac_aa_code['X'] = set(self.__iupac_aa_code.keys())
-			self.__iupac_aa_code.update({"B": set("DN"), "Z": set("EQ"), "J": set("IL"), "Φ": set("VILFWYM"), "Ω": set("FWYH"), "Ψ": set("VILM"), "π": set("PGAS"), "ζ": set("STHNQEDKR"), "+": set("KRH"), "-": set("DE") })
-		return self.__iupac_aa_code
-
-	@property
-	def iupac_explicit_aa_code(self):
-		'''
-		Provides a dict of the IUPAC amino acid one letter codes only containing letters coding for exactly one amino acid
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
-		if self.__iupac_explicit_aa_code is None:
- 			self.__iupac_explicit_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) == 1 ])
-		return self.__iupac_explicit_aa_code
-
-	@property
-	def iupac_ambig_aa_code(self):
-		'''
-		Provides a dict of the IUPAC amino acid one letter codes only containing letters coding for more than one amino acid
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
-		if self.__iupac_ambig_aa_code is None:
- 			self.__iupac_ambig_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) > 1 ])
-		return self.__iupac_ambig_aa_code
-
-	def pinpoint_mutation(self, mutation, code):
-		'''
-		Returns a set of explicit mutations based on the given, possibly ambiguous mutation definition.
-		The mutation definition must follow the covsonar nomenclature system.
-		'''
-		# extract ALT call from mutation profile
-		match = self.__terminal_letters_regex.search(mutation)
-		if not match:
-			return mutation
-		match = match.group(0)
-
-		# resolve ambiguities
-		options = []
-		for m in match:
-			options.append(code[m])
-
-		# generate the set of explicit mutations
-		orig_stat = mutation[:-len(match)]
-		return set([mutation] + [ orig_stat + "".join(x) for x in itertools.product(*options) ])
-
-	def filter_ambig(self, profile, explicit_code, keep=None):
-		'''
-		Returns a mutation profile that do not include any ambiguous SNP anymore.
-		Mutations listed in keep will be not excluded.
-		'''
-		out = []
-		keep = set(keep) if keep else set()
-		for mutation in list(filter(None, profile.split(" "))):
-			if mutation in keep or self.del_regex.search(mutation):
-				out.append(mutation)
-				continue
-			match = self.__terminal_letters_regex.search(mutation)
-			if match and len(match.group(0)) == 1 and  match.group(0) not in explicit_code:
-				continue
-			out.append(mutation)
-		return " ".join(out)
-
-	def add_fasta(self, *fnames, cpus=1, paranoid=True):
+	def add_fasta(self, *fnames, cachedir=None, cpus=1, paranoid=True):
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
+		If dir is not defined, a temporary directory will be used as cache.
 		'''
-		msg = "[step 1 of 3] preparing ... "
-		# split fasta files to single entry temporary files
-		with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".covsonar_import_tmpdir_") as tmpdirname:
-			entry = []
-			j = 0
-			ext = ".fasta"
-			for i in tqdm(range(len(fnames)), desc = msg):
-				with open(fnames[i], "r") as inhandle:
-					for line in inhandle:
-						if line.startswith(">"):
-							if entry:
-								self.writefile(os.path.join(tmpdirname, str(j) + ext), *entry)
-								j += 1
-							entry = [line]
-						else:
-							entry.append(line)
-			if entry:
-				self.writefile(os.path.join(tmpdirname, str(j) + ext), *entry)
-				j += 1
+		cache = sonardb.sonarCache(cachedir)
 
-			# execute adding method of the database module on the generated files
-			fnames = [ os.path.join(tmpdirname, str(x) + ext) for x in range(j) ]
-			msg = "[step 2 of 3] processing ..."
-			r = Parallel(n_jobs=cpus)(delayed(self.process_genome)(fnames[x], fnames[x] + ".pickle") for x in tqdm(range(len(fnames)), desc = msg))
+		# add fasta files to cache
+		msg = "[step 1 of 3] caching ...   "
+		for i in tqdm(range(len(fnames)), desc = msg):
+			cache.add_fasta(fnames[i])
 
-			msg = "[step 3 of 3] importing ... "
-			self.add_pickle([ x + ".pickle" for x in fnames ], msg = msg)
+		# execute adding method of the database module on the generated files
+		seqhashes = cache.get_cached_seqhashes()
+		msg = "[step 2 of 3] processing ..."
+		r = Parallel(n_jobs=cpus)(delayed(self.db.process_fasta)(cache.cached_fasta_name(seqhashes[x]), cache.cached_pickle_name(seqhashes[x])) for x in tqdm(range(len(seqhashes)), desc = msg))
 
-	def add_pickle(self, *fnames, paranoid=True, msg = "importing ..."):
-		self.dbobj.mass_import(*fnames, msg=msg)
+		msg = "[step 3 of 3] importing ... "
+		data = []
+		for seqhash in seqhashes:
+			fname = cache.cached_pickle_name(seqhash)
+			for acc, descr in cache.get_acc_descr(seqhash):
+				data.append((fname, acc, descr))
+		with sonardb.sonarDBManager(self.dbfile) as dbm:
+			for i in tqdm(range(len(data)), desc = msg):
+				dat = [data[i][1], data[i][2]] + cache.load_pickle(data[i][0])[2:]
+				self.db.import_genome(*dat, paranoid = True, dbm=dbm)
 
-			#if True: # for now let's be always paranoid
-			#	self.be_paranoid(fnames[i][:-7], auto_delete=True)
-			#	sleep(0.05)
-
-	def process_genome(self, fname, cache=None):
-		self.dbobj.add_genome_from_fasta(fname, cache)
-
-	def show_seq_diffs(self, seq1, seq2, stderr=False):
-		target = sys.stderr if stderr else None
-		for i,s in enumerate(difflib.ndiff(seq2, seq1)):
-			if s[0]==' ': continue
-			elif s[0]=='-':
-				print(u'wrong "{}" at position {}'.format(s[-1],i), file = target)
-			elif s[0]=='+':
-				print(u'missing "{}" at position {}'.format(s[-1],i), file = target)
-
-	def be_paranoid(self, fname, auto_delete=False):
-		record = SeqIO.read(fname, "fasta")
-		acc = record.id
-		descr = record.description
-		seq = str(record.seq.upper())
-		restored_seq = self.restore(acc, aligned=False, seq_return=True)
-		if seq != restored_seq:
-			if auto_delete:
-				self.dbobj.delete_accession(acc)
-			if restored_seq:
-				self.show_seq_diffs(seq, restored_seq, True)
-			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match.")
-
-	def create_profile_clause(self, profile, dna=True, exclusive=False, negate=False):
+	def add_cache(self, cachedir=None, paranoid=True):
 		'''
-		Adds genome sequence(s) from the given FASTA file(s) to the database.
+		Adds genome sequence(s) from a preprocessed sonar cache.
 		'''
-		# configuring
-		condition = " " if not negate else " NOT "
-		config = {
-				   "dna": {
-							"field": "dna_profile",
-					  		"code": self.iupac_nt_code,
-					  		"explicit_code": self.iupac_explicit_nt_code
-						  },
-					"aa": {
-							"field": "aa_profile",
-							"code": self.iupac_aa_code,
-							"explicit_code": self.iupac_explicit_aa_code
-					}
-				  }
+		msg = "[step 1 of 2] restoring ... "
+		fastas = [x for x in glob.glob(os.path.join(cachedir, "*"  + ".fasta"))]
+		if not len(fastas):
+			sys.exit("cache error: not a valid cache")
+		data = []
+		for i in tqdm(range(len(fastas)), desc = msg):
+			record = SeqIO.read(fastas[i], "fasta")
+			acc, descr, seq  = record.id, record.description, str(record.seq)
+			seqhash = self.db.hash(seq)
+			picklefile = os.path.join(cachedir, sonardb.sonarCache.slugify(seqhash) + ".pickle")
+			if not os.path.isfile(picklefile):
+				sys.exit("cache error: cache seems to be corrupt")
+			data.append((picklefile, acc, descr))
 
-		# generating clause
-		clause = []
-		vars = set(profile)
-		dna_profile_length = 1
-		aa_profile_length = 1
-		for var in vars:
-			if self.isdnavar(var):
-				dna_profile_length += 1 + len(var)
-				conf = config['dna']
-			else:
-				aa_profile_length += 1 + len(var)
-				conf = config['aa']
-			for v in self.pinpoint_mutation(var, conf['code']):
-				clause.append(conf['field'] + condition + "LIKE '% " + v + " %'")
+		msg = "[step 2 of 2] importing ... "
+		with sonardb.sonarDBManager(self.dbfile) as dbm:
+			for i in tqdm(range(len(data)), desc = msg):
+				dat = [data[i][1], data[i][2]] + sonardb.sonarCache.load_pickle(data[i][0])[2:]
+				self.db.import_genome(*dat, paranoid = True, dbm=dbm)
 
-		clause = " AND ".join(clause)
+	def match(self, include_profiles, exclude_profiles, accessions, lineages, exclusive, ambig):
+		self.rows_to_csv(self.db.match(include_profiles, exclude_profiles, None, None, exclusive, ambig), na="*** no match ***")
 
-		# add exclusiveness condition not allowing additional mutations
-		if exclusive:
-			if dna_profile_length > 1 and aa_profile_length > 1:
-				sys.exit("input error: exclusive profiles must be defined on dna OR protein level only.")
-			if dna_profile_length > 0:
-				clause += " AND length(" + conf['field'] + ") = " + str(dna_profile_length)
-			elif aa_profile_length > 0:
-				clause += " AND length(" + conf['field'] + ") = " + str(aa_profile_length)
-		return clause
-
-	def isdnavar(self, var):
-		'''
-		Returns True if a variant definition is a valid dna variant expression.
-		'''
-		match = self.dna_var_regex.match(var)
-		if match:
-			return True
-		return False
-
-	def isaavar(self, var):
-		'''
-		Returns True if a variant definition is a valid aa variant expression.
-		'''
-		match = self.aa_var_regex.match(var)
-		if match:
-			return True
-		return False
-
-		def isdel(self, var):
-			'''
-			Returns True if a variant definition is a valid aa variant expression.
-			'''
-			match = self.aa_var_regex.match(var)
-			if match:
-				return True
-			return False
-
-	def isvalidvar(self):
-		pass
-
-	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, exclusive=False, ambig=False, show_sql=False):
-		'''
-		Provides mutation profile matching against sequences in the database.
-		'''
-
-		# For developers:
-		# Aim is to bring all profile definitions and filters to one and the same
-		# sqllite query to let the database do the actual work
-
-		clause = []
-		vals =[]
-
-		#sanity check:
-		check = []
-		if include_profiles:
-			check += [item for sublist in include_profiles for item in sublist]
-		if exclude_profiles:
-			check += [item for sublist in exclude_profiles for item in sublist]
-		nonvalid = [ x for x in check if not self.isdnavar(x) and not self.isaavar(x) ]
-		if nonvalid:
-			sys.exit("input error: Non-valid variant expression(s) entered: " + ", ".join(nonvalid))
-
-		# adding conditions of profiles to include to where clause
-		if include_profiles:
-			includes = []
-			for profile in include_profiles:
-				includes.append(self.create_profile_clause(profile, exclusive=exclusive, negate=False))
-			if len(includes) > 1:
-				includes = [ "(" + x + ")" if " AND " in x else x for x in includes ]
-			clause.append(" OR ".join(includes))
-			if len(includes) > 1:
-				clause[-1] = "(" + clause[-1] + ")"
-
-		# adding conditions of profiles to exclude to where clause
-		if exclude_profiles:
-			excludes = []
-			for profile in exclude_profiles:
-				excludes.append(self.create_profile_clause(profile, exclusive=exclusive, negate=True))
-			excludes = [ "(" + x + ")" if " AND " in x else x for x in excludes ]
-			clause.append(" AND ".join(excludes))
-
-		# adding accession and lineage based conditions
-		if accessions:
-			clause.append("accession IN (" + " , ".join(['?'] * len(accessions)) + ")")
-			vals.extend(accessions)
-		if lineages:
-			clause.append("lineages IN (" + " ,".join(['?'] * len(lineages))  + ")")
-			vals.extend(lineages)
-
-		# executing the query and storing results
-		clause = " AND ".join(clause)
-		rows = [x for x in self.dbobj.select("essence", whereClause=clause, valList=vals, show_sql=show_sql)]
-
-		# remove ambiguities from database profiles if wished
-		if not ambig:
-			keep = [item for sublist in include_profiles for item in sublist] if include_profiles else None
-			for i in range(len(rows)):
-				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code, keep)
-				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code, keep)
-
-		self.rows_to_csv(rows)
-
-	def restore(self, acc, aligned=False, seq_return=False):
-		rows = [x for x in self.dbobj.select("dna_view", whereClause="accession = ?", valList=[acc], orderby="start DESC")] # it's crucial to sort in desc to safely insert potential insertions
-		if rows:
-			gap = "-" if aligned else ""
-			refseq = list(self.dbobj.refseq)
-			qryseq = refseq[:]
-			for row in rows:
-				if not row['start'] is None:
-					s = row['start']
-					if row['ref'] != refseq[s]:
-						sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
-					qryseq[s] = gap if not row['alt'] else row['alt']
-					if aligned and len(row['alt']) > 1:
-						refseq[s] +=  "-" * (len(row['alt'])-1)
-			if seq_return:
-				return "".join(qryseq)
-			if aligned:
-				print(">" + self.dbobj.refdescr)
-				print("".join(refseq))
-			print(">" + rows[0]['description'])
-			print("".join(qryseq))
-
-	def rows_to_csv(self, rows):
+	def rows_to_csv(self, rows, na="*** no data ***"):
 		if len(rows) == 0:
-			print("*** no data ***")
+			print(na, file=sys.stderr)
 		else:
 			writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
 			writer.writeheader()
 			writer.writerows(rows)
+
 
 if __name__ == "__main__":
 	args = parse_args()
@@ -451,23 +143,20 @@ if __name__ == "__main__":
 	#add sequences
 	if args.tool == "add":
 		files = []
-		ext = ".fasta" if not args.pickle else ".pickle"
 		if args.file:
-			files += args.fasta
-		if args.dir:
-			files += [x for x in glob.glob(os.path.join(args.dir, "*"  + ext))]
+			files += args.file
 
-		if not files:
+		if not files and args.cache is None:
 			sys.exit("nothing to add.")
 
-		if not args.pickle:
-			snr.add_fasta(*files, cpus=args.cpus)
+		if files:
+			snr.add_fasta(*files, cachedir=args.outdir, cpus=args.cpus)
 		else:
-			snr.add_pickle(*files)
+			snr.add_cache(cachedir=args.cache)
 
 	#show
 	if args.tool == "match":
-		snr.match(include_profiles=args.include, exclude_profiles=args.exclude, lineages=args.lineage, accessions=args.acc, exclusive=args.exclusive, ambig=args.ambig)
+		snr.match(args.include, args.exclude, args.acc, args.lineage, args.exclusive, args.ambig)
 
 	#restore alignment
 	if args.tool == "restore":
