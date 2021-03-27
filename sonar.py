@@ -35,10 +35,11 @@ def parse_args():
 
 	# create the parser for the "add" command
 	parser_add = subparsers.add_parser('add', parents=[general_parser], help='add genome sequences to the database.')
-	parser_add.add_argument('-f', '--file', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+", default=[])
-	parser_add.add_argument('-o', '--outdir', metavar="DIR", help="use this directory for intermediate files (if set, temporary files are not deleted after import)", type=str, default=None)
-	#parser_add.add_argument('-d', '--dir', metavar="DIR", help="add all files with fasta/pickle extension from the given input directory", type=str, default=None)
-	parser_add.add_argument('--cache', metavar="DIR", help="import data from a pre-processed sonar cache directory", type=str, default="None")
+	parser_add_input = parser_add.add_mutually_exclusive_group()
+	parser_add_input.add_argument('-f', '--file', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+", default=[])
+	parser_add_input.add_argument('-d', '--dir', metavar="DIR", help="add all fasta files (ending with \".fasta\" or \".fna\") from a given directory or directories", type=str, nargs="+", default=None)
+	parser_add_input.add_argument('-o', '--outdir', metavar="DIR", help="use this directory for intermediate files (if set, temporary files are not deleted after import)", type=str, default=None)
+	parser_add.add_argument('--cache', metavar="DIR", help="import data from a pre-processed sonar cache directory", type=str, default=None)
 	parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
 
 	# create the parser for the "match" command
@@ -47,19 +48,28 @@ def parse_args():
 	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=None)
 	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=None)
 	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=None)
+	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=int, default=None)
+	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", type=str)
 	parser_match.add_argument('--exclusive', help="do not allow additional mutations", action="store_true")
-	parser_match.add_argument('--count', help="count only matching genomes", action="store_true")
+	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match.add_argument('--logic', help="decide between OR or AND  logic when matching profile mutations (default: AND logic)", choices=["OR", "or", "AND", "and"], default="AND")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
-	# create the parser for the "match" command
-	parser_match = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence (alignment) for a given accession.')
-	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs = "+", required=True)
-	parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
+	# create the parser for the "restore" command
+	# parser_match = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence (alignment) for a given accession.')
+	# parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs = "+", required=True)
+	# parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
 
-	# create the parser for the "view" command
-	parser_add = subparsers.add_parser('view', parents=[general_parser], help='view database content.')
-	parser_add.add_argument('-v', metavar="FILE", help="complete data view (default: dna)", choices=['dna', 'prot', 'profiles'], default="profiles")
+	# create the parser for the "update" command
+	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
+	parser_update_input = parser_update.add_mutually_exclusive_group()
+	parser_update_input.add_argument('--pangolin', metavar="FILE", help="pangolin csv file", type=str, default=None)
+	parser_update_input.add_argument('--csv', help="generic csv please define columns like: pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}", type=str, default=None)
+	parser_update_input.add_argument('--tsv', help="generic tsv please define columns like: pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}", type=str, default=None)
+
+
+	#create the parser for the "optimize" command
+	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
 
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
@@ -78,6 +88,8 @@ class sonar():
 		If dir is not defined, a temporary directory will be used as cache.
 		'''
 		cache = sonardb.sonarCache(cachedir)
+		with sonardb.sonarDBManager(self.dbfile) as dbm:
+			pass
 
 		# add fasta files to cache
 		msg = "[step 1 of 3] caching ...   "
@@ -124,8 +136,39 @@ class sonar():
 				dat = [data[i][1], data[i][2]] + sonardb.sonarCache.load_pickle(data[i][0])[2:]
 				self.db.import_genome(*dat, paranoid = True, dbm=dbm)
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, exclusive, ambig):
-		self.rows_to_csv(self.db.match(include_profiles, exclude_profiles, None, None, exclusive, ambig), na="*** no match ***")
+	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False):
+		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)
+		if count:
+			print(len(rows))
+		else:
+			self.rows_to_csv(rows, na="*** no match ***")
+
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, samplingCol=None, sep=",", pangolin=False):
+		updates = defaultdict(dict)
+		if pangolin:
+			with open(fname, "r") as handle:
+				lines = csv.DictReader(handle, delimiter = ',',  quoting=csv.QUOTE_MINIMAL)
+				for line in lines:
+					acc = line['﻿Sequence name']
+					updates[acc]['lineage'] = line['Lineage']
+		elif accCol:
+			with open(fname, "r") as handle:
+				lines = csv.DictReader(file, delimiter = sep)
+				for line in lines:
+					acc = line[accCol]
+					if lineageCol and (acc not in updates or 'lineage' not in updates[acc]) :
+						updates[acc]['lineage'] = line['Lineage']
+					if zipCol:
+						updates[acc]['zip'] = line['zipCol']
+					if samplingCol:
+						updates[acc]['sampling'] = line['samplingCol']
+
+		with sonardb.sonarDBManager(self.dbfile) as dbm:
+			for acc, update in updates.items():
+				elems = update.items()
+				fieldList = [x[0] for x in elems]
+				valList = [x[1] for x in elems]
+				dbm.update("genome", fieldList, valList, "accession = ?", [acc])
 
 	def rows_to_csv(self, rows, na="*** no data ***"):
 		if len(rows) == 0:
@@ -136,34 +179,78 @@ class sonar():
 			writer.writerows(rows)
 
 
+def process_update_expressions(expr):
+	allowed_fields = {"accession", "lineage", "date", "zip"}
+	for val in expr:
+		val = val.split("=")
+		if val[0] not in allowed_fields or len(val) == 1:
+			sys.exit("input error: " + args.csv + "is not a valid expression")
+		if val[0] in fields:
+			sys.exit("input error: multiple assignments for " + val[0])
+		fields[val[0]] = "=".join(val[1:])
+		if 'accession' not in fields:
+			sys.exit("input error: an accession column has to be defined.")
+	return fields
+
 if __name__ == "__main__":
 	args = parse_args()
 	snr = sonar(args.db)
 
-	#add sequences
+	# add
 	if args.tool == "add":
-		files = []
-		if args.file:
-			files += args.file
 
-		if not files and args.cache is None:
+		# fasta file input
+		if args.file:
+			files = args.file
+
+		#dir input
+		elif args.dir:
+			files = []
+			for d in args.dir:
+				if not os.path.isdir(dir):
+					sys.exit("input error: " + dir + " is not a valid directory")
+				files += [x for x in glob.glob(os.path.join(dir, "*.fasta *.fna"))]
+
+		# cache input
+		elif args.cache:
+			if not os.path.isdir(args.cache):
+				sys.exit("input error: " + args.cache + " does not exist")
+
+		# sanity check
+		if not files and not args.cache:
 			sys.exit("nothing to add.")
 
-		if files:
-			snr.add_fasta(*files, cachedir=args.outdir, cpus=args.cpus)
-		else:
+		if args.cache:
 			snr.add_cache(cachedir=args.cache)
+		else:
+			snr.add_fasta(*files, cachedir=args.outdir, cpus=args.cpus)
 
-	#show
+
+	# match
 	if args.tool == "match":
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.exclusive, args.ambig)
+		# sanity check
+		if args.date:
+			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
+			for d in args.date:
+				if not regex.match(d):
+					sys.exit("input error: " + d + "is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
+		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.exclusive, args.ambig, args.count)
 
-	#restore alignment
-	if args.tool == "restore":
-		for acc in args.accs:
-			snr.restore(acc, args.align)
+	# update
+	if args.tool == "update":
+		fields={}
+		if args.csv:
+			cols = process_update_expressions(args.csv)
+			snr.update_metadata(args.csv, **cols, sep=",", pangolin=False)
+		elif args.tsv:
+			cols = process_update_expressions(args.csv)
+			snr.update_metadata(args.tsv, **cols, sep="", pangolin=False)
+		elif args.pangolin:
+			snr.update_metadata(args.pangolin, pangolin=True)
+		else:
+			print("nothing to update.")
 
-	#view data
-	if args.tool == "view":
-		rows = [x for x in snr.dbobj.iter_rows(args.v + "_view")]
-		snr.rows_to_csv(rows)
+
+	# optimize
+	if args.tool == "optimize":
+		sonardb.sonarDBManager.optimize(args.db)

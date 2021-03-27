@@ -460,7 +460,7 @@ class sonarDBManager():
 		return con, cur
 
 	def start_transaction(self):
-		self.cursor.execute("BEGIN")
+		self.cursor.execute("BEGIN DEFERRED")
 
 	def commit(self):
 		self.connection.commit()
@@ -510,6 +510,17 @@ class sonarDBManager():
 			print(sql)
 		self.cursor.execute(sql, valList)
 		return self.cursor.lastrowid
+
+	def update(self, table, fieldList, valList, whereClause, whereVals, print_sql=True):
+		sql = "UPDATE " + table + " SET " + ", ".join([ str(x) + "= ?" for x in fieldList ]) + " WHERE " + whereClause
+		if print_sql:
+			print(sql)
+		self.cursor.execute(sql, valList + whereVals)
+
+	@staticmethod
+	def optimize(dbfile):
+		with sqlite3.connect(self.__uri + "?mode=rwc", uri = True) as con:
+			con.executescript("VACUUM")
 
 	@staticmethod
 	def dict_factory(cursor, row):
@@ -685,7 +696,7 @@ class sonarDB(object):
 		'''
 		return seguid(seq)
 
-	def process_fasta(self, fname, cache=None):
+	def process_fasta(self, fname, cache=None, seqhashes_to_skip=None):
 		'''
 		Processes a given fasta and prepars the contained genome sequence for database import.
 		Relevant sequence- and alignment-based information are provided in pickle format that
@@ -1051,7 +1062,7 @@ class sonarDB(object):
 				clause += " AND length(" + conf['field'] + ") = " + str(aa_profile_length)
 		return clause
 
-	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, exclusive=False, ambig=False, show_sql=False):
+	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, zips=None, dates=None, exclusive=False, ambig=False, show_sql=False):
 		'''
 		Provides mutation profile matching against sequences in the database.
 		'''
@@ -1092,13 +1103,31 @@ class sonarDB(object):
 			excludes = [ "(" + x + ")" if " AND " in x else x for x in excludes ]
 			clause.append(" AND ".join(excludes))
 
-		# adding accession and lineage based conditions
+		# adding accession, lineage, zips, and dates based conditions
 		if accessions:
 			clause.append("accession IN (" + " , ".join(['?'] * len(accessions)) + ")")
 			vals.extend(accessions)
 		if lineages:
 			clause.append("lineages IN (" + " ,".join(['?'] * len(lineages))  + ")")
 			vals.extend(lineages)
+		if zips:
+			z = []
+			for zp in zips:
+				z.append("zip = '" + str(zp) + "%'")
+			clause.append(" OR ".join(z))
+			if len(z) > 1:
+				clause[-1] = "(" + clause[-1] + ")"
+		if dates:
+			d = []
+			for dt in dates:
+				if ":" in dt:
+					d1, d2 = dt.split(":")
+					d.append("sampling BETWEEN " + d1 + " AND " + d2)
+				else:
+					d.append("sampling = " + d)
+			clause.append(" OR ".join(d))
+			if len(d) > 1:
+				clause[-1] = "(" + clause[-1] + ")"
 
 		# executing the query and storing results
 		clause = " AND ".join(clause)

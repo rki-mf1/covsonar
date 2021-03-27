@@ -9,10 +9,11 @@ CREATE TABLE IF NOT EXISTS genome (
   accession VARCHAR(150) NOT NULL PRIMARY KEY,
   description TEXT,
   seqhash VARCHAR(40) NOT NULL,
-	zip INT,
-	sampling DATE,
-	GISAID VARCHAR(100),
-	ENA VARCHAR(100),
+	lineage VARCHAR(40),
+	zip VARCHAR(10),
+	sampling TEXT,
+	gisaid VARCHAR(100),
+	ena VARCHAR(100),
   FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
 );
 
@@ -54,14 +55,6 @@ CREATE TABLE IF NOT EXISTS prot (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(protein, locus, start, end, ref, alt);
 
-CREATE TABLE IF NOT EXISTS lineage (
-  seqhash VARCHAR(40) NOT NULL,
-  lineage VARCHAR(45) NOT NULL,
-  pangolin_version VARCHAR(45) NOT NULL,
-  pangolearn_version VARCHAR(45) NOT NULL,
-  FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
-);
-
 CREATE TABLE IF NOT EXISTS profile (
   seqhash VARCHAR(40) NOT NULL,
 	dna_profile TEXT NOT NULL,
@@ -74,56 +67,61 @@ AS
 SELECT
 	accession,
 	description,
+	gisaid,
+	ena,
+	zip,
+	sampling,
+	lineage,
   genome.seqhash,
   dna_profile,
-	aa_profile,
-  lineage
+	aa_profile
 FROM
 	genome
 LEFT JOIN sequence USING (seqhash)
-LEFT JOIN profile USING (seqhash)
-LEFT JOIN lineage USING (seqhash);
+LEFT JOIN profile USING (seqhash);
 
 CREATE VIEW IF NOT EXISTS dna_view
 AS
 SELECT
 	accession,
 	description,
+	gisaid,
+	ena,
+	zip,
+	sampling,
+	lineage,
   genome.seqhash,
   start,
 	end,
   ref,
-  alt,
-  lineage,
-  pangolin_version,
-  pangolearn_version
+  alt
 FROM
 	genome
 LEFT JOIN sequence USING (seqhash)
 LEFT JOIN sequence2dna USING (seqhash)
-LEFT JOIN dna USING (varid)
-LEFT JOIN lineage USING (seqhash);
+LEFT JOIN dna USING (varid);
 
 CREATE VIEW IF NOT EXISTS prot_view
 AS
 SELECT
 	accession,
 	description,
+	gisaid,
+	ena,
+	zip,
+	sampling,
+	lineage,
   genome.seqhash,
   protein,
 	locus,
   start,
 	end,
   ref,
-  alt,
-  lineage,
-  pangolin_version,
-  pangolearn_version
+  alt
 FROM
 	genome
 LEFT JOIN sequence USING (seqhash)
 LEFT JOIN sequence2prot USING (seqhash)
-LEFT JOIN prot USING (varid)
-LEFT JOIN lineage USING (seqhash);
+LEFT JOIN prot USING (varid);
 
 PRAGMA foreign_keys = ON;
