@@ -48,11 +48,10 @@ def parse_args():
 	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=None)
 	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=None)
 	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=None)
-	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=int, default=None)
-	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", type=str)
+	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=int,  nargs="+", default=None)
+	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str)
 	parser_match.add_argument('--exclusive', help="do not allow additional mutations", action="store_true")
 	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
-	parser_match.add_argument('--logic', help="decide between OR or AND  logic when matching profile mutations (default: AND logic)", choices=["OR", "or", "AND", "and"], default="AND")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
 	# create the parser for the "restore" command
@@ -63,9 +62,10 @@ def parse_args():
 	# create the parser for the "update" command
 	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
 	parser_update_input = parser_update.add_mutually_exclusive_group()
-	parser_update_input.add_argument('--pangolin', metavar="FILE", help="pangolin csv file", type=str, default=None)
-	parser_update_input.add_argument('--csv', help="generic csv please define columns like: pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}", type=str, default=None)
-	parser_update_input.add_argument('--tsv', help="generic tsv please define columns like: pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}", type=str, default=None)
+	parser_update_input.add_argument('--pangolin', metavar="FILE", help="import linegae information from csv file created by pangolin", type=str, default=None)
+	parser_update_input.add_argument('--csv', metavar="FILE", help="import metadata from a csv file", type=str, default=None)
+	parser_update_input.add_argument('--tsv', metavar="FILE", help="import metadata from a tsv file", type=str, default=None)
+	parser_update.add_argument('--fields', metavar="STR", help="if --csv or --tsv is used, define relevant columns like \"pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}\"", type=str, nargs="+", default=None)
 
 
 	#create the parser for the "optimize" command
@@ -122,7 +122,7 @@ class sonar():
 			sys.exit("cache error: not a valid cache")
 		data = []
 		for i in tqdm(range(len(fastas)), desc = msg):
-			record = SeqIO.read(fastas[i], "fasta")
+			record = SeqIO.readfieldList(fastas[i], "fasta")
 			acc, descr, seq  = record.id, record.description, str(record.seq)
 			seqhash = self.db.hash(seq)
 			picklefile = os.path.join(cachedir, sonardb.sonarCache.slugify(seqhash) + ".pickle")
@@ -143,7 +143,7 @@ class sonar():
 		else:
 			self.rows_to_csv(rows, na="*** no match ***")
 
-	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, samplingCol=None, sep=",", pangolin=False):
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, sep=",", pangolin=False):
 		updates = defaultdict(dict)
 		if pangolin:
 			with open(fname, "r") as handle:
@@ -153,15 +153,19 @@ class sonar():
 					updates[acc]['lineage'] = line['Lineage']
 		elif accCol:
 			with open(fname, "r") as handle:
-				lines = csv.DictReader(file, delimiter = sep)
+				lines = csv.DictReader(handle, delimiter = sep)
 				for line in lines:
 					acc = line[accCol]
 					if lineageCol and (acc not in updates or 'lineage' not in updates[acc]) :
-						updates[acc]['lineage'] = line['Lineage']
+						updates[acc]['lineage'] = line[lineageCol]
 					if zipCol:
-						updates[acc]['zip'] = line['zipCol']
-					if samplingCol:
-						updates[acc]['sampling'] = line['samplingCol']
+						updates[acc]['zip'] = line[zipCol]
+					if dateCol:
+						updates[acc]['date'] = line[dateCol]
+					if gisaidCol:
+						updates[acc]['gisaid'] = line[gisaidCol]
+					if enaCol:
+						updates[acc]['ena'] = line[enaCol]
 
 		with sonardb.sonarDBManager(self.dbfile) as dbm:
 			for acc, update in updates.items():
@@ -180,15 +184,17 @@ class sonar():
 
 
 def process_update_expressions(expr):
-	allowed_fields = {"accession", "lineage", "date", "zip"}
+	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol"}
+	fields = {}
 	for val in expr:
 		val = val.split("=")
-		if val[0] not in allowed_fields or len(val) == 1:
-			sys.exit("input error: " + args.csv + "is not a valid expression")
-		if val[0] in fields:
+		if val[0] not in allowed or len(val) == 1:
+			sys.exit("input error: " + val[0] + " is not a valid expression")
+		key = allowed[val[0]]
+		if key in fields:
 			sys.exit("input error: multiple assignments for " + val[0])
-		fields[val[0]] = "=".join(val[1:])
-		if 'accession' not in fields:
+		fields[key] = "=".join(val[1:])
+		if 'accCol' not in fields:
 			sys.exit("input error: an accession column has to be defined.")
 	return fields
 
@@ -230,21 +236,21 @@ if __name__ == "__main__":
 	if args.tool == "match":
 		# sanity check
 		if args.date:
-			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
+			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
 			for d in args.date:
 				if not regex.match(d):
-					sys.exit("input error: " + d + "is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
+					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
 		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.exclusive, args.ambig, args.count)
 
 	# update
 	if args.tool == "update":
 		fields={}
 		if args.csv:
-			cols = process_update_expressions(args.csv)
+			cols = process_update_expressions(args.fields)
 			snr.update_metadata(args.csv, **cols, sep=",", pangolin=False)
 		elif args.tsv:
-			cols = process_update_expressions(args.csv)
-			snr.update_metadata(args.tsv, **cols, sep="", pangolin=False)
+			cols = process_update_expressions(args.fields)
+			snr.update_metadata(args.tsv, **cols, sep="\t", pangolin=False)
 		elif args.pangolin:
 			snr.update_metadata(args.pangolin, pangolin=True)
 		else:

@@ -511,7 +511,7 @@ class sonarDBManager():
 		self.cursor.execute(sql, valList)
 		return self.cursor.lastrowid
 
-	def update(self, table, fieldList, valList, whereClause, whereVals, print_sql=True):
+	def update(self, table, fieldList, valList, whereClause, whereVals, print_sql=False):
 		sql = "UPDATE " + table + " SET " + ", ".join([ str(x) + "= ?" for x in fieldList ]) + " WHERE " + whereClause
 		if print_sql:
 			print(sql)
@@ -519,7 +519,7 @@ class sonarDBManager():
 
 	@staticmethod
 	def optimize(dbfile):
-		with sqlite3.connect(self.__uri + "?mode=rwc", uri = True) as con:
+		with sqlite3.connect(dbfile) as con:
 			con.executescript("VACUUM")
 
 	@staticmethod
@@ -712,7 +712,7 @@ class sonarDB(object):
 		>>> data[1]
 		'b117 Ideal severe acute respiratory syndrome coronavirus 2 lineage B.1.1.7, complete genome'
 		>>> data[5]
-		'C3267T C5388A T6954C del:11288:8 del:21765:5 del:21991:2 A23063T C23271A C23604A C23709T T24506G G24914C C27972T G28048T A28111G G28280C A28281T T28282A T28282A'
+		'C3267T C5388A T6954C del:11288:8 del:21765:5 del:21991:2 A23063T C23271A C23604A C23709T T24506G G24914C C27972T G28048T A28111G G28280C A28281T T28282A'
 		>>> data[6]
 		'N:D3L ORF8:Q27* ORF8:R52I S:del:68:2 ORF8:Y73C S:del:143:1 N:S235F S:N501Y S:A570D S:P681H S:T716I S:S982A ORF1ab:T1001I S:D1118H ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:1'
 
@@ -827,7 +827,7 @@ class sonarDB(object):
 				if varid is None:
 					varid = self.insert_prot_var(protein, locus, ref, alt, s, e, dbm)
 				self.insert_sequence2prot(seqhash, varid, dbm)
-		if paranoid:
+		if True:
 			self.be_paranoid(acc, seq, dbm, auto_delete=True)
 
 	def insert_genome(self, acc, descr, seqhash, dbm):
@@ -837,8 +837,8 @@ class sonarDB(object):
 		return dbm.insert('sequence', ['seqhash'], [seqhash], ignore=True)
 
 	def insert_profile(self, seqhash, dna_profile, aa_profile, dbm):
-		dna_profile = " " + dna_profile.strip() + dna_profile
-		aa_profile = " " + aa_profile.strip() + aa_profile
+		dna_profile = " " + dna_profile.strip() + " "
+		aa_profile = " " + aa_profile.strip() + " "
 		return dbm.insert('profile', ['seqhash', 'dna_profile', 'aa_profile'], [seqhash, dna_profile, aa_profile], ignore=True)
 
 	def insert_dna_var(self, ref, alt, start, end, dbm):
@@ -953,12 +953,19 @@ class sonarDB(object):
 				this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[l]
 				next_ref, next_alt, next_start, next_end, next_protein, next_locus = vars[l+1]
 				if this_alt != "":
-					profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein))
+					var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein)
+					if var not in profile:
+						profile.append(var)
 				elif this_alt == "" and this_start + len(this_ref) == next_start and this_protein == next_protein and this_locus == next_locus:
 					vars[l+1] = (this_ref + next_ref, vars[l+1][1], this_start, next_start, this_protein, this_locus)
 				else:
-					profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
-		profile.append(self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus))
+					var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein)
+					if var not in profile:
+						profile.append(var)
+		var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein)
+		if var not in profile:
+			profile.append(var)
+
 		return " ".join(profile)
 
 	@staticmethod
@@ -1113,7 +1120,7 @@ class sonarDB(object):
 		if zips:
 			z = []
 			for zp in zips:
-				z.append("zip = '" + str(zp) + "%'")
+				z.append("zip LIKE '" + str(zp) + "%'")
 			clause.append(" OR ".join(z))
 			if len(z) > 1:
 				clause[-1] = "(" + clause[-1] + ")"
@@ -1121,10 +1128,10 @@ class sonarDB(object):
 			d = []
 			for dt in dates:
 				if ":" in dt:
-					d1, d2 = dt.split(":")
-					d.append("sampling BETWEEN " + d1 + " AND " + d2)
+					x, y = dt.split(":")
+					d.append("(date BETWEEN '" + x + "' AND '" + y + "')")
 				else:
-					d.append("sampling = " + d)
+					d.append("date = " + dt)
 			clause.append(" OR ".join(d))
 			if len(d) > 1:
 				clause[-1] = "(" + clause[-1] + ")"

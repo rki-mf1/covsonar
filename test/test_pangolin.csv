@@ -1,0 +1,4 @@
+﻿Sequence name,Lineage,Probability,Most common countries,Number of taxa,Date range,Days since last sampling
+"NC_045512.2 Severe acute respiratory syndrome coronavirus 2 isolate Wuhan-Hu-1, complete genome",B,1.0,"UK, USA, China",3857,"December-24, January-31",52
+test2,B.1.1.189,1.0,"UK, Denmark, Turkey",251,"April-11, February-10",45
+test1,B.1.1.297,1.0,"Belgium, Luxembourg, Netherlands",201,"July-16, February-03",52
