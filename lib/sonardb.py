@@ -219,8 +219,6 @@ class sonarALIGN(object):
 		sonarGFFObj = sonarGFF object to consider cds annotation and provide protein level based functions
 		'''
 		self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
-		with open("test.fna", "w") as handle:
-			handle.write(">qry\n" + self.aligned_query + "\n>target\n" + self.aligned_target)
 		self.gff = sonarGFFObj if sonarGFFObj else None
 		self.indel_regex = re.compile(".-+")
 		self.codon_regex = re.compile(".-*.-*.-*")
