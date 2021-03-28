@@ -229,7 +229,7 @@ if __name__ == "__main__":
 		if args.cache:
 			snr.add_cache(cachedir=args.cache)
 		else:
-			snr.add_fasta(*files, cachedir=args.outdir, cpus=args.cpus)
+			snr.add_fasta(*files, cachedir=args.cachedir, cpus=args.cpus)
 
 
 	# match
