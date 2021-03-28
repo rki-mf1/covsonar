@@ -1268,7 +1268,9 @@ class sonarCache():
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".pickle")
 
 	def link_pickle_name(self, fastaname):
-		return self.cached_pickle_name(os.path.splitext(os.path.basename(fastaname))[0])
+		with open(fastaname) as handle:
+			seqhash = handle.readline().strip()[1:]
+		return self.cached_pickle_name(seqhash)
 
 	def cached_acclog_name(self):
 		return os.path.join(self.dirname, "acclist")
