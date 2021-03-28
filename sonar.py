@@ -38,7 +38,7 @@ def parse_args():
 	parser_add_input = parser_add.add_mutually_exclusive_group()
 	parser_add_input.add_argument('-f', '--file', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+", default=[])
 	parser_add_input.add_argument('-d', '--dir', metavar="DIR", help="add all fasta files (ending with \".fasta\" or \".fna\") from a given directory or directories", type=str, nargs="+", default=None)
-	parser_add_input.add_argument('-o', '--outdir', metavar="DIR", help="use this directory for intermediate files (if set, temporary files are not deleted after import)", type=str, default=None)
+	parser_add.add_argument('-c', '--cachedir', metavar="DIR", help="use this directory to cache files (if not set, a temporary directory is used and deleted after import)", type=str, default=None)
 	parser_add.add_argument('--cache', metavar="DIR", help="import data from a pre-processed sonar cache directory", type=str, default=None)
 	parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
 
