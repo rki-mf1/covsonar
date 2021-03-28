@@ -785,7 +785,7 @@ class sonarDB(object):
 
 		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
 		>>> cache = sonarCache()
-		>>> cache.add_fasta("doctest_b117.fna")
+		>>> cachefile=cache.add_fasta("doctest_b117.fna")
 		>>> db = sonarDB(DOCTESTDB + "_import_genome_from_cache")
 		>>> db.import_genome_from_cache(cache)
 
@@ -1226,7 +1226,17 @@ class sonarCache():
 		if not os.path.isdir(self.dirname):
 			os.makedirs(self.dirname)
 		elif os.listdir(self.dirname):
-			sys.exit("cache error: cache directory is not empty")
+			self.restore_cache()
+
+	def restore_cache(self):
+		acclog = self.cached_acclog_name()
+		if os.listdir(self.dirname):
+			if not os.path.isfile(acclog):
+				sys.exit("cache error: not a valid cache directory.")
+			self.cache = self.load_pickle(acclog)
+			for seqhash in self.get_cached_seqhashes():
+				if not os.path.isfile(self.cached_fasta_name(seqhash)) or not os.path.isfile(self.cached_pickle_name(seqhash)) :
+					sys.exit("cache error: cache directory is corrupted.")
 
 	@staticmethod
 	def slugify(string):
@@ -1257,6 +1267,12 @@ class sonarCache():
 	def cached_pickle_name(self, seqhash):
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".pickle")
 
+	def link_pickle_name(self, fastaname):
+		return self.cached_pickle_name(os.path.splitext(os.path.basename(fastaname))[0])
+
+	def cached_acclog_name(self):
+		return os.path.join(self.dirname, "acclist")
+
 	@staticmethod
 	def load_pickle(fname):
 		with open(fname, 'rb') as handle:
@@ -1266,25 +1282,27 @@ class sonarCache():
 		with open(fname, 'wb') as handle:
 			pickle.dump(data, handle)
 
+
 	def add_fasta(self, fname):
 		'''
 		Adds entries of a given fasta file in a sequence-unredundant manner to
 		the cache.
 		'''
+		fnames = []
 		for record in SeqIO.parse(fname, "fasta"):
 			acc = record.id
 			descr = record.description
 			seq = str(record.seq).upper()
 			seqhash = sonarDB.hash(seq)
-			fname = self.cached_fasta_name(seqhash)
+			fnames.append(self.cached_fasta_name(seqhash))
 
 			# check for seqhash collision
-			if os.path.isfile(fname):
-				_, s = self.read_fasta(fname)
+			if os.path.isfile(fnames[-1]):
+				_, s = self.read_fasta(fnames[-1])
 				if s != seq:
 					sys.exit("cache error: sequence collision for hash '" + seqhash + "'")
 			else:
-				with open(fname, "w") as handle:
+				with open(fnames[-1], "w") as handle:
 					handle.write(">" + seqhash + os.linesep + seq)
 
 			# check for accession collision
@@ -1293,6 +1311,9 @@ class sonarCache():
 
 			if not acc in self.cache:
 				self.cache[acc] = (descr, seqhash)
+
+		self.write_pickle(self.cached_acclog_name(), self.cache[acc])
+		return fnames
 
 	def get_cached_seqhashes(self):
 		return sorted(set([x[1] for x in self.cache.values()]))

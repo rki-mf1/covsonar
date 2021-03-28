@@ -38,8 +38,7 @@ def parse_args():
 	parser_add_input = parser_add.add_mutually_exclusive_group()
 	parser_add_input.add_argument('-f', '--file', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+", default=[])
 	parser_add_input.add_argument('-d', '--dir', metavar="DIR", help="add all fasta files (ending with \".fasta\" or \".fna\") from a given directory or directories", type=str, nargs="+", default=None)
-	parser_add.add_argument('-c', '--cachedir', metavar="DIR", help="use this directory to cache files (if not set, a temporary directory is used and deleted after import)", type=str, default=None)
-	parser_add.add_argument('--cache', metavar="DIR", help="import data from a pre-processed sonar cache directory", type=str, default=None)
+	parser_add.add_argument('-c', '--cache', metavar="DIR", help="use (and restore data from) a given cache (if not set, a temporary cache is used and deleted after import)", type=str, default=None)
 	parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
 
 	# create the parser for the "match" command
@@ -82,58 +81,47 @@ class sonar():
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 
-	def add_fasta(self, *fnames, cachedir=None, cpus=1, paranoid=True):
+	def add(self, fnames=None, cachedir=None, cpus=1, paranoid=True):
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		If dir is not defined, a temporary directory will be used as cache.
 		'''
+		step = 0
+		if cachedir and os.path.isdir(cachedir):
+			step += 1
+			print("[step", step, "] restoring ... ")
 		cache = sonardb.sonarCache(cachedir)
-		with sonardb.sonarDBManager(self.dbfile) as dbm:
-			pass
+
+		if not os.path.isfile(self.dbfile):
+			with sonardb.sonarDBManager(self.dbfile) as dbm:
+				pass
 
 		# add fasta files to cache
-		msg = "[step 1 of 3] caching ...   "
-		for i in tqdm(range(len(fnames)), desc = msg):
-			cache.add_fasta(fnames[i])
+		if fnames:
+			step += 1
+			msg = "[step" + str(step) + "] caching ...   "
+			for i in tqdm(range(len(fnames)), desc = msg):
+				added = cache.add_fasta(fnames[i])
+			new = []
+			for fname in added:
+				p = cache.link_pickle_name(fname)
+				if not os.path.isfile(p):
+					new.append((fname, p))
 
-		# execute adding method of the database module on the generated files
-		seqhashes = cache.get_cached_seqhashes()
-		msg = "[step 2 of 3] processing ..."
-		r = Parallel(n_jobs=cpus)(delayed(self.db.process_fasta)(cache.cached_fasta_name(seqhashes[x]), cache.cached_pickle_name(seqhashes[x])) for x in tqdm(range(len(seqhashes)), desc = msg))
-
-		msg = "[step 3 of 3] importing ... "
+			if new:
+				step += 1
+				msg = "[step" + str(step) + "] processing ..."
+				r = Parallel(n_jobs=cpus)(delayed(self.db.process_fasta)(*new[x]) for x in tqdm(range(len(new)), desc = msg))
+		step += 1
+		msg = "[step" + str(step) + "] importing ... "
 		data = []
-		for seqhash in seqhashes:
+		for seqhash in cache.get_cached_seqhashes():
 			fname = cache.cached_pickle_name(seqhash)
 			for acc, descr in cache.get_acc_descr(seqhash):
 				data.append((fname, acc, descr))
 		with sonardb.sonarDBManager(self.dbfile) as dbm:
 			for i in tqdm(range(len(data)), desc = msg):
 				dat = [data[i][1], data[i][2]] + cache.load_pickle(data[i][0])[2:]
-				self.db.import_genome(*dat, paranoid = True, dbm=dbm)
-
-	def add_cache(self, cachedir=None, paranoid=True):
-		'''
-		Adds genome sequence(s) from a preprocessed sonar cache.
-		'''
-		msg = "[step 1 of 2] restoring ... "
-		fastas = [x for x in glob.glob(os.path.join(cachedir, "*"  + ".fasta"))]
-		if not len(fastas):
-			sys.exit("cache error: not a valid cache")
-		data = []
-		for i in tqdm(range(len(fastas)), desc = msg):
-			record = SeqIO.readfieldList(fastas[i], "fasta")
-			acc, descr, seq  = record.id, record.description, str(record.seq)
-			seqhash = self.db.hash(seq)
-			picklefile = os.path.join(cachedir, sonardb.sonarCache.slugify(seqhash) + ".pickle")
-			if not os.path.isfile(picklefile):
-				sys.exit("cache error: cache seems to be corrupt")
-			data.append((picklefile, acc, descr))
-
-		msg = "[step 2 of 2] importing ... "
-		with sonardb.sonarDBManager(self.dbfile) as dbm:
-			for i in tqdm(range(len(data)), desc = msg):
-				dat = [data[i][1], data[i][2]] + sonardb.sonarCache.load_pickle(data[i][0])[2:]
 				self.db.import_genome(*dat, paranoid = True, dbm=dbm)
 
 	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False):
@@ -205,31 +193,11 @@ if __name__ == "__main__":
 	# add
 	if args.tool == "add":
 
-		# fasta file input
-		if args.file:
-			files = args.file
-
-		#dir input
-		elif args.dir:
-			files = []
-			for d in args.dir:
-				if not os.path.isdir(dir):
-					sys.exit("input error: " + dir + " is not a valid directory")
-				files += [x for x in glob.glob(os.path.join(dir, "*.fasta *.fna"))]
-
-		# cache input
-		elif args.cache:
-			if not os.path.isdir(args.cache):
-				sys.exit("input error: " + args.cache + " does not exist")
-
 		# sanity check
-		if not files and not args.cache:
+		if not args.file and not args.cache:
 			sys.exit("nothing to add.")
 
-		if args.cache:
-			snr.add_cache(cachedir=args.cache)
-		else:
-			snr.add_fasta(*files, cachedir=args.cachedir, cpus=args.cpus)
+		snr.add(args.file, cachedir=args.cache, cpus=args.cpus)
 
 
 	# match
