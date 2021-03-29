@@ -25,6 +25,7 @@ from tempfile import TemporaryDirectory, mkdtemp
 import traceback
 import difflib
 import itertools
+import gc
 
 class sonarCDS(object):
 	'''
@@ -211,14 +212,19 @@ class sonarALIGN(object):
 	sequence. Additional protein-based functionalities are provided if a sonarGFF object
 	is provided.
 	'''
-	def __init__(self, query, target, sonarGFFObj = None, scoring=(-16,-4,16,-4,0,0)):
+	def __init__(self, query, target, sonarGFFObj = None, aligned = False, scoring=(-16,-4,16,-4,0,0)):
 		'''
 		following parameters are needed to initialize the class:
 		query = query nucleotide sequence to be algned to the target sequence
 		target = target nucleotide sequence
 		sonarGFFObj = sonarGFF object to consider cds annotation and provide protein level based functions
 		'''
-		self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
+        if aligned:
+            self.aligned_query = query.upper()
+            self.aligned_target = target.upper()
+        else:   
+            self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
+
 		self.gff = sonarGFFObj if sonarGFFObj else None
 		self.indel_regex = re.compile(".-+")
 		self.codon_regex = re.compile(".-*.-*.-*")
@@ -243,7 +249,8 @@ class sonarALIGN(object):
 		if self.__target_coords_matrix is None:
 			self.__target_coords_matrix = [len(x.group()) for x in re.finditer(".-*", self.aligned_target)]
 		return self.__target_coords_matrix
-
+    
+    @staticmethod
 	def align_dna(self, query, target, open_gap_score= -16, extend_gap_score = -4, end_extend_gap_score = -16,
 				  end_gap_score = -4, target_end_gap_score = 0, query_end_gap_score = 0,
 				  matrixfile = os.path.join(os.path.dirname(os.path.realpath(__file__)), "EDNAFULL")):
@@ -273,8 +280,13 @@ class sonarALIGN(object):
 		aligner.end_gap_score = end_gap_score
 		aligner.target_end_gap_score = target_end_gap_score
 		aligner.query_end_gap_score = query_end_gap_score
-		alignment = str(sorted(aligner.align(query, target), key=lambda x: x.score, reverse=True)[0]).split("\n")
-		return alignment[0], alignment[2]
+		alignments = aligner.align(query, target)
+		best_alignment = None
+		for alignment in alignments:
+			if not best_alignment or best_alignment.score < alignment.score:
+				best_alignment = alignment
+		best_alignment = str(best_alignment).split("\n")
+		return best_alignment[0], best_alignment[2]
 
 	def align_aa(self, query, target):
 		'''
@@ -1314,7 +1326,7 @@ class sonarCache():
 			if not acc in self.cache:
 				self.cache[acc] = (descr, seqhash)
 
-		self.write_pickle(self.cached_acclog_name(), self.cache[acc])
+		#self.write_pickle(self.cached_acclog_name(), self.cache[acc])
 		return fnames
 
 	def get_cached_seqhashes(self):

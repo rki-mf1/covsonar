@@ -12,7 +12,7 @@ from Bio import SeqIO
 import numpy as np
 import tempfile
 from collections import defaultdict
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, parallel_backend
 import itertools
 import re
 from tqdm import tqdm
@@ -100,8 +100,9 @@ class sonar():
 		if fnames:
 			step += 1
 			msg = "[step" + str(step) + "] caching ...   "
+			added = set()
 			for i in tqdm(range(len(fnames)), desc = msg):
-				added = cache.add_fasta(fnames[i])
+				added.update(cache.add_fasta(fnames[i]))
 			new = []
 			for fname in added:
 				p = cache.link_pickle_name(fname)
@@ -111,7 +112,9 @@ class sonar():
 			if new:
 				step += 1
 				msg = "[step" + str(step) + "] processing ..."
-				r = Parallel(n_jobs=cpus)(delayed(self.db.process_fasta)(*new[x]) for x in tqdm(range(len(new)), desc = msg))
+				with parallel_backend("loky", inner_max_num_threads=1):
+					with Parallel(n_jobs=cpus,batch_size=1) as parallel:
+						parallel(delayed(self.db.process_fasta)(*new[x]) for x in tqdm(range(len(new)), desc = msg))
 		step += 1
 		msg = "[step" + str(step) + "] importing ... "
 		data = []
