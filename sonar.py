@@ -119,10 +119,12 @@ class sonar():
 			for _ in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, new), total=len(new), desc = msg):
 				pass
 
-		msg = "[step" + str(step) + "] importing ... "
-		data = []
-		seqhashes = list(cache.cache.keys())
-		self.db.import_genome_from_cache(cachedir, msg=msg)
+			cache.write_idx(backup=True)
+
+			msg = "[step" + str(step) + "] importing ... "
+			data = []
+			seqhashes = list(cache.cache.keys())
+			self.db.import_genome_from_cache(cache.dirname, msg=msg)
 
 	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False):
 		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)
