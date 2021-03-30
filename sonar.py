@@ -89,26 +89,26 @@ class sonar():
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		If dir is not defined, a temporary directory will be used as cache.
 		'''
-		step = 0
-		if cachedir and os.path.isdir(cachedir):
-			step += 1
-			print("[step", step, "] restoring ... ")
-
 		# create db if necessary
 		if not os.path.isfile(self.dbfile):
 			with sonardb.sonarDBManager(self.dbfile) as dbm:
 				pass
+
+		step = 0
+		if cachedir and os.path.isdir(cachedir):
+			step += 1
+			print("[step", step, "] restoring ... ")
 
 		with sonardb.sonarCache(cachedir) as cache:
 
 			# add fasta files to cache
 			if fnames:
 				step += 1
-				msg = "[step" + str(step) + "] caching ...   "
+				msg = "[step " + str(step) + "] caching ...   "
 				for i in tqdm(range(len(fnames)), desc = msg):
 					cache.add_fasta(fnames[i])
 			step += 1
-			msg = "[step" + str(step) + "] processing ..."
+			msg = "[step " + str(step) + "] processing ..."
 			new = []
 			for seqhash in cache.cache:
 				this = cache.get_cache_files(seqhash)
@@ -128,7 +128,7 @@ class sonar():
 
 			cache.write_idx(backup=True)
 
-			msg = "[step" + str(step) + "] importing ... "
+			msg = "[step " + str(step) + "] importing ... "
 			data = []
 			seqhashes = list(cache.cache.keys())
 			self.db.import_genome_from_cache(cache.dirname, msg=msg)

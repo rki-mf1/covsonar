@@ -768,11 +768,11 @@ class sonarDB(object):
 				dna_profile = None
 				prot_profile = None
 
-			if cache is None:
-				return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
+		if cache is None:
+			return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
 
-			with open(cache, "wb") as handle:
-				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
+		with open(cache, "wb") as handle:
+			pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
 
 	def import_genome_from_fasta(self, *fnames, msg=None, paranoid=True):
 		'''
@@ -1356,9 +1356,13 @@ class sonarCache():
 
 			# check for accession collision
 			entry = (acc, descr)
-			found_seqhashes = [x for x in self.cache if entry in self.cache[x]]
-			if found_seqhashes and (len(found_seqhashes) > 1 or found_seqhashes[0] != seqhash):
-				sys.exit("cache error: accession collision for '" + acc + "'.")
+			found_seqhashes = []
+			for key in self.cache:
+				if acc in [x[0] for x in self.cache[key]]:
+					found_seqhashes.append(key)
+			if found_seqhashes:
+				if len(found_seqhashes) > 1 or found_seqhashes[0] != seqhash:
+					sys.exit("cache error: accession collision for '" + acc + "'.")
 			else:
 				self.cache[seqhash].add(entry)
 
