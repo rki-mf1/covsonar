@@ -15,7 +15,7 @@ conda activate covsonar_ci
 set -u
 
 #doctest
-cd "$DIR/lib"
+cd $DIR/lib
 ./sonardb.py
 cd "$CWD"
 
@@ -61,7 +61,7 @@ else
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
-$DIR/sonar.py match -e ORF1ab:K6826T -i G1820A --db "$db" > "$out"
+$DIR/sonar.py match -e C1348T -i G1820A --db "$db" > "$out"
 if cmp -s $DIR/test/expected2.csv "$out"; then
     echo 'match 3 as expected'
 else

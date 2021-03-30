@@ -21,6 +21,8 @@ import glob
 from time import sleep
 import shutil
 import traceback
+from multiprocessing import Pool
+import types
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -90,42 +92,37 @@ class sonar():
 		if cachedir and os.path.isdir(cachedir):
 			step += 1
 			print("[step", step, "] restoring ... ")
-		cache = sonardb.sonarCache(cachedir)
 
+		# create db if necessary
 		if not os.path.isfile(self.dbfile):
 			with sonardb.sonarDBManager(self.dbfile) as dbm:
 				pass
 
-		# add fasta files to cache
-		if fnames:
-			step += 1
-			msg = "[step" + str(step) + "] caching ...   "
-			added = set()
-			for i in tqdm(range(len(fnames)), desc = msg):
-				added.update(cache.add_fasta(fnames[i]))
-			new = []
-			for fname in added:
-				p = cache.link_pickle_name(fname)
-				if not os.path.isfile(p):
-					new.append((fname, p))
+		with sonardb.sonarCache(cachedir) as cache:
 
-			if new:
+			# add fasta files to cache
+			if fnames:
 				step += 1
-				msg = "[step" + str(step) + "] processing ..."
-				with parallel_backend("loky", inner_max_num_threads=1):
-					with Parallel(n_jobs=cpus,batch_size=1) as parallel:
-						parallel(delayed(self.db.process_fasta)(*new[x]) for x in tqdm(range(len(new)), desc = msg))
-		step += 1
+				msg = "[step" + str(step) + "] caching ...   "
+				for i in tqdm(range(len(fnames)), desc = msg):
+					cache.add_fasta(fnames[i])
+
+			step += 1
+			msg = "[step" + str(step) + "] processing ..."
+			new = []
+			for seqhash in cache.cache:
+				this = cache.get_cache_files(seqhash)
+				if not os.path.isfile(this[1]):
+					new.append(this)
+
+			pool = Pool(processes=cpus)
+			for _ in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, new), total=len(new), desc = msg):
+				pass
+
 		msg = "[step" + str(step) + "] importing ... "
 		data = []
-		for seqhash in cache.get_cached_seqhashes():
-			fname = cache.cached_pickle_name(seqhash)
-			for acc, descr in cache.get_acc_descr(seqhash):
-				data.append((fname, acc, descr))
-		with sonardb.sonarDBManager(self.dbfile) as dbm:
-			for i in tqdm(range(len(data)), desc = msg):
-				dat = [data[i][1], data[i][2]] + cache.load_pickle(data[i][0])[2:]
-				self.db.import_genome(*dat, paranoid = True, dbm=dbm)
+		seqhashes = list(cache.cache.keys())
+		self.db.import_genome_from_cache(cachedir, msg=msg)
 
 	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False):
 		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)
@@ -201,7 +198,6 @@ if __name__ == "__main__":
 			sys.exit("nothing to add.")
 
 		snr.add(args.file, cachedir=args.cache, cpus=args.cpus)
-
 
 	# match
 	if args.tool == "match":

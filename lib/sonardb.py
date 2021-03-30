@@ -26,6 +26,7 @@ import traceback
 import difflib
 import itertools
 import gc
+from collections import defaultdict
 
 class sonarCDS(object):
 	'''
@@ -219,11 +220,11 @@ class sonarALIGN(object):
 		target = target nucleotide sequence
 		sonarGFFObj = sonarGFF object to consider cds annotation and provide protein level based functions
 		'''
-        if aligned:
-            self.aligned_query = query.upper()
-            self.aligned_target = target.upper()
-        else:   
-            self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
+		if aligned:
+			self.aligned_query = query.upper()
+			self.aligned_target = target.upper()
+		else:
+			self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
 
 		self.gff = sonarGFFObj if sonarGFFObj else None
 		self.indel_regex = re.compile(".-+")
@@ -249,8 +250,7 @@ class sonarALIGN(object):
 		if self.__target_coords_matrix is None:
 			self.__target_coords_matrix = [len(x.group()) for x in re.finditer(".-*", self.aligned_target)]
 		return self.__target_coords_matrix
-    
-    @staticmethod
+
 	def align_dna(self, query, target, open_gap_score= -16, extend_gap_score = -4, end_extend_gap_score = -16,
 				  end_gap_score = -4, target_end_gap_score = 0, query_end_gap_score = 0,
 				  matrixfile = os.path.join(os.path.dirname(os.path.realpath(__file__)), "EDNAFULL")):
@@ -706,7 +706,10 @@ class sonarDB(object):
 		'''
 		return seguid(seq)
 
-	def process_fasta(self, fname, cache=None, seqhashes_to_skip=None):
+	def multi_process_fasta_wrapper(self, args):
+		return self.process_fasta(args[0], args[1])
+
+	def process_fasta(self, fname, cache=None):
 		'''
 		Processes a given fasta and prepars the contained genome sequence for database import.
 		Relevant sequence- and alignment-based information are provided in pickle format that
@@ -750,7 +753,7 @@ class sonarDB(object):
 				return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
 
 			with open(cache, "wb") as handle:
-				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq], handle)
+				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
 
 	def import_genome_from_fasta(self, *fnames, msg=None, paranoid=True):
 		'''
@@ -791,31 +794,25 @@ class sonarDB(object):
 					data = pickle.load(handle, encoding="bytes")
 				self.import_genome(*data, dbm=dbm, paranoid=paranoid)
 
-	def import_genome_from_cache(self, cacheObj, msg=None, paranoid=True):
+	def import_genome_from_cache(self, cachedir, msg=None, paranoid=True):
 		'''
 		Imports genome from sonar cache object.
 
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> cache = sonarCache()
-		>>> cachefile=cache.add_fasta("doctest_b117.fna")
-		>>> db = sonarDB(DOCTESTDB + "_import_genome_from_cache")
-		>>> db.import_genome_from_cache(cache)
-
 		'''
-		seqhashes = list(cacheObj.get_cached_seqhashes())
-		if not msg is None:
-			rng = tqdm(range(len(seqhashes)), desc = msg)
-		else:
-			rng = range(len(seqhashes))
+		with sonarCache(cachedir) as cache:
+			seqhashes = list(cache.cache.keys())
+			if not msg is None:
+				rng = tqdm(range(len(seqhashes)), desc = msg)
+			else:
+				rng = range(len(seqhashes))
 
-		with sonarDBManager(self.db) as dbm:
-			for i in rng:
-				seqhash = seqhashes[i]
-				processed_data = self.process_fasta(cacheObj.cached_fasta_name(seqhash))[2:]
-				seq = cacheObj.get_cached_seq(seqhash)
-				pfile = cacheObj.cached_pickle_name(seqhash)
-				for acc, descr in cacheObj.get_acc_descr(seqhash):
-					self.import_genome(acc, descr, *processed_data, dbm=dbm, paranoid=paranoid)
+			with sonarDBManager(self.db) as dbm:
+				for i in rng:
+					seqhash = seqhashes[i]
+					seq = cache.get_cached_seq(seqhash)
+					preprocessed_data = cache.load_info(seqhash)[2:]
+					for entry in cache.cache[seqhash]:
+						self.import_genome(*entry, *preprocessed_data, seq, dbm=dbm, paranoid=paranoid)
 
 	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq, dbm, paranoid=True):
 		'''
@@ -837,8 +834,8 @@ class sonarDB(object):
 				if varid is None:
 					varid = self.insert_prot_var(protein, locus, ref, alt, s, e, dbm)
 				self.insert_sequence2prot(seqhash, varid, dbm)
-		if True:
-			self.be_paranoid(acc, seq, dbm, auto_delete=True)
+			if True:
+				self.be_paranoid(acc, seq, dbm, auto_delete=True)
 
 	def insert_genome(self, acc, descr, seqhash, dbm):
 		return dbm.insert('genome', ['accession', 'description', 'seqhash'], [acc, descr, seqhash])
@@ -1157,7 +1154,6 @@ class sonarDB(object):
 			for i in range(len(rows)):
 				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code, keep)
 				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code, keep)
-
 		return rows
 
 	# VALIDATION
@@ -1217,22 +1213,31 @@ class sonarCache():
 		readonly = allow read only access only
 		'''
 		self.temp = not bool(dir)
+		self._idx = None
+		self.cache = defaultdict(set)
+
 		if self.temp:
 			self.dirname = mkdtemp(prefix=".sonarCache_")
 		else:
 			self.dirname = os.path.abspath(dir)
 			self.checkdir()
-		self.cache = {}
 
 	def __enter__(self):
-		pass
+		return self
 
 	def __exit__(self, exc_type, exc_value, exc_traceback):
+		self.write_idx(backup=True)
 		if [exc_type, exc_value, exc_traceback].count(None) != 3:
 			print("warning:", file=sys.stderr)
 			print(traceback.format_exc(), file=sys.stderr)
 		if os.path.isdir(self.dirname) and self.temp:
 			shutil.rmtree(self.dirname)
+
+	@property
+	def idx(self):
+		if self._idx is None:
+			self._idx = os.path.join(self.dirname, "cache.idx")
+		return self._idx
 
 	def checkdir(self):
 		if not os.path.isdir(self.dirname):
@@ -1241,14 +1246,13 @@ class sonarCache():
 			self.restore_cache()
 
 	def restore_cache(self):
-		acclog = self.cached_acclog_name()
-		if os.listdir(self.dirname):
-			if not os.path.isfile(acclog):
-				sys.exit("cache error: not a valid cache directory.")
-			self.cache = self.load_pickle(acclog)
-			for seqhash in self.get_cached_seqhashes():
-				if not os.path.isfile(self.cached_fasta_name(seqhash)) or not os.path.isfile(self.cached_pickle_name(seqhash)) :
-					sys.exit("cache error: cache directory is corrupted.")
+		if not os.path.isfile(self.idx):
+			sys.exit("chache error: index file missing.")
+		self.cache = self.load_idx()
+		for seqhash in self.cache:
+			files = self.get_cache_files(seqhash)
+			if not os.path.isfile(files[0]) or not os.path.isfile(files[1]) :
+				sys.exit("cache error: chache is corrupted.")
 
 	@staticmethod
 	def slugify(string):
@@ -1259,87 +1263,84 @@ class sonarCache():
 
 	def iter_fasta(self, fname):
 		'''
-		generates an iterator returning the entries of a given FASTA file as tuple of header
-		and sequence.
+		generates an iterator returning the entries of a given FASTA file as tuple of
+		accession, header and sequence.
 		'''
 		for record in SeqIO.read(fname, "fasta"):
-			yield record.description, str(record.seq).upper()
+			yield record.id, record.description, str(record.seq).upper()
 
 	def read_fasta(self, fname):
 		'''
-		reads single entry fasta file and returns a tuple of header and sequence.
+		reads single entry fasta file and returns a tuple of accession, header and sequence.
 		Exception raises if multiple entries are in the respective fasta file.
 		'''
 		record = SeqIO.read(fname, "fasta")
-		return record.description[1:], str(record.seq).upper()
+		return record.id, record.description[1:], str(record.seq).upper()
 
-	def cached_fasta_name(self, seqhash):
+	def get_fasta_fname(self, seqhash):
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".fasta")
 
-	def cached_pickle_name(self, seqhash):
+	def get_info_fname(self, seqhash):
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".pickle")
 
-	def link_pickle_name(self, fastaname):
-		with open(fastaname) as handle:
-			seqhash = handle.readline().strip()[1:]
-		return self.cached_pickle_name(seqhash)
+	def get_cache_files(self, seqhash):
+		return self.get_fasta_fname(seqhash), self.get_info_fname(seqhash)
 
-	def cached_acclog_name(self):
-		return os.path.join(self.dirname, "acclist")
-
-	@staticmethod
-	def load_pickle(fname):
-		with open(fname, 'rb') as handle:
+	def load_info(self, seqhash):
+		with open(self.get_info_fname(seqhash), 'rb') as handle:
 			return pickle.load(handle, encoding="bytes")
 
-	def write_pickle(self, fname, data):
-		with open(fname, 'wb') as handle:
+	def write_info(self, seqhash, data):
+		with open(self.get_info_fname(seqhash), 'wb') as handle:
 			pickle.dump(data, handle)
 
+	def load_idx(self):
+		with open(self.idx, 'rb') as handle:
+			return pickle.load(handle, encoding="bytes")
 
-	def add_fasta(self, fname):
+	def write_idx(self, backup):
+		if backup and os.path.isfile(self.idx):
+			shutil.copy(self.idx, self.idx + ".old")
+		with open(self.idx, 'wb') as handle:
+			pickle.dump(self.cache, handle)
+
+	def add_fasta(self, fname, autodelete=False):
 		'''
 		Adds entries of a given fasta file in a sequence-unredundant manner to
 		the cache.
 		'''
-		fnames = []
 		for record in SeqIO.parse(fname, "fasta"):
 			acc = record.id
 			descr = record.description
 			seq = str(record.seq).upper()
 			seqhash = sonarDB.hash(seq)
-			fnames.append(self.cached_fasta_name(seqhash))
+			fasta, info = self.get_cache_files(seqhash)
 
-			# check for seqhash collision
-			if os.path.isfile(fnames[-1]):
-				_, s = self.read_fasta(fnames[-1])
-				if s != seq:
-					sys.exit("cache error: sequence collision for hash '" + seqhash + "'")
+			#check or create cached fasta file
+			if os.path.isfile(fasta):
+				if seq != self.get_cached_seq(seqhash):
+					sys.exit("cache error: sequence collision for hash '" + seqhash + "'.")
 			else:
-				with open(fnames[-1], "w") as handle:
+				with open(fasta, "w") as handle:
 					handle.write(">" + seqhash + os.linesep + seq)
 
 			# check for accession collision
-			if acc in self.cache and self.cache[acc] != (descr, seqhash):
-				sys.exit("cache error: sequence collision for accession '" + acc + "'")
-
-			if not acc in self.cache:
-				self.cache[acc] = (descr, seqhash)
-
-		#self.write_pickle(self.cached_acclog_name(), self.cache[acc])
-		return fnames
+			entry = (acc, descr)
+			found_seqhashes = [x for x in self.cache if entry in self.cache[x]]
+			if found_seqhashes and (len(found_seqhashes) > 1 or found_seqhashes[0] != seqhash):
+				sys.exit("cache error: accession collision for '" + acc + "'.")
+			else:
+				self.cache[seqhash].add(entry)
 
 	def get_cached_seqhashes(self):
-		return sorted(set([x[1] for x in self.cache.values()]))
+		return set(self.cache.keys())
 
-	def get_cached_fasta_files(self):
-		return [ self.cached_fasta_name(x) for x in self.get_cached_seqhashes ]
+	def iter_cached_fasta_files(self):
+		for x in self.cache:
+			yield self.get_fasta_fname(x)
 
 	def get_cached_seq(self, seqhash):
-		return self.read_fasta(self.cached_fasta_name(seqhash))[1]
-
-	def get_acc_descr(self, seqhash):
-		return [(x, self.cache[x][0]) for x in self.cache if self.cache[x][1] == seqhash]
+		return self.read_fasta(self.get_fasta_fname(seqhash))[-1]
 
 if __name__ == "__main__":
 	import doctest
