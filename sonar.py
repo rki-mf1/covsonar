@@ -41,7 +41,8 @@ def parse_args():
 	parser_add_input.add_argument('-f', '--file', metavar="FILE", help="fasta file(s) containing DNA sequences to add", type=str, nargs="+", default=[])
 	parser_add_input.add_argument('-d', '--dir', metavar="DIR", help="add all fasta files (ending with \".fasta\" or \".fna\") from a given directory or directories", type=str, nargs="+", default=None)
 	parser_add.add_argument('-c', '--cache', metavar="DIR", help="use (and restore data from) a given cache (if not set, a temporary cache is used and deleted after import)", type=str, default=None)
-	parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
+	parser_add.add_argument('-t', '--timeout', metavar="INT", help="timout for aligning sequences in seconds (default: 600)", type=int, default=600)
+	#parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
 
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
@@ -83,7 +84,7 @@ class sonar():
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 
-	def add(self, fnames=None, cachedir=None, cpus=1, paranoid=True):
+	def add(self, fnames=None, cachedir=None, cpus=1, timeout=600, paranoid=True):
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		If dir is not defined, a temporary directory will be used as cache.
@@ -106,18 +107,24 @@ class sonar():
 				msg = "[step" + str(step) + "] caching ...   "
 				for i in tqdm(range(len(fnames)), desc = msg):
 					cache.add_fasta(fnames[i])
-
 			step += 1
 			msg = "[step" + str(step) + "] processing ..."
 			new = []
 			for seqhash in cache.cache:
 				this = cache.get_cache_files(seqhash)
 				if not os.path.isfile(this[1]):
-					new.append(this)
+					new.append(list(this) + [seqhash, timeout])
 
 			pool = Pool(processes=cpus)
-			for _ in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, new), total=len(new), desc = msg):
-				pass
+			failed = set()
+			for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, new), total=len(new), desc = msg):
+				if not status:
+					failed.update([x[1] for x in cache.cache[seqhash]])
+					del cache.cache[seqhash]
+			if failed:
+				print("timeout warning: following genomes were not added to the database since the respective sequence produced an timeout while aligning:", file=sys.stderr)
+				for f in failed:
+					print(f, file=sys.stderr)
 
 			cache.write_idx(backup=True)
 
@@ -199,7 +206,7 @@ if __name__ == "__main__":
 		if not args.file and not args.cache:
 			sys.exit("nothing to add.")
 
-		snr.add(args.file, cachedir=args.cache, cpus=args.cpus)
+		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, timeout=args.timeout)
 
 	# match
 	if args.tool == "match":

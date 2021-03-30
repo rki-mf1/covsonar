@@ -25,8 +25,9 @@ from tempfile import TemporaryDirectory, mkdtemp
 import traceback
 import difflib
 import itertools
-import gc
 from collections import defaultdict
+import signal
+from contextlib import contextmanager
 
 class sonarCDS(object):
 	'''
@@ -416,6 +417,18 @@ class sonarALIGN(object):
 			l = -2
 		return str(Seq.translate(seq[:l], table=translation_table))
 
+class timeOut():
+    def __init__(self, seconds=1, error_message='Timeout'):
+        self.seconds = seconds
+        self.error_message = error_message
+    def handle_timeout(self, signum, frame):
+        raise TimeoutError(self.error_message)
+    def __enter__(self):
+        signal.signal(signal.SIGALRM, self.handle_timeout)
+        signal.alarm(self.seconds)
+    def __exit__(self, type, value, traceback):
+        signal.alarm(0)
+
 class sonarDBManager():
 	'''
 	This class provides basic functions and properties to manage a given sonar database.
@@ -541,7 +554,6 @@ class sonarDBManager():
 		for idx, col in enumerate(cursor.description):
 			d[col[0]] = row[idx]
 		return d
-
 
 class sonarDB(object):
 	'''
@@ -707,7 +719,14 @@ class sonarDB(object):
 		return seguid(seq)
 
 	def multi_process_fasta_wrapper(self, args):
-		return self.process_fasta(args[0], args[1])
+		fname, cache, seqhash, timeout = args
+		try:
+			with timeOut(seconds=timeout):
+				self.process_fasta(fname, cache)
+		except TimeoutError:
+			return False, seqhash
+		else:
+			return True, seqhash
 
 	def process_fasta(self, fname, cache=None):
 		'''
@@ -1260,6 +1279,17 @@ class sonarCache():
 		Provides a filesystem safe representation of a string.
 		'''
 		return base64.urlsafe_b64encode(string.encode('UTF-8') ).decode('UTF-8')
+
+	@staticmethod
+	def deslugify(string):
+		'''
+		decodes filesystem safe representation of a string.
+		'''
+		return base64.urlsafe_b64decode(string).decode("utf-8")
+
+	@staticmethod
+	def seqhash_from_fasta_name(fname):
+		return sonarCache.deslugify(os.path.basename(fname))[:-5]
 
 	def iter_fasta(self, fname):
 		'''
