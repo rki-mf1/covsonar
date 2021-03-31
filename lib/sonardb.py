@@ -28,6 +28,7 @@ import itertools
 from collections import defaultdict
 import signal
 from contextlib import contextmanager
+from Bio.Emboss.Applications import StretcherCommandline
 
 class sonarCDS(object):
 	'''
@@ -214,7 +215,7 @@ class sonarALIGN(object):
 	sequence. Additional protein-based functionalities are provided if a sonarGFF object
 	is provided.
 	'''
-	def __init__(self, query, target, sonarGFFObj = None, aligned = False, scoring=(-16,-4,16,-4,0,0)):
+	def __init__(self, query, target, algnfile, sonarGFFObj = None, aligned = False, scoring=(-16,-4,16,-4,0,0)):
 		'''
 		following parameters are needed to initialize the class:
 		query = query nucleotide sequence to be algned to the target sequence
@@ -225,7 +226,9 @@ class sonarALIGN(object):
 			self.aligned_query = query.upper()
 			self.aligned_target = target.upper()
 		else:
-			self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
+			#self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
+			self.aligned_query, self.aligned_target = self.use_stretcher(query, target, algnfile)
+
 
 		self.gff = sonarGFFObj if sonarGFFObj else None
 		self.indel_regex = re.compile(".-+")
@@ -251,6 +254,12 @@ class sonarALIGN(object):
 		if self.__target_coords_matrix is None:
 			self.__target_coords_matrix = [len(x.group()) for x in re.finditer(".-*", self.aligned_target)]
 		return self.__target_coords_matrix
+		
+		
+	def use_stretcher(self, query, target, outfile):
+		cline = StretcherCommandline(asequence=query, bsequence=target, gapopen=16, gapextend=4, outfile=outfile, aformat="fasta")
+		stdout, stderr = cline()
+		return [str(x.seq) for x in SeqIO.parse(outfile, "fasta")]
 
 	def align_dna(self, query, target, open_gap_score= -16, extend_gap_score = -4, end_extend_gap_score = -16,
 				  end_gap_score = -4, target_end_gap_score = 0, query_end_gap_score = 0,
@@ -418,16 +427,16 @@ class sonarALIGN(object):
 		return str(Seq.translate(seq[:l], table=translation_table))
 
 class timeOut():
-    def __init__(self, seconds=1, error_message='Timeout'):
-        self.seconds = seconds
-        self.error_message = error_message
-    def handle_timeout(self, signum, frame):
-        raise TimeoutError(self.error_message)
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handle_timeout)
-        signal.alarm(self.seconds)
-    def __exit__(self, type, value, traceback):
-        signal.alarm(0)
+	def __init__(self, seconds=1, error_message='Timeout'):
+		self.seconds = seconds
+		self.error_message = error_message
+	def handle_timeout(self, signum, frame):
+		raise TimeoutError(self.error_message)
+	def __enter__(self):
+		signal.signal(signal.SIGALRM, self.handle_timeout)
+		signal.alarm(self.seconds)
+	def __exit__(self, type, value, traceback):
+		signal.alarm(0)
 
 class sonarDBManager():
 	'''
@@ -719,16 +728,16 @@ class sonarDB(object):
 		return seguid(seq)
 
 	def multi_process_fasta_wrapper(self, args):
-		fname, cache, seqhash, timeout = args
+		fname, algnfile, cache, seqhash, timeout = args
 		try:
 			with timeOut(seconds=timeout):
-				self.process_fasta(fname, cache)
+				self.process_fasta(fname, algnfile, cache)
 		except TimeoutError:
 			return False, seqhash
 		else:
 			return True, seqhash
 
-	def process_fasta(self, fname, cache=None):
+	def process_fasta(self, fname, algnfile, cache=None):
 		'''
 		Processes a given fasta and prepars the contained genome sequence for database import.
 		Relevant sequence- and alignment-based information are provided in pickle format that
@@ -756,7 +765,8 @@ class sonarDB(object):
 			seq = str(record.seq.upper())
 			seqhash = self.hash(seq)
 			if not self.seq_exists(seqhash, dbm):
-				alignment = sonarALIGN(seq, self.refseq, self.refgffObj)
+				#alignment = sonarALIGN(seq, self.refseq, self.refgffObj)
+				alignment = sonarALIGN(fname, self.reffna, algnfile, self.refgffObj)
 				dnadiff = alignment.dnadiff
 				aadiff = alignment.aadiff
 				dna_profile = self.build_profile(*dnadiff)
@@ -770,7 +780,9 @@ class sonarDB(object):
 
 			if cache is None:
 				return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
-
+			
+			print(cache)
+			print([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile])
 			with open(cache, "wb") as handle:
 				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
 
@@ -1205,7 +1217,7 @@ class sonarDB(object):
 		if orig_seq != restored_seq:
 			if auto_delete:
 				self.delete_accession(acc, dbm)
-			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match.")
+			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match.", file=sys.stderr)
 
 	def show_seq_diffs(self, seq1, seq2, stderr=False):
 		target = sys.stderr if stderr else None
@@ -1310,11 +1322,14 @@ class sonarCache():
 	def get_fasta_fname(self, seqhash):
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".fasta")
 
+	def get_algn_fname(self, seqhash):
+		return os.path.join(self.dirname, self.slugify(seqhash) + ".algn")
+		
 	def get_info_fname(self, seqhash):
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".pickle")
 
 	def get_cache_files(self, seqhash):
-		return self.get_fasta_fname(seqhash), self.get_info_fname(seqhash)
+		return self.get_fasta_fname(seqhash), self.get_algn_fname(seqhash), self.get_info_fname(seqhash)
 
 	def load_info(self, seqhash):
 		with open(self.get_info_fname(seqhash), 'rb') as handle:
@@ -1344,7 +1359,7 @@ class sonarCache():
 			descr = record.description
 			seq = str(record.seq).upper()
 			seqhash = sonarDB.hash(seq)
-			fasta, info = self.get_cache_files(seqhash)
+			fasta, align, info = self.get_cache_files(seqhash)
 
 			#check or create cached fasta file
 			if os.path.isfile(fasta):
