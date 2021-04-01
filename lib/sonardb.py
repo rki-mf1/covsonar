@@ -29,6 +29,7 @@ from collections import defaultdict
 import signal
 from contextlib import contextmanager
 from Bio.Emboss.Applications import StretcherCommandline
+import csv
 
 class sonarCDS(object):
 	'''
@@ -215,7 +216,7 @@ class sonarALIGN(object):
 	sequence. Additional protein-based functionalities are provided if a sonarGFF object
 	is provided.
 	'''
-	def __init__(self, query, target, algnfile, sonarGFFObj = None, aligned = False, scoring=(-16,-4,16,-4,0,0)):
+	def __init__(self, query, target, algnfile, sonarGFFObj = None, aligned = False, stretcher=True, scoring=(-16,-4,16,-4,0,0)):
 		'''
 		following parameters are needed to initialize the class:
 		query = query nucleotide sequence to be algned to the target sequence
@@ -225,13 +226,15 @@ class sonarALIGN(object):
 		if aligned:
 			self.aligned_query = query.upper()
 			self.aligned_target = target.upper()
-		else:
-			#self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
+		elif stretcher:
 			self.aligned_query, self.aligned_target = self.use_stretcher(query, target, algnfile)
+		else:
+			self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
 
 
 		self.gff = sonarGFFObj if sonarGFFObj else None
-		self.indel_regex = re.compile(".-+")
+		self.indel_regex = re.compile("[^-]-+")
+		self.starting_gap_regex = re.compile("^-+")
 		self.codon_regex = re.compile(".-*.-*.-*")
 		self.__dnadiff = None
 		self.__aadiff = None
@@ -352,17 +355,24 @@ class sonarALIGN(object):
 		'''
 		target = self.aligned_target
 		query = self.aligned_query
-
+		
+		# query overhead in front
+		match = self.starting_gap_regex.match(target)
+		if match:
+			yield "", query[:match.end()], -1, None, None, None
+		
 		# insertions
+		isites = set()
 		for match in self.indel_regex.finditer(target):
+			isites.add(match.start())
 			s = self.real_pos(match.start())
 			yield match.group()[0], query[match.start():match.end()], s, None, None, None
 
 		# deletions and snps
 		for i, pair in enumerate(zip(target, query)):
-			if pair[0] != "-" and pair[0] != pair[1]:
+			if pair[0] != "-" and pair[0] != pair[1] and i not in isites:
+				s = self.real_pos(i) 
 				l = len(pair[1])
-				s = self.real_pos(i)
 				e = None if l == 1 else s + l
 				yield pair[0], pair[1].replace("-", ""), s, e, None, None
 
@@ -541,7 +551,11 @@ class sonarDBManager():
 		if print_sql:
 			print(sql)
 		self.cursor.execute(sql, valList)
-		return self.cursor.lastrowid
+		if self.cursor.lastrowid:
+			return self.cursor.lastrowid
+		where = " AND ".join([x + "= ?" for x in fieldList])
+		rowid = self.select(table, ['rowid'], where, valList)[0]['rowid']
+		return rowid
 
 	def update(self, table, fieldList, valList, whereClause, whereVals, print_sql=False):
 		sql = "UPDATE " + table + " SET " + ", ".join([ str(x) + "= ?" for x in fieldList ]) + " WHERE " + whereClause
@@ -781,10 +795,11 @@ class sonarDB(object):
 			if cache is None:
 				return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
 			
-			print(cache)
-			print([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile])
-			with open(cache, "wb") as handle:
+			with open(cache, "wb") as handle: 
 				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
+			
+			with open(cache + ".txt", "w") as handle:	
+				print([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], file=handle)			
 
 	def import_genome_from_fasta(self, *fnames, msg=None, paranoid=True):
 		'''
@@ -866,7 +881,7 @@ class sonarDB(object):
 					varid = self.insert_prot_var(protein, locus, ref, alt, s, e, dbm)
 				self.insert_sequence2prot(seqhash, varid, dbm)
 			if True:
-				self.be_paranoid(acc, seq, dbm, auto_delete=True)
+				self.be_paranoid(acc, seq, dbm, auto_delete=False)
 
 	def insert_genome(self, acc, descr, seqhash, dbm):
 		return dbm.insert('genome', ['accession', 'description', 'seqhash'], [acc, descr, seqhash])
@@ -926,6 +941,7 @@ class sonarDB(object):
 
 	def get_dna_vars(self, acc, dbm):
 		return dbm.select('dna_view', whereClause="accession = ?", whereVals=[acc], orderby="start DESC")
+		
 	def iter_table(self, table):
 		sql = dbm.select('dna', whereClause="ref = ? AND alt = ? AND start = ? and end = ?", whereVals=[ref, alt, start, end], fetchone=True)
 		for row in dbm.select(table):
@@ -1198,11 +1214,16 @@ class sonarDB(object):
 			for row in rows:
 				if not row['start'] is None:
 					s = row['start']
-					if row['ref'] != refseq[s]:
-						sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
-					qryseq[s] = gap if not row['alt'] else row['alt']
-					if aligned and len(row['alt']) > 1:
-						refseq[s] +=  "-" * (len(row['alt'])-1)
+					if s >= 0:
+						if row['ref'] != refseq[s]:
+							sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
+						qryseq[s] = gap if not row['alt'] else row['alt']
+						if aligned and len(row['alt']) > 1:
+							refseq[s] +=  "-" * (len(row['alt'])-1)
+					else:
+						qryseq = [row['alt']] + qryseq
+						if aligned:
+							refseq = ["-" * (len(row['alt']))] + refseq
 			if seq_return:
 				return "".join(qryseq)
 			if aligned:
@@ -1211,10 +1232,17 @@ class sonarDB(object):
 			print(">" + rows[0]['description'])
 			print("".join(qryseq))
 
-	def be_paranoid(self, acc, orig_seq, dbm, auto_delete=True):
+	def be_paranoid(self, acc, orig_seq, dbm, auto_delete=False):
 		orig_seq = orig_seq.upper()
 		restored_seq = self.restore(acc, aligned=False, seq_return=True, dbm=dbm)
 		if orig_seq != restored_seq:
+			print(">restored_"+acc+"\n" + restored_seq +"\n")
+			print(">orig_seq_"+acc+"\n" + orig_seq +"\n")
+			print()
+			rows = self.get_dna_vars(acc, dbm)
+			writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
+			writer.writeheader()
+			writer.writerows(rows)
 			if auto_delete:
 				self.delete_accession(acc, dbm)
 			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match.", file=sys.stderr)
