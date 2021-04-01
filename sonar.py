@@ -94,6 +94,7 @@ class sonar():
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		If dir is not defined, a temporary directory will be used as cache.
 		'''
+
 		step = 0
 		if cachedir and os.path.isdir(cachedir):
 			step += 1
@@ -103,6 +104,11 @@ class sonar():
 		if not os.path.isfile(self.dbfile):
 			with sonardb.sonarDBManager(self.dbfile) as dbm:
 				pass
+
+		step = 0
+		if cachedir and os.path.isdir(cachedir):
+			step += 1
+			print("[step", step, "] restoring ... ")
 
 		with sonardb.sonarCache(cachedir) as cache:
 
