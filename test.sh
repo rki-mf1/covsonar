@@ -35,56 +35,56 @@ $DIR/sonar.py update --db "$db" --pangolin "$DIR/test/test_pangolin.csv"
 $DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv" --fields accession=accessions zip=regions date=dates gisaid=gisaid ena=ena
 $DIR/sonar.py optimize --db "$db"
 $DIR/sonar.py match --db "$db" | sort > "$out"
-if diff -q $DIR/test/expected.csv "$out"; then
+if cmp -s $DIR/test/expected.csv "$out"; then
     echo 'match 1 as expected'
 else
     echo 'match 1 not as expected'
-		diff $DIR/test/expected.csv "$out"
+		cmp $DIR/test/expected.csv "$out"
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
 $DIR/sonar.py match --date 2021-01-01:2021-01-31 -i C241T --db "$db" > "$out"
-if diff -q $DIR/test/expected2.csv "$out"; then
+if cmp -s $DIR/test/expected2.csv "$out"; then
     echo 'match 2 as expected'
 else
     echo 'match 2 not as expected'
-		diff $DIR/test/expected2.csv "$out"
+		cmp $DIR/test/expected2.csv "$out"
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
 $DIR/sonar.py match -i G1820A --db "$db" > "$out"
-if diff -q $DIR/test/expected2.csv "$out"; then
+if cmp -s $DIR/test/expected2.csv "$out"; then
     echo 'match 3 as expected'
 else
     echo 'match 3 not as expected'
-		diff $DIR/test/expected2.csv "$out"
+		cmp $DIR/test/expected2.csv "$out"
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
 $DIR/sonar.py match -e C1348T -i G1820A --db "$db" > "$out"
-if diff -q $DIR/test/expected2.csv "$out"; then
+if cmp -s $DIR/test/expected2.csv "$out"; then
     echo 'match 4 as expected'
 else
     echo 'match 4 not as expected'
-		diff $DIR/test/expected2.csv "$out"
+		cmp $DIR/test/expected2.csv "$out"
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
 $DIR/sonar.py match --acc test2 --db "$db" > "$out"
-if diff -q $DIR/test/expected2.csv "$out"; then
+if cmp -s $DIR/test/expected2.csv "$out"; then
     echo 'match 5 as expected'
 else
     echo 'match 5 not as expected'
-		diff $DIR/test/expected2.csv "$out"
+		cmp $DIR/test/expected2.csv "$out"
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
 $DIR/sonar.py match --zip 177 --db "$db" > "$out"
-if diff -q $DIR/test/expected2.csv "$out"; then
+if cmp -s $DIR/test/expected2.csv "$out"; then
     echo 'match 6 as expected'
 else
     echo 'match 6 not as expected'
-		diff $DIR/test/expected2.csv "$out"
+		cmp $DIR/test/expected2.csv "$out"
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
