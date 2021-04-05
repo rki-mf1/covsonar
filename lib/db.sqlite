@@ -2,23 +2,23 @@ PRAGMA user_version = 1;
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS sequence (
-  seqhash VARCHAR(40) NOT NULL PRIMARY KEY
+	seqhash VARCHAR(40) NOT NULL PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS genome (
-  accession VARCHAR(150) NOT NULL PRIMARY KEY,
-  description TEXT,
-  seqhash VARCHAR(40) NOT NULL,
+	accession VARCHAR(150) NOT NULL PRIMARY KEY,
+	description TEXT,
+	seqhash VARCHAR(40) NOT NULL,
 	lineage VARCHAR(40),
 	zip VARCHAR(10),
 	date TEXT,
 	gisaid VARCHAR(100),
 	ena VARCHAR(100),
-  FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
+	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
 );
 
 CREATE TABLE IF NOT EXISTS sequence2dna (
-  seqhash VARCHAR(40) NOT NULL,
+	seqhash VARCHAR(40) NOT NULL,
 	varid INTEGER NOT NULL,
 	PRIMARY KEY(seqhash, varid),
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash),
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS sequence2dna (
 );
 
 CREATE TABLE IF NOT EXISTS sequence2prot (
-  seqhash VARCHAR(40) NOT NULL,
+	seqhash VARCHAR(40) NOT NULL,
 	varid INTEGER NOT NULL,
 	PRIMARY KEY(seqhash, varid),
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash),
@@ -34,32 +34,32 @@ CREATE TABLE IF NOT EXISTS sequence2prot (
 );
 
 CREATE TABLE IF NOT EXISTS dna (
-  varid INTEGER PRIMARY KEY,
-  start INTEGER NOT NULL,
+	varid INTEGER PRIMARY KEY,
+	start INTEGER NOT NULL,
 	end INTEGER,
-  ref VARCHAR(1000) NOT NULL,
-  alt VARCHAR(1000) NOT NULL,
+	ref VARCHAR(1000) NOT NULL,
+	alt VARCHAR(1000) NOT NULL,
 	FOREIGN KEY(varid) REFERENCES sequence2dna(varid)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dna ON dna (start, end, ref, alt);
 
 CREATE TABLE IF NOT EXISTS prot (
-  varid INTEGER PRIMARY KEY,
-  protein VARCHAR(45) NOT NULL,
+	varid INTEGER PRIMARY KEY,
+	protein VARCHAR(45) NOT NULL,
 	locus VARCHAR(45) NOT NULL,
-  start INTEGER NOT NULL,
+	start INTEGER NOT NULL,
 	end INTEGER,
-  ref VARCHAR(1000) NOT NULL,
-  alt VARCHAR(1000) NOT NULL,
+	ref VARCHAR(1000) NOT NULL,
+	alt VARCHAR(1000) NOT NULL,
 	FOREIGN KEY(varid) REFERENCES sequence2prot(varid)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(protein, locus, start, end, ref, alt);
 
 CREATE TABLE IF NOT EXISTS profile (
-  seqhash VARCHAR(40) NOT NULL,
+	seqhash VARCHAR(40) NOT NULL,
 	dna_profile TEXT NOT NULL,
-  aa_profile TEXT NOT NULL,
-  PRIMARY KEY(seqhash)
+	aa_profile TEXT NOT NULL,
+	PRIMARY KEY(seqhash)
 );
 
 CREATE VIEW IF NOT EXISTS essence
@@ -72,8 +72,8 @@ SELECT
 	zip,
 	date,
 	lineage,
-  genome.seqhash,
-  dna_profile,
+	genome.seqhash,
+	dna_profile,
 	aa_profile
 FROM
 	genome
@@ -90,11 +90,11 @@ SELECT
 	zip,
 	date,
 	lineage,
-  genome.seqhash,
-  start,
+	genome.seqhash,
+	start,
 	end,
-  ref,
-  alt
+	ref,
+	alt
 FROM
 	genome
 LEFT JOIN sequence USING (seqhash)
@@ -111,13 +111,13 @@ SELECT
 	zip,
 	date,
 	lineage,
-  genome.seqhash,
-  protein,
+	genome.seqhash,
+	protein,
 	locus,
-  start,
+	start,
 	end,
-  ref,
-  alt
+	ref,
+	alt
 FROM
 	genome
 LEFT JOIN sequence USING (seqhash)

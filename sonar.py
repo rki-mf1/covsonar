@@ -56,9 +56,14 @@ def parse_args():
 	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
-	# create the parser for the "restore" command
-	# parser_match = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence (alignment) for a given accession.')
-	# parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs = "+", required=True)
+	#create the parser for the "restore" command
+	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
+	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, nargs = "+", required=True)
+	# parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
+
+	#create the parser for the "view" command
+	parser_view = subparsers.add_parser('view', parents=[general_parser], help='show dna profile.')
+	parser_view.add_argument('--acc', metavar="STR", help="accession to consider", type=str, required=True)
 	# parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
 
 	# create the parser for the "update" command
@@ -84,11 +89,17 @@ class sonar():
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 
-	def add(self, fnames=None, cachedir=None, cpus=1, timeout=600, paranoid=True):
+	def add(self, fnames=None, cachedir=None, cpus=1, timeout=600):
 		'''
 		Adds genome sequence(s) from the given FASTA file(s) to the database.
 		If dir is not defined, a temporary directory will be used as cache.
 		'''
+
+		step = 0
+		if cachedir and os.path.isdir(cachedir):
+			step += 1
+			print("[step", step, "] restoring ... ", file=sys.stderr)
+
 		# create db if necessary
 		if not os.path.isfile(self.dbfile):
 			with sonardb.sonarDBManager(self.dbfile) as dbm:
@@ -128,6 +139,7 @@ class sonar():
 
 			cache.write_idx(backup=True)
 
+			step += 1
 			msg = "[step " + str(step) + "] importing ... "
 			data = []
 			seqhashes = list(cache.cache.keys())
@@ -170,6 +182,14 @@ class sonar():
 				fieldList = [x[0] for x in elems]
 				valList = [x[1] for x in elems]
 				dbm.update("genome", fieldList, valList, "accession = ?", [acc])
+
+	def restore(self, acc):
+		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
+			self.db.restore(acc, aligned=False, seq_return=True, dbm=dbm)
+
+	def view(self, acc):
+		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
+			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
 
 	def rows_to_csv(self, rows, na="*** no data ***"):
 		if len(rows) == 0:
@@ -232,6 +252,14 @@ if __name__ == "__main__":
 		else:
 			print("nothing to update.")
 
+	# restore
+	if args.tool == "restore":
+		for acc in args.acc:
+			print(snr.restore(acc))
+
+	# view
+	if args.tool == "view":
+		snr.view(args.acc)
 
 	# optimize
 	if args.tool == "optimize":
