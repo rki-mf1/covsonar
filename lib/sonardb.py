@@ -10,180 +10,411 @@ import sqlite3
 from sqlite3 import Error
 from Bio.SeqUtils.CheckSum import seguid
 from Bio.Seq import Seq
-from Bio import Align
 from Bio import SeqIO
-from Bio.Align import substitution_matrices
+from Bio.Emboss.Applications import StretcherCommandline
 from packaging import version
 import shutil
 import base64
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import pickle
 from tqdm import tqdm
 from urllib.parse import quote as urlquote
-from math import floor
-from tempfile import TemporaryDirectory, mkdtemp
+from math import floor, ceil
+from tempfile import mkstemp, TemporaryDirectory, mkdtemp
 import traceback
-import difflib
 import itertools
-from collections import defaultdict
 import signal
-from contextlib import contextmanager
-from Bio.Emboss.Applications import StretcherCommandline
 import csv
+from time import sleep
+
+class sonarTimeout():
+	"""
+	this class is a helper class raising a TimeoutError within a defined context
+
+	Example
+	--------
+
+	>>> with sonarTimeout(1) as _:
+	... 	sleep(60)
+	Traceback (most recent call last):
+	...
+	TimeoutError: Timeout
+
+    Parameters
+    ----------
+
+    seconds : int
+        define time in seconds until TimeoutError is raised
+	error_message: str
+		define error message to be shown [ 'Timeout' ]
+
+    Attributes
+    ----------
+
+    seconds : int
+        time in seconds when a TimeoutError is raised
+	error_message : str
+		error message to be shown [ 'Timeout' ]
+	"""
+	def __init__(self, seconds, error_message='Timeout'):
+		self.seconds = seconds
+		self.error_message = error_message
+
+	def __enter__(self):
+		signal.signal(signal.SIGALRM, self.handle_timeout)
+		signal.alarm(self.seconds)
+
+	def __exit__(self, type, value, traceback):
+		signal.alarm(0)
+
+	def handle_timeout(self, signum, frame):
+		raise TimeoutError(self.error_message)
+
+
+class sonarFiler():
+	"""
+	this class is a helper class providing a creating (temporary) file handler
+	for writing in a given context
+
+	Notes
+	-----
+		Please consider, that an existing file will be overwritten.
+
+	Examples
+	--------
+
+	>>> with sonarFiler() as handle:
+	... 	fname = handle.name
+	... 	os.path.isfile(fname)
+	True
+	>>> os.path.isfile(fname)
+	False
+
+    Parameters
+    ----------
+    fname : str
+        define designated file name to open. If None, a temporary file is
+		created and deleted after use. [ None ]
+
+    Attributes
+    ----------
+    name : str
+        stores file name
+	basename : str
+		stores file basename
+	path : str
+		stores absolute file path
+	tmp : bool
+		stores True if it is a temporary file else False
+	"""
+	def __init__(self, fname = None):
+		self.fname = fname
+		self.tmp = True if fname is None else False
+
+	def __enter__(self):
+		if 	self.fname is None:
+			self.handle, path = mkstemp()
+		else:
+			self.handle = open(self.fname, "w")
+			path = self.fname
+		self.name = os.path.abspath(path)
+		self.basename = os.path.basename(path)
+		self.path = os.path.dirname(path)
+		return self
+
+	def __exit__(self, type, value, traceback):
+		if self.tmp:
+			os.remove(self.name)
 
 class sonarCDS(object):
-	'''
-	This class provides properties and functions for each coding sequence
-	of the reference annotation
-	'''
+	"""
+	this object stores coding sequence information on one coding sequence(CDS)
+
+	Notes
+	-----
+    	Please note, that genomic coordinates are processed and returned 0-based
+		by this object. While start or single coordinates are inclusive,
+		end coordinates of ranges are exclusive, expressed in a mathematical
+		notation: [start, end)
+
+	Examples
+	--------
+
+	Initiating an sonarCDS object:
+
+	>>> cds = sonarCDS("ORF1", 155, 170, "+", "ATGTTATGAATGGCC")
+
+	Accessing amino acid sequence (genetic code 1):
+
+	>>> cds.aa
+	'ML'
+
+	Accessing CDS coordinates or genome range:
+
+	>>> cds.coords
+	(155, 170)
+	>>> cds.range
+	range(155, 170)
+
+    Parameters
+    ----------
+    symbol : str
+        define the symbol of the protein encoded
+		(e.g. ORF1ab)
+    start : int
+        define the genomic start coordinate (0-based, inclusive)
+    end : int
+        define the genomic end coordinate (0-based, exclusive)
+	strand : {'+', '-'}
+		define the genomic strand encoded on
+	seq : str
+		define the nucleotide sequence
+	locus: str
+		define the gene locus accession number [ None ]
+	translation_table : int
+		define the genetic code table used for in silico translation (see
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+
+    Attributes
+    ----------
+    symbol : str
+        stores the symbol of the protein encoded
+	start : int
+		stores the genomic start coordinate (0-based, inclusive). The start
+		coordinate is always lower than the end coordinate.
+	end : int
+		stores the genomic end coordinate (0-based, exclusive). The end
+		coordinate is always greater than the start coordinate.
+	coords : tuple
+		stores a tuple of start and end coordinate
+	range :	range
+		stores an range from start to end coordinate
+	nuc : str
+		stores the nucleotide sequence
+	aa : str
+		stores the in silico translated amino acid sequence from start to the
+		first in-frame stop codon.
+	translation_table : int
+		stores the genetic code table used for in silico translation (see
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+	"""
+
 	def __init__(self, symbol, start, end, strand, seq, locus=None, translation_table=1):
-		'''
-		following parameters are needed to initialize the class:
-		symbol = gene symbol
-		start = CDS start coordinate on the reference genome (0-based, inclusive)
-		end = CDS end coordinate on the reference genome (0-based, exclusive)
-		strand = coding strand ("+" or "-")
-		seq = coding nucleotide sequence
-		locus = gene locus accession number
-		translation_table = translation table to use (default: 1)
-		'''
 		self.symbol = symbol
 		self.locus = locus
 		self.start = min(start, end) # inclusive
 		self.end = max(start, end) # exclusive
-		self.strand = "+" if strand == "+" or int(strand) == 1 else "-"
-		self.dna = seq
+		self.strand = strand
+		self.nuc = seq
 		self.translation_table = translation_table
 		self.__aa = None
 
 	@property
 	def aa(self):
-		'''
-		Property providing the aminoc acid code of the CDS from start to the
-		first stop codon.
-
-		>>> cds=sonarCDS("Eno", 155, 170, "+", "ATGTTATGAATGGCC")
-		>>> cds.aa
-		'ML'
-		'''
+		nuc = self.nuc if self.strand == "+" else str(Seq(self.nuc).reverse_complement())
 		if self.__aa is None:
-			l = len(self.dna)
+			l = len(nuc)
 			if l%3 == 1:
 				l = -1
 			elif l%3 == 2:
 				l = -2
-			self.__aa = str(Seq.translate(self.dna[:l], table=self.translation_table, to_stop=True))
+			self.__aa = str(Seq.translate(nuc[:l], table=self.translation_table, to_stop=True))
 		return self.__aa
 
 	@property
 	def coords(self):
-		'''
-		Property providing a tuple of 0-based start (inclusive) and end (exclusive)
-		coordinate  of the CDS in the reference genome. Start coordinate is alsways
-		smaller than end coordinate.
-
-		>>> cds=sonarCDS("Eno", 155, 170, "+", "ATGTTATGAATGGCC")
-		>>> cds.coords
-		(155, 170)
-		'''
 		return self.start, self.end
 
 	@property
 	def range(self):
-		'''
-		Property providing a range from start and end coordinate of the CDS in the reference genome.
-
-		>>> cds=sonarCDS("Eno", 155, 170, "+", "ATGTTATGAATGGCC")
-		>>> cds.range
-		range(155, 170)
-		'''
 		return range(self.start, self.end)
 
 class sonarGFF(object):
-	'''
-	This class provides properties and functions of CDS annotations extracted
-	from a given file.
-	'''
+	"""
+	this object stores CDS objects based on a GFF3 file.
+
+	Notes
+	-----
+    	Please note, that genomic coordinates are processed and returned 0-based
+		by this object. While start or single coordinates are inclusive,
+		end coordinates of ranges are exclusive, expressed in a mathematical
+		notation: [start, end)
+
+		Please note, that only single molecule genome annotations can be handled
+		by this object.
+
+	Examples
+	--------
+
+	Initiating an sonarGFF object. In this example the REF_GFF_FILE and REF_FASTA_FILE
+	variable stores the path of an GFF3 and FASTA file containing the annotation
+	and genomic sequence of the SARS-COV-2 NC_045512.2, respectively.
+
+	>>> gff = sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
+
+    Parameters
+    ----------
+    gff3 : str
+        define a path to a valid GFF3 file storing genome annotation
+    fna : int
+        define a path to a valid FASTA file storing the nucleotide
+		sequence of the annotated genome
+	translation_table : int
+		define the genetic code table used for in silico translation of CDS (see
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+
+    Attributes
+    ----------
+	translation_table : int
+		stores the genetic code table used for in silico translation of CDS (see
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi)
+    cds : list
+        stores a list of sonarCDS objects (one per CDS of the given annotation)
+    coords : dict
+        stores a dictionary with protein symbol as keys and respective 0-based
+		genomic coordinate tuples (start always lower than end coordinate,
+		start coordinate inclusive, end coordinate exclusive)
+	symbols : list
+		stores a list of protein symbols
+
+	"""
+
 	def __init__(self, gff3, fna, translation_table=1):
-		'''
-		following parameters are needed to initialize the class:
-		gff3 = gff3 file name containing the annotation
-		fna = fasta file name containing the reference genome sequence (only one sequence allowed)
-		translation_table = translation_table = translation table to use (default: 1)
-		'''
 		self.translation_table = translation_table
 		self.cds = self.process_gff3(gff3, fna)
 		self.coords = { x.symbol: (x.start, x.end) for x in self.cds }
 		self.symbols = [x.symbol for x in self.cds ]
 
 	def iscds(self, x, y=None):
-		'''
-		Checks if reference genome coordinate X [to y] is in an annotated CDS.
-		Both coordinates have to be 0-based, x is inclusive, y exclusive.
+		"""
+		function to check if a given genomic coordinate (range) overlaps with an
+		annotated coding sequence (CDS).
 
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> gff=sonarGFF("doctest.gff3", "doctest.fna")
-		>>> gff.iscds(2)
+		Examples
+		--------
+
+		>>> gff=sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
+		>>> gff.iscds(21562)
+		True
+		>>> gff.iscds(25384)
 		False
-		>>> gff.iscds(7)
+		>>> gff.iscds(25380, 25384)
 		True
 
-		'''
-		x, y = sorted([x, y]) if y is not None else (x, x)
+		Parameters
+		----------
+		x : int
+			genomic (start) coordinate (0-based, inclusive)
+		y : int
+			genomic end coordniate (0-based, exclusive) [ None ]
+
+		Returns
+		-------
+		bool
+			True if coordinate(s) within CDS, False otherwise.
+
+		"""
+		if y is None:
+			y = x + 1
+		r = range(x, y)
 		for start, end in self.coords.values():
-			if x >= start and y < end:
+			if x < end and start < y:
 				return True
 		return False
 
 	def convert_pos_to_dna(self, protein_symbol, x):
-		'''
-		Returns a reference genome coordinate (0-based start of the codon)
-		based on a given 0-based protein coordinate (x).
+		"""
+		function to convert a protein-based coordinate to a genomic coordinate
+
+		Examples
+		--------
 
 		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> gff=sonarGFF("doctest.gff3", "doctest.fna")
-		>>> gff.convert_pos_to_dna("ORF1", 2)
-		8
-		'''
-		if x > 0:
-			x = x*3 - 2
-		return x + self.coords[protein_symbol][0]
+		>>> gff=sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
+		>>> gff.convert_pos_to_dna("S", 4)
+		21574
+
+		Parameters
+		----------
+		protein_symbol : str
+			define the protein based on its symbol
+		x : int
+			define the position within the protein (0-based, inclusive)
+
+		Returns
+		-------
+		int
+			lower-bound genomic coordinate (0-based) where the respective protein
+			position is encoded
+		"""
+		return x*3 + self.coords[protein_symbol][0]
 
 	def convert_pos_to_aa(self, x, y=None):
-		'''
-		Based on a given 0-based reference genome coordinate x [and y] a tuple of
-		respective protein symbol and 0-based protein coordinates are returned.
-		If x is not in an annotated CDS None is returned.
-		If multiple CDS cover the respective genome position(s), one is randomly
-		selected.
+		"""
+		function to convert a genomic coordinate (range) to amino acid positions
+		of the rexpective protein encoded
+
+		Examples
+		--------
 
 		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> gff=sonarGFF("doctest.gff3", "doctest.fna")
-		>>> gff.convert_pos_to_aa(6,10)
-		('ORF1', 0, 1)
-		'''
-		x, y = sorted([x, y]) if y is not None else (x, x)
+		>>> gff=sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
+		>>> gff.convert_pos_to_aa(265,274)
+		('ORF1ab', 0, 3)
 
+		Parameters
+		----------
+		x : int
+			genomic (start) coordinate (0-based, inclusive)
+		y : int
+			genomic end coordniate (0-based, exclusive) [ None ]
+
+		Returns
+		-------
+		tuple
+		   tuple of respective protein symbol, 0-based start position within the
+		   protein (inclusive), 0-based end position within the protein (exclusive)
+		   or None if givben position is not in an annotated CDS.
+
+		"""
+		y = x + 1  if y is None else y
 		for symbol, coords in self.coords.items():
-			if x >= coords[0] and y < coords[1]:
+			if x >= coords[0] and y <= coords[1]:
 				x = floor((x - coords[0])/3)
 				if y is None:
-					return (symbol, x)
-				y = floor((y - 1 - coords[0])/3)
+					return (symbol, x, None)
+				y = floor((y - coords[0])/3)
 				return (symbol, x, y)
 		return None
 
 	def process_gff3(self, gff, fna):
-		'''
-		Parse a GFF3 formatted file to extract all CDS. A list of sonarCDS objects
-		is returned.
+		"""
+		function to parse CDS from a given GFF3 file
+
+		Examples
+		--------
 
 		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> gff=sonarGFF("doctest.gff3", "doctest.fna")
+		>>> gff = sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
+		>>> gff.coords == {'ORF1ab': (265, 21555), 'S': (21562, 25384), 'ORF3a': (25392, 26220), 'E': (26244, 26472), 'M': (26522, 27191), 'ORF6': (27201, 27387), 'ORF7a': (27393, 27759), 'ORF7b': (27755, 27887), 'ORF8': (27893, 28259),'N': (28273, 29533), 'ORF10': (29557, 29674)}
+		True
 
-		>>> gff.coords
-		{'ORF1': (4, 13)}
-		'''
+		Parameters
+		----------
+		gff : str
+			path to a valid GFF3 file storing the genome annotation
+		fna : str
+			path to a valid FASTA file storing the respective genome sequence
+
+		Returns
+		-------
+		dict
+		  dictionary with protein symbols as keys and respective 0-based
+		  genomic coordinate tuples (start always lower than end coordinate,
+		  start coordinate inclusive, end coordinate exclusive)
+
+		"""
+
 		symbol_regex = re.compile("gene=([^;]+)(?:;|$)")
 		locus_regex = re.compile("locus_tag=([^;]+)(?:;|$)")
 
@@ -193,9 +424,9 @@ class sonarGFF(object):
 		with open(gff, "r") as handle:
 			cds = set()
 			for line in handle:
-				if line.startswith("#") or len(line.strip()) == 0:
-					continue
 				fields = line.rstrip("\r\n").split("\t")
+				if line.startswith("#") or len(fields) < 7:
+					continue
 				if fields[2] == "CDS":
 					symbol = symbol_regex.search(fields[-1])
 					symbol = symbol.groups(1)[0] if symbol else None
@@ -208,34 +439,89 @@ class sonarGFF(object):
 					if strand == "-":
 						dna = str(Seq.reverse_complement(dna))
 					cds.add((symbol, s, e, strand, dna, locus, self.translation_table))
+		cds = sorted(cds, key=lambda x: x[1])
 		return [sonarCDS(*x) for x in cds]
 
 class sonarALIGN(object):
-	'''
-	This class provides alignment functions and properties to a given query and target
-	sequence. Additional protein-based functionalities are provided if a sonarGFF object
-	is provided.
-	'''
-	def __init__(self, query, target, algnfile, sonarGFFObj = None, aligned = False, stretcher=True, scoring=(-16,-4,16,-4,0,0)):
-		'''
-		following parameters are needed to initialize the class:
-		query = query nucleotide sequence to be algned to the target sequence
-		target = target nucleotide sequence
-		sonarGFFObj = sonarGFF object to consider cds annotation and provide protein level based functions
-		'''
-		if aligned:
-			self.aligned_query = query.upper()
-			self.aligned_target = target.upper()
-		elif stretcher:
-			self.aligned_query, self.aligned_target = self.use_stretcher(query, target, algnfile)
-		else:
-			self.aligned_query, self.aligned_target = self.align_dna(query.upper(), target.upper(), *scoring)
+	"""
+	this object performs pairwise sequence alignments and stores respective
+	informations.
 
+	Notes
+	-----
+    	Please note, that genomic coordinates are processed and returned 0-based
+		by this object. While start or single coordinates are inclusive,
+		end coordinates of ranges are exclusive, expressed in a mathematical
+		notation: [start, end)
 
+		Please note, alignment is based on EMBOSS Stretcher.
+
+	Example
+	-------
+
+	In this example the QRY_FASTA_FILE and REF_FASTA_FILE variables store
+	the path of FASTA files containing the query and reference genome sequences,
+	respectively.
+
+	>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE)
+
+    Parameters
+    ----------
+    query_file : str
+        define a path to a valid FASTA file storing the query genome sequence
+    target_file : str
+        define a path to a valid FASTA file storing the target or reference
+		genome sequence
+	out_file : str
+		define a path to an output file that will store the FASTA formatted
+		alignment. Please consider, that an existing file will be overwritten!
+		If None, a temporary file is used and deleted after processing. [ None ]
+	sonarGFFObj : object
+		define a sonarGFF object storing the annotated CDS of the reference genome
+		[ None ]
+
+    Attributes
+    ----------
+	aligned_query : str
+		stores the aligned upper-case query sequence
+    aligned_target : str
+        stores the aligned upper-case target or reference sequence
+    gff : object
+        stores the sonarGFF object if provided, otherwise None
+	dnadiff : list
+		stores a list of tuples for each genomic variation (based on the alignment).
+		Each tuple consists of:
+		 - reference base (or bases in case of deletions)
+		 - query base (or bases in case of insertions)
+		 - genomic coordinate (0-based, inclusive)
+		 - genomic end coordinate (in case of InDels 0-based and exlusive otherwise None)
+		 - None
+		 - None
+		Accordingly to the VCF format, InDels are expressed considering the upstream
+		base as anchor. As a special case, an insertion at the start of the sequence
+		has no anchor and a genomic coordinate of -1. The last two tuple elements
+		are always None to keep the length according to tuples stored in aadiff.
+	aadiff : list
+		stores a list of tuples for each amino acid variation in an annotated protein.
+		Each tuple consists of:
+		 - reference amino acid (or amino acids in case of deletions)
+		 - query amino acid (or amino acids in case of insertions)
+		 - protein position (0-based, inclusive)
+		 - protein end position (in case of InDels 0-based and exlusive otherwise None)
+		 - protein symbol
+		 - gene locus
+		Accordingly to the VCF format, InDels are expressed considering the upstream
+		base as anchor. As a special case, an insertion at the start of the sequence
+		has no anchor and a genomic coordinate of -1. The last two tuple elements
+		are always None to keep the length according to tuples stored in aadiff.
+	"""
+
+	def __init__(self, query_file, target_file, out_file = None, sonarGFFObj = None):
+		self.aligned_query, self.aligned_target = self.align_dna(query_file, target_file, out_file)
 		self.gff = sonarGFFObj if sonarGFFObj else None
-		self.indel_regex = re.compile("[^-]-+")
-		self.starting_gap_regex = re.compile("^-+")
-		self.codon_regex = re.compile(".-*.-*.-*")
+		self._indel_regex = re.compile("[^-]-+")
+		self._codon_regex = re.compile(".-*.-*.-*")
+		self._starting_gap_regex = re.compile("^-+")
 		self.__dnadiff = None
 		self.__aadiff = None
 		self.__target_coords_matrix = None
@@ -253,117 +539,233 @@ class sonarALIGN(object):
 		return self.__aadiff
 
 	@property
-	def target_coords_matrix(self):
+	def _target_coords_matrix(self):
 		if self.__target_coords_matrix is None:
 			self.__target_coords_matrix = [len(x.group()) for x in re.finditer(".-*", self.aligned_target)]
 		return self.__target_coords_matrix
-		
-		
-	def use_stretcher(self, query, target, outfile):
-		cline = StretcherCommandline(asequence=query, bsequence=target, gapopen=16, gapextend=4, outfile=outfile, aformat="fasta")
+
+	def use_stretcher(self, query_file, target_file, out_file, gapopen= 16, gapextend = 4, right_align = True):
+		"""
+		function to perform a pairwise aligment using EMBOSS Stretcher
+
+		Parameters
+		----------
+		query_file : str
+			define a path to a valid FASTA file storing the query sequence
+		target_file : str
+			define a path to a valid FASTA file storing the target or reference
+			sequence
+		out_file : str
+			define a path to a file that will store the alignment. Please consider,
+			that an existing file will be overwritten.
+		gapopen : int
+			define penalty for gap opening [ 16 ]
+		gapextend : int
+			define penalty for gap extension [ 4 ]
+
+		Returns
+		-------
+		list
+		  list of aligned query and target sequence, in that order
+		"""
+		temp = True if not out_file else False
+		if temp:
+			handle, out_file = mkstemp()
+		cline = StretcherCommandline(asequence=query_file, bsequence=target_file, gapopen=gapopen, gapextend=gapextend, outfile=out_file, aformat="fasta")
 		stdout, stderr = cline()
-		return [str(x.seq) for x in SeqIO.parse(outfile, "fasta")]
+		alignment = [str(x.seq) for x in SeqIO.parse(out_file, "fasta")]
+		if temp:
+			os.remove(out_file)
+		if right_align:
+			alignment = self.right_align_gaps(*alignment)
+		return alignment
 
-	def align_dna(self, query, target, open_gap_score= -16, extend_gap_score = -4, end_extend_gap_score = -16,
-				  end_gap_score = -4, target_end_gap_score = 0, query_end_gap_score = 0,
-				  matrixfile = os.path.join(os.path.dirname(os.path.realpath(__file__)), "EDNAFULL")):
-		'''
-		align two nucleotide sequences and return a tuple of the aligned sequences.
-		EDNAFULL is used as default matrix.
+	def right_align_gaps(self, query, target):
+		"""
+		function to align gaps to the right in two aligned sequences
 
-		>>> algn = sonarALIGN("ATTGTTGTTATAATGGCCAGTT", "ATTGATGTTATGAATGGCCTTT", scoring=(-10, -0.5, -10, -0.5, 0, 0))
-		>>> algn.align_dna("ATTGTTGTTATAATGGCCAGTT", "ATTGATGTTATGAATGGCCTTT", -10, -0.5, -10, -0.5, 0, 0)
-		('ATTGTTGTTAT-AATGGCCAGTT-', 'ATTGATGTTATGAATGGCC--TTT')
+		Parameters
+		----------
+		seq : str
+			define an aligned sequence to align gaps
 
-		Instead of using this function, the object properties aligned_query and
-		aligned_target should be used:
+		Returns
+		-------
+		list
+		  aligned query and target sequence with right-aligned gaps, in that order
+		"""
+		l = len(query)-1
+		for match in re.finditer("-+", query):
+			s = match.start()-1
+			e = match.end()-1
+			g = "-" * (e-s)
+			while s >= 0 and e < l and query[s] == target[e]:
+				query = query[:s] + g + query[s] + query[e+1:]
+				s -= 1
+				e -= 1
+		for match in re.finditer("-+", target):
+			s = match.start()-1
+			e = match.end()-1
+			g = "-" * (e-s)
+			while s >= 0 and e < l and target[s] == query[e]:
+				target = target[:s] + g + target[e:]
+				s -= 1
+				e -= 1
+		return query, target
 
-		>>> algn.aligned_query
-		'ATTGTTGTTAT-AATGGCCAGTT-'
-		>>> algn.aligned_target
-		'ATTGATGTTATGAATGGCC--TTT'
+	def align_dna(self, query_file, target_file, out_file=None, gapopen = 16, gapextend = 4, right_align = True):
+		"""
+		function to perform the default pairwise nucleotide aligment
 
-		'''
-		aligner = Align.PairwiseAligner()
-		aligner.mode = 'global'
-		aligner.substitution_matrix = substitution_matrices.read(matrixfile)
-		aligner.open_gap_score = open_gap_score
-		aligner.extend_gap_score = extend_gap_score
-		aligner.end_extend_gap_score = end_extend_gap_score
-		aligner.end_gap_score = end_gap_score
-		aligner.target_end_gap_score = target_end_gap_score
-		aligner.query_end_gap_score = query_end_gap_score
-		alignments = aligner.align(query, target)
-		best_alignment = None
-		for alignment in alignments:
-			if not best_alignment or best_alignment.score < alignment.score:
-				best_alignment = alignment
-		best_alignment = str(best_alignment).split("\n")
-		return best_alignment[0], best_alignment[2]
+		Parameters
+		----------
+		query_file : str
+			define a path to a valid FASTA file storing the query sequence
+		target_file : str
+			define a path to a valid FASTA file storing the target or reference
+			sequence
+		out_file : str
+			define a path to a file that will store the alignment. Please consider,
+			that an existing file will be overwritten.
+		gapopen : int
+			define penalty for gap opening [ 16 ]
+		gapextend : int
+			define penalty for gap extension [ 4 ]
 
-	def align_aa(self, query, target):
-		'''
-		this function is not in use right now, and should be revised to mimick EMBOSS NEEDLE before.
-		'''
-		aligner = Align.PairwiseAligner()
-		aligner.substitution_matrix = substitution_matrices.load("PAM250")
-		aligner.mode = 'global'
-		aligner.open_gap_score = -10
-		aligner.extend_gap_score = -0.5
-		aligner.target_end_gap_score = 0.0
-		aligner.query_end_gap_score = 0.0
-		alignment = str(sorted(aligner.align(query, target), key=lambda x: x.score, reverse=True)[0]).split("\n")
-		return alignment[0], alignment[2]
+		Returns
+		-------
+		list
+		  list of aligned query and target sequence
+		"""
+		return self.use_stretcher(query_file, target_file, out_file, gapopen, gapextend, right_align)
 
 	def real_pos(self, x):
-		'''
-		converts alignment position to the real position in the target sequence.
-		Positions are meant to be 0-based.
+		"""
+		function to convert an alignment position to the real position in the
+		target or reference sequence.
 
-		>>> algn = sonarALIGN("ATTGTTGTTATAATGGCCAGTT", "ATTGATGTTATGAATGGCCTTT", scoring=(-10, -0.5, -10, -0.5, 0, 0))
-		>>> algn.real_pos(22)
-		20
-		'''
+		Example
+		-------
+		In this example the QRY_FASTA_FILE and REF_FASTA_FILE variables store
+		the path of FASTA files containing the query and reference genome sequences,
+		respectively.
+
+		>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE)
+		>>> algn.real_pos(29282)
+		29282
+
+		Parameters
+		----------
+		x : int
+			define a position within the alignment (0-based)
+
+		Returns
+		-------
+		int
+		  corresponding position (0-based) of the target/reference sequence
+		"""
 		return x - self.aligned_target[:x+1].count("-")
 
 	def align_pos(self, x):
-		'''
-		converts a target sequence position to the respective position in the alignment.
-		Positions are meant to be 0-based.
+		"""
+		function to convert an target/reference position to the corresponding
+		position in the alignment.
 
-		>>> algn = sonarALIGN("ATTGTTGTTATAATGGCCAGTT", "ATTGATGTTATGAATGGCCTTT", scoring=(-10, -0.5, -10, -0.5, 0, 0))
-		>>> algn.align_pos(20)
-		22
-		'''
-		return sum(self.target_coords_matrix[:x])
+		Example
+		-------
+
+		>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE)
+		>>> algn.align_pos(29282)
+		29282
+
+		Parameters
+		----------
+		x : int
+			define a reference position (0-based)
+
+		Returns
+		-------
+		int
+		  corresponding position of the sequence alignment
+		"""
+		return sum(self._target_coords_matrix[:x])
 
 	def iter_dna_vars(self):
-		'''
-		generating an iterator returning tuples for each variant alignment position
-		consisting of target nucleotide, query nucleotide(s), target start position, target end position, None, None
-		Last two None elements exist to harmonize output syntax between this and the iter_aa_vars function.
+		"""
+		function to iterate variations on nucleotide level.
 
-		>>> algn = sonarALIGN("ATTGTTGTTATATGGCCAGTT", "ATTGATGTTATGAATGGCCTTT", scoring=(-10, -0.5, -10, -0.5, 0, 0))
+		Example
+		-------
+
+		In this example the QRY_FASTA_FILE and REF_FASTA_FILE variables store
+		the path of FASTA files containing the query and reference genome sequences,
+		respectively. The reference is NC_045512.2 while the query is a B.1.1.7
+		prototype sequence.
+
+		>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE)
 		>>> for x in algn.iter_dna_vars():
 		... 	print(x)
-		('C', 'CAG', 18, None, None, None)
-		('A', 'T', 4, None, None, None)
-		('G', '', 11, None, None, None)
-		('A', '', 12, None, None, None)
-		('T', '', 21, None, None, None)
+		('C', 'T', 3266, None, None, None)
+		('C', 'A', 5387, None, None, None)
+		('T', 'C', 6953, None, None, None)
+		('T', '', 11287, None, None, None)
+		('C', '', 11288, None, None, None)
+		('T', '', 11289, None, None, None)
+		('G', '', 11290, None, None, None)
+		('G', '', 11291, None, None, None)
+		('T', '', 11292, None, None, None)
+		('T', '', 11293, None, None, None)
+		('T', '', 11294, None, None, None)
+		('T', '', 11295, None, None, None)
+		('T', '', 21764, None, None, None)
+		('A', '', 21765, None, None, None)
+		('C', '', 21766, None, None, None)
+		('A', '', 21767, None, None, None)
+		('T', '', 21768, None, None, None)
+		('G', '', 21769, None, None, None)
+		('T', '', 21990, None, None, None)
+		('T', '', 21991, None, None, None)
+		('A', '', 21992, None, None, None)
+		('A', 'T', 23062, None, None, None)
+		('C', 'A', 23270, None, None, None)
+		('C', 'A', 23603, None, None, None)
+		('C', 'T', 23708, None, None, None)
+		('T', 'G', 24505, None, None, None)
+		('G', 'C', 24913, None, None, None)
+		('C', 'T', 27971, None, None, None)
+		('G', 'T', 28047, None, None, None)
+		('A', 'G', 28110, None, None, None)
+		('G', 'C', 28279, None, None, None)
+		('A', 'T', 28280, None, None, None)
+		('T', 'A', 28281, None, None, None)
+		('C', 'T', 28976, None, None, None)
 
-		'''
+		Returns
+		-------
+		iterator of tuples
+			each tuple represents a nucleotide level variation and consists of:
+		  		 - target nucleotide
+		  		 - query nucleotide(s)
+		  		 - target or reference start position (0-based
+		  		 - target or reference end position (0-based)
+		  		 - None
+		  		 - None
+			Accordingly to the VCF format, insertions are expressed considering the upstream
+			base as anchor. As a special case, an insertion at the start of the sequence
+			has no anchor and a genomic coordinate of -1. The last two tuple elements
+			are always None to keep the length according to tuples stored in aadiff.
+		"""
 		target = self.aligned_target
 		query = self.aligned_query
-		
+
 		# query overhead in front
-		match = self.starting_gap_regex.match(target)
+		match = self._starting_gap_regex.match(target)
 		if match:
 			yield "", query[:match.end()], -1, None, None, None
-		
+
 		# insertions
 		isites = set()
-		for match in self.indel_regex.finditer(target):
+		for match in self._indel_regex.finditer(target):
 			isites.add(match.start())
 			s = self.real_pos(match.start())
 			yield match.group()[0], query[match.start():match.end()], s, None, None, None
@@ -371,64 +773,123 @@ class sonarALIGN(object):
 		# deletions and snps
 		for i, pair in enumerate(zip(target, query)):
 			if pair[0] != "-" and pair[0] != pair[1] and i not in isites:
-				s = self.real_pos(i) 
+				s = self.real_pos(i)
 				l = len(pair[1])
 				e = None if l == 1 else s + l
 				yield pair[0], pair[1].replace("-", ""), s, e, None, None
 
 	def iter_aa_vars(self):
-		'''
-		generating an iterator returning tuples for each variant alignment position that affects a protein sequence
-		(based on given cds annotation provided by the sonarGFF object) consisting of target amino acid, query amino acid(s),
-		target start position, target end position, protein symbol, locus accession.
-		Last two None elements exist to harmonize output syntax between this and the iter_aa_vars function.
+		"""
+		function to iterate variations on amino acid level.
 
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> gff=sonarGFF("doctest.gff3", "doctest.fna")
-		>>> algn = sonarALIGN("ATTGTTGTTATATGGCCAGTT", "ATTGATGTTATGAATGGCCTTT", gff)
+		Example
+		-------
+
+		In this example the QRY_FASTA_FILE, REF_FASTA_FILE, and REF_GFF_FILE
+		variables store	the path of FASTA files containing the query and
+		reference genome sequences as well as the reference genome annotation,
+		in that order. The reference is NC_045512.2 while the query is a B.1.1.7
+		prototype sequence without S:D613G variation.
+
+		Please consider, that a sonarGFF is needed to consider annotation and
+		deduce amino acid level profiles.
+
+		>>> gff = sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
+		>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE, sonarGFFObj=gff)
 		>>> for x in algn.iter_aa_vars():
 		... 	print(x)
-		('M', 'L', 0, None, 'ORF1', 'testseq_0001')
-		('*', '', 2, None, 'ORF1', 'testseq_0001')
+		('T', 'I', 1000, None, 'ORF1ab', 'GU280_gp01')
+		('A', 'D', 1707, None, 'ORF1ab', 'GU280_gp01')
+		('I', 'T', 2229, None, 'ORF1ab', 'GU280_gp01')
+		('S', '', 3674, None, 'ORF1ab', 'GU280_gp01')
+		('G', '', 3675, None, 'ORF1ab', 'GU280_gp01')
+		('F', '', 3676, None, 'ORF1ab', 'GU280_gp01')
+		('I', '', 67, None, 'S', 'GU280_gp02')
+		('H', '', 68, None, 'S', 'GU280_gp02')
+		('V', '', 69, None, 'S', 'GU280_gp02')
+		('V', '', 142, None, 'S', 'GU280_gp02')
+		('Y', '', 143, None, 'S', 'GU280_gp02')
+		('N', 'Y', 500, None, 'S', 'GU280_gp02')
+		('A', 'D', 569, None, 'S', 'GU280_gp02')
+		('P', 'H', 680, None, 'S', 'GU280_gp02')
+		('T', 'I', 715, None, 'S', 'GU280_gp02')
+		('S', 'A', 981, None, 'S', 'GU280_gp02')
+		('D', 'H', 1117, None, 'S', 'GU280_gp02')
+		('Q', '*', 26, None, 'ORF8', 'GU280_gp09')
+		('R', 'I', 51, None, 'ORF8', 'GU280_gp09')
+		('Y', 'C', 72, None, 'ORF8', 'GU280_gp09')
+		('D', 'L', 2, None, 'N', 'GU280_gp10')
+		('S', 'F', 234, None, 'N', 'GU280_gp10')
 
-		'''
+		Returns
+		-------
+		iterator of tuples
+			each tuple represents a amino acid level variation and consists of:
+				 - target nucleotide
+				 - query nucleotide(s)
+				 - target or reference start position (0-based
+				 - target or reference end position (0-based)
+				 - protein symbol
+				 - gene locus
+			Accordingly to the VCF format, InDels are expressed considering the upstream
+			base as anchor. As a special case, an insertion at the start of the sequence
+			has no anchor and a genomic coordinate of -1. The last two tuple elements
+			are always None to keep the length according to tuples stored in aadiff.
+		"""
 		if self.gff:
 			for cds in self.gff.cds:
+				s = self.align_pos(cds.start)
+				e = self.align_pos(cds.end)
 				if cds.strand == "+":
-					s = self.align_pos(cds.start)
-					e = self.align_pos(cds.end)
 					query = self.aligned_query[s:e]
 					target = self.aligned_target[s:e]
 				else:
-					s = self.align_pos(cds.start)
-					e = self.align_pos(cds.end)
 					query = str(Seq.reverse_complement(self.aligned_query[s:e]))
 					target = str(Seq.reverse_complement(self.aligned_target[s:e]))
 
-				for match in self.codon_regex.finditer(target):
+				for match in self._codon_regex.finditer(target):
 					s = match.start()
 					e = match.end()
 					tcodon = match.group().replace("-", "")
-					qcodon = query[match.start():match.end()]
+					qcodon = query[s:e]
 					taa = self.translate(tcodon, cds.translation_table)
 					if "-" in qcodon:
 						yield taa, "", int(s/3), None, cds.symbol, cds.locus
-						continue
-					qaa = self.translate(qcodon, cds.translation_table)
-					if qaa != taa:
-						e = None if len(qaa) == 1 else int(e/3)
-						yield taa, qaa, int(s/3), e, cds.symbol, cds.locus
+					else:
+						qaa = self.translate(qcodon, cds.translation_table)
+						if qaa != taa:
+							e = None if len(qaa) == 1 else int(s/3) + len(qaa)
+							yield (taa, qaa, int(s/3), e, cds.symbol, cds.locus)
 
 	def translate(self, seq, translation_table=1):
-		'''
-		returns amino acid sequence based on a given nucleotide sequence and translation table.
-		The given sequence is shortened if its length is not a multiple of 3.
+		"""
+		function to translate a nucleotide sequence.
 
-		>>> algn = sonarALIGN("ATTGTTGTTATATGGCCAGTT", "ATTGATGTTATGAATGGCCTTT")
+		Notes
+		-----
+			If necessary, the given nucleotide sequence is shortened that its
+			length is a multiple of 3.
+
+		Example
+		-------
+
+		>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE)
 		>>> algn.translate("ATGTGAAA")
 		'M*'
 
-		'''
+		Parameters
+		----------
+		seq : str
+			define the nucleotide sequence to translate
+		translation_table : int
+			define the genetic code table used for in silico translation (see
+			https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+
+		Returns
+		-------
+		str
+			translated amino acid sequence
+		"""
 		l = len(seq)
 		if l%3 == 1:
 			l = -1
@@ -436,33 +897,46 @@ class sonarALIGN(object):
 			l = -2
 		return str(Seq.translate(seq[:l], table=translation_table))
 
-class timeOut():
-	def __init__(self, seconds=1, error_message='Timeout'):
-		self.seconds = seconds
-		self.error_message = error_message
-	def handle_timeout(self, signum, frame):
-		raise TimeoutError(self.error_message)
-	def __enter__(self):
-		signal.signal(signal.SIGALRM, self.handle_timeout)
-		signal.alarm(self.seconds)
-	def __exit__(self, type, value, traceback):
-		signal.alarm(0)
-
 class sonarDBManager():
-	'''
-	This class provides basic functions and properties to manage a given sonar database.
-	At initialization, the database is created if necessary and a connection is
-	established. All modyfying actions are grouped in a single transaction by default.
-	The class should be always used in a context manager (with statement) to allow
-	rollback at abnormal termination.
-	'''
+	"""
+	This object provides a sonarDB SQLite manager handler managing connections and
+	providing context-safe transaction control.
+
+	Notes
+	-----
+    	This object should be called using a context manager to ensure rollbacks
+		on abnormal termination.
+
+	Example
+	-------
+
+	In this example the DOCTESTDB variable store the path to a database file
+
+	>>> with sonarDBManager(DOCTESTDB) as dbm:
+	... 	pass
+
+    Parameters
+    ----------
+
+    dbfile : str
+        define a path to a non-existent or valid SONAR database file. If the
+		file does not exist, a SONAR database is created.
+	timeout : int
+		define busy timeout [ -1 ],
+	readonly : bool
+		define if the connection should be read-only [ True ]
+
+    Attributes
+    ----------
+    dbfile : str
+        stores the path to the used SONAR database file.
+	connection : object
+		stores the SQLite3 connection
+	cursor : method
+		stores the SQLite3 cursor
+	"""
+
 	def __init__(self, dbfile, timeout=-1, readonly=False):
-		'''
-		following parameters are needed to initialize the class:
-		dbfile = database file (will be created if it does not exists)
-		timeout = busy time out of the database
-		readonly = allow read only access only
-		'''
 		self.dbfile = os.path.abspath(dbfile)
 		self.connection = None
 		self.cursor = None
@@ -493,9 +967,6 @@ class sonarDBManager():
 			self.close()
 
 	def connect(self):
-		'''
-		Establishes a database connection and returns a tuple of connection and cursor
-		'''
 		con = sqlite3.connect(self.__uri + "?mode=" + self.__mode, self.__timeout, isolation_level = None, uri = True)
 		con.row_factory = self.dict_factory
 		cur = con.cursor()
@@ -514,15 +985,44 @@ class sonarDBManager():
 		self.connection.close()
 
 	def create_scheme(self):
-		'''
-		create database scheme.
-		'''
 		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "db.sqlite"), 'r') as handle:
 			sql = handle.read()
 		with sqlite3.connect(self.__uri + "?mode=rwc", uri = True) as con:
 			con.executescript(sql)
 
-	def select(self, table, fieldList=['*'], whereClause=[], whereVals=None, orderby=None, fetchone=False, print_sql=False):
+	def select(self, table, fieldList=['*'], whereClause=None, whereVals=None, orderby=None, fetchone=False, print_sql=False):
+		"""
+		generic function to perform a SELECT query on the SONAR database.
+
+		Parameters
+		----------
+		table : str
+			define table to select data from
+		fieldList : list
+			define a list of field names to select. By default all fields are selected
+			[ ['*'] ]
+		whereClause : str
+			define a where expression for conditional select. The expression has
+			not to be introduced by 'where'. The actual values will be inserted
+			syntax-safely and, thus, have to be replaced by ? within the clause
+			(e.g. 'accession = ?'). [ None ]
+		whereVals : list
+			list of ordered values to be inserted into the whereClause. [ None ]
+		orderby : str
+			define an 'order by' expression to order results [ None ]
+		fetchone : bool
+			define wether only one (set True) or all (set False) rows should be
+			returned. [ False ]
+		print_sql : bool
+			define if assembled query should be printed on screen
+			(e.g. for debugging) [ False ]
+
+		Returns
+		-------
+		list
+			list of selected rows. Each row is represented as a dictionary with
+			selected field names as keys.
+		"""
 		sql = "SELECT " + "".join(fieldList) + " FROM " + table
 		if whereClause:
 			sql += " WHERE " + whereClause
@@ -537,15 +1037,59 @@ class sonarDBManager():
 			return self.cursor.fetchone()
 		return self.cursor.fetchall()
 
-	def delete(self, table, whereClause=None, whereVals=[], print_sql=False):
+	def delete(self, table, whereClause=None, whereVals=None, print_sql=False):
+		"""
+		generic function to perform a DELETE request on the SONAR database.
+
+		Parameters
+		----------
+		table : str
+			define table to delete data from
+		whereClause : str
+			define a where expression for conditional deletions. The expression has
+			not to be introduced by 'where'. The actual values will be inserted
+			syntax-safely and, thus, have to be replaced by ? within the clause
+			(e.g. 'accession = ?'). [ None ]
+		whereVals : list
+			list of ordered values to be inserted into the whereClause. [ None ]
+		print_sql : bool
+			define if assembled query should be printed on screen
+			(e.g. for debugging) [ False ]
+		"""
 		sql = "DELETE FROM " + table
 		if whereClause:
 			sql += " WHERE " + whereClause
+		else:
+			whereVals = []
 		if print_sql:
 			print(sql)
 		self.cursor.execute(sql, whereVals)
 
 	def insert(self, table, fieldList, valList, ignore=False, print_sql=False):
+		"""
+		generic function to perform an INSERT request on the SONAR database.
+
+		Parameters
+		----------
+		table : str
+			define table to insert data to
+		fieldList : list
+			define a list of field names into which the data should be inserted
+		valList : list
+			define a list of values to be inserted. The values will be inserted
+			in the same order as they appear and the field names have been defined
+			in fieldList.
+		ignore : bool
+			define if INSERT can be ignored [ False ]
+		print_sql : bool
+			define if assembled query should be printed on screen
+			(e.g. for debugging) [ False ]
+
+		Returns
+		-------
+		int
+			id of modified row
+		"""
 		ignore = "" if not ignore else "OR IGNORE "
 		sql = "INSERT " + ignore + "INTO " + table + "(" + ", ".join(fieldList) + ") VALUES (" + ", ".join(['?']*len(valList)) + ")"
 		if print_sql:
@@ -558,6 +1102,35 @@ class sonarDBManager():
 		return rowid
 
 	def update(self, table, fieldList, valList, whereClause, whereVals, print_sql=False):
+		"""
+		generic function to perform an UPDATE query on the SONAR database.
+
+		Parameters
+		----------
+		table : str
+			define table to select data from
+		fieldList : list
+			define a list of field names to be updated
+		valList : list
+			define a list of values to be inserted. The values will be inserted
+			in the same order as they appear and the field names have been defined
+			in fieldList.
+		whereClause : str
+			define a where expression. The expression has
+			not to be introduced by 'where'. The actual values will be inserted
+			syntax-safely and, thus, have to be replaced by ? within the clause
+			(e.g. 'accession = ?').
+		whereVals : list
+			list of ordered values to be inserted into the whereClause.
+		orderby : str
+			define an 'order by' expression to order results [ None ]
+		fetchone : bool
+			define wether only one (set True) or all (set False) rows should be
+			returned. [ False ]
+		print_sql : bool
+			define if assembled query should be printed on screen
+			(e.g. for debugging) [ False ]
+		"""
 		sql = "UPDATE " + table + " SET " + ", ".join([ str(x) + "= ?" for x in fieldList ]) + " WHERE " + whereClause
 		if print_sql:
 			print(sql)
@@ -570,28 +1143,91 @@ class sonarDBManager():
 
 	@staticmethod
 	def dict_factory(cursor, row):
-		'''
-		convert database result in list of dictionaries where keys are the respective column names.
-		'''
 		d = OrderedDict()
 		for idx, col in enumerate(cursor.description):
 			d[col[0]] = row[idx]
 		return d
 
 class sonarDB(object):
-	'''
-	This class provides sonarDB the actual functionalities.
-	'''
+	"""
+	this object provides sonarDB functionalities and intelligence
+
+	Notes
+	-----
+    	Please note, that genomic and protein coordinates are processed and
+		returned 0-based by this object, except for formatted profiles.
+		While start or single coordinates are inclusive, end coordinates of
+		ranges are exclusive, expressed in a mathematical notation: [start, end).
+		Only in formatted profiles start and end coordinates are 1-based and both
+		inclusive.
+
+	Examples
+	--------
+
+	In this example the path to the database is stored in DOCTESTDB.
+
+	>>> db = sonarDB(DOCTESTDB)
+
+    Parameters
+    ----------
+    dbfile : str
+		define a path to a non-existent or valid SONAR database file. If the
+		file does not exist, a SONAR database is created.
+	translation_table : int
+		define the genetic code table used for in silico translation (see
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+
+    Attributes
+    ----------
+    db : str
+		stores the absolute path to the used SONAR database file
+	reffna : str
+		stores the absolute path to the built-in FASTA file containing the reference
+		genome sequences
+	refgff : str
+		stores the absolute path to the built-in GFF3 file containing the reference
+		genome annotation
+	translation_table : int
+		stores the genetic code table used for in silico translation (see
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+	refseq : str
+		stores the upper-case sequence of the built-in reference genome
+	refdescr : str
+		stores the FASTA header of the built-in reference genome
+	refgffObj : object
+		stores the sonarGFF object based on the built-in reference genome
+		annotation
+	iupac_nt_code : dict
+		stores a dict of IUPAC one-letter nucleotide codes (as keys) whereas
+		the values are the respective set of matching IUPAC one-letter nucleotide
+		codes (e.g "W" -> set('A', 'T'))
+	iupac_explicit_nt_code : dict
+		stores a set of non-ambiguous IUPAC one-letter nucleotide codes
+	iupac_ambig_nt_code : set
+		stores a set of ambiguous IUPAC one-letter nucleotide codes
+	iupac_aa_code : dict
+		stores a dict of IUPAC one-letter amnino acid codes (as keys) whereas
+		the values are the respective set of matching IUPAC one-letter amino
+		acids codes
+	iupac_explicit_aa_code : dict
+		stores a set of non-ambiguous IUPAC one-letter amino acid codes
+	iupac_ambig_aa_code : dict
+		stores a set of ambiguous IUPAC one-letter amino acid codes
+	dna_var_regex : compiled re expression
+		stores a compiled re expression that matches to nucleotide profiles but
+		not to amino acid profiles
+	aa_var_regex : compiled re expression
+		stores a compiled re expression that matches to amino acid profiles but
+		not to nucleotide profiles
+	del_regex : compiled re expression
+		stores a compiled re expression that matches to deletion profiles on
+		nucleotide as well as on amino acid level.
+	"""
 	def __init__(self, dbfile, translation_table = 1):
-		'''
-		following parameters are needed to initialize the class:
-		dbfile = database file (will be created if it does not exists)
-		translation_table = translation database
-		'''
 		self.db = os.path.abspath(dbfile)
-		self.moduledir = os.path.dirname(os.path.realpath(__file__))
-		self.reffna = os.path.join(self.moduledir, "ref.fna")
-		self.refgff = os.path.join(self.moduledir, "ref.gff3")
+		self.__moduledir = os.path.dirname(os.path.realpath(__file__))
+		self.reffna = os.path.join(self.__moduledir, "ref.fna")
+		self.refgff = os.path.join(self.__moduledir, "ref.gff3")
 		self.translation_table = translation_table
 		self.__refseq = None
 		self.__refdescr = None
@@ -611,9 +1247,6 @@ class sonarDB(object):
 
 	@property
 	def refseq(self):
-		'''
-		Provides the built-in reference genome sequence.
-		'''
 		if not self.__refseq:
 			with open(self.reffna, "r") as handle:
 				self.__refseq = "".join([x.strip().upper() for x in handle.readlines()[1:]])
@@ -621,9 +1254,6 @@ class sonarDB(object):
 
 	@property
 	def refdescr(self):
-		'''
-		Provides the header information of the built-in reference genome.
-		'''
 		if not self.__refdescr:
 			with open(self.reffna, "r") as handle:
 				self.__refdescr = handle.readline().strip()[1:]
@@ -631,19 +1261,12 @@ class sonarDB(object):
 
 	@property
 	def refgffObj(self):
-		'''
-		Provides the sonarGFF header based on the built-in reference genome
-		annotation.
-		'''
 		if not self.__refgffObj:
 			self.__refgffObj = sonarGFF(self.refgff, self.reffna, self.translation_table)
 		return self.__refgffObj
 
 	@property
 	def dna_var_regex(self):
-		'''
-		Provides a regex matching to valid dna variant expressions.
-		'''
 		if self.__dna_var_regex is None:
 			allowed_letters = "[" + "".join(self.iupac_nt_code.keys()) + "]"
 			self.__dna_var_regex = re.compile("^(?:(?:del:[0-9]+:[0-9]+)|(?:" + allowed_letters + "[0-9]+" + allowed_letters + "+))$")
@@ -651,9 +1274,6 @@ class sonarDB(object):
 
 	@property
 	def aa_var_regex(self):
-		'''
-		Provides a regex matching to valid protein variant expressions.
-		'''
 		if self.__aa_var_regex is None:
 			allowed_symbols = "(?:(?:" + ")|(?:".join(self.refgffObj.symbols) + "))"
 			allowed_letters = "[" + "".join(self.iupac_aa_code.keys()).replace("-", "") + "-" + "]"
@@ -662,9 +1282,6 @@ class sonarDB(object):
 
 	@property
 	def del_regex(self):
-		'''
-		Provides a regex matching to valid protein variant expressions.
-		'''
 		if self.__del_regex is None:
 			allowed_symbols = "(?:(?:" + ")|(?:".join(self.refgffObj.symbols) + "))"
 			self.__del_regex = re.compile("^(?:" + allowed_symbols + ":)?del:[0-9]+:[0-9]+$")
@@ -672,62 +1289,39 @@ class sonarDB(object):
 
 	@property
 	def iupac_nt_code(self):
-		'''
-		Provides a dict of all IUPAC nucleotide one letter codes
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
 		if self.__iupac_nt_code is None:
- 			self.__iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AG"), "Y": set("CT"), "S": set("GC"), "W": set("AT"), "K": set("GT"), "M": set("AC"), "B": set("CGT"), "D": set("AGT"), "H": set("ACT"), "V": set("ACG"), "N": set("ATGC") }
+			self.__iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AGR"), "Y": set("CTY"), "S": set("GCS"), "W": set("ATW"), "K": set("GTK"), "M": set("ACM"), "B": set("CGTB"), "D": set("AGTD"), "H": set("ACTH"), "V": set("ACGV") }
+			self.__iupac_nt_code['N'] = set(self.__iupac_nt_code.keys()) | set("N")
 		return self.__iupac_nt_code
 
 	@property
 	def iupac_explicit_nt_code(self):
-		'''
-		Provides a dict of the IUPAC nucleotide one letter codes only containing letters coding for exactly one nucleotide
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
 		if self.__iupac_explicit_nt_code is None:
  			self.__iupac_explicit_nt_code = set([ x for x in self.iupac_nt_code if len(self.iupac_nt_code[x]) == 1 ])
 		return self.__iupac_explicit_nt_code
 
 	@property
 	def iupac_ambig_nt_code(self):
-		'''
-		Provides a dict of the IUPAC nucleotide one letter codes only containing letters coding for more than one nucleotides
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
 		if self.__iupac_ambig_nt_code is None:
  			self.__iupac_ambig_nt_code = set([ x for x in self.iupac_nt_code if len(self.iupac_nt_code[x]) > 1 ])
 		return self.__iupac_ambig_nt_code
 
 	@property
 	def iupac_aa_code(self):
-		'''
-		Provides a dict of all IUPAC amino acid one letter codes
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
 		if self.__iupac_aa_code is None:
 			self.__iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O") }
-			self.__iupac_aa_code['X'] = set(self.__iupac_aa_code.keys())
-			self.__iupac_aa_code.update({"B": set("DN"), "Z": set("EQ"), "J": set("IL"), "Φ": set("VILFWYM"), "Ω": set("FWYH"), "Ψ": set("VILM"), "π": set("PGAS"), "ζ": set("STHNQEDKR"), "+": set("KRH"), "-": set("DE") })
+			self.__iupac_aa_code.update({"B": set("DNB"), "Z": set("EQZ"), "J": set("ILJ"), "Φ": set("VILFWYMΦ"), "Ω": set("FWYHΩ"), "Ψ": set("VILMΨ"), "π": set("PGASπ"), "ζ": set("STHNQEDKRζ"), "+": set("KRH+"), "-": set("DE-") })
+			self.__iupac_aa_code['X'] = set(self.__iupac_aa_code.keys()) | set("X")
 		return self.__iupac_aa_code
 
 	@property
 	def iupac_explicit_aa_code(self):
-		'''
-		Provides a dict of the IUPAC amino acid one letter codes only containing letters coding for exactly one amino acid
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
 		if self.__iupac_explicit_aa_code is None:
  			self.__iupac_explicit_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) == 1 ])
 		return self.__iupac_explicit_aa_code
 
 	@property
 	def iupac_ambig_aa_code(self):
-		'''
-		Provides a dict of the IUPAC amino acid one letter codes only containing letters coding for more than one amino acid
-		(key: one letter code, value: set of assigned one letter explicit codes).
-		'''
 		if self.__iupac_ambig_aa_code is None:
  			self.__iupac_ambig_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) > 1 ])
 		return self.__iupac_ambig_aa_code
@@ -736,32 +1330,80 @@ class sonarDB(object):
 
 	@staticmethod
 	def hash(seq):
-		'''
-		Provides a SEGUID hash of a sequence (basically SHA-1 ot the sequence in upper-cases).
-		'''
+		"""
+		static function to hash any sequence using SEGUID (SHA-1 hash of the
+		upper-case sequence)
+
+		Parameters
+		----------
+		seq : str
+			define a sequence to hash
+
+		Returns
+		-------
+		str
+			seguid
+
+		"""
 		return seguid(seq)
 
 	def multi_process_fasta_wrapper(self, args):
+		"""
+		wrapper function for sonarDB.process_fasta that accepts the needed
+		parameters as list (which allows to be called by multiprocessing for
+		parallelization) to add a genome sequences from a FASTA file. The FASTA
+		file has to contain exactly one record.
+
+		Parameters
+		----------
+		args[0] : str
+			corresponds to fname in sonarDB.process_fasta
+			define a valid FASTA file containing exactly one genome record to be
+			added to the SONAR database
+		args[1] : str
+			corresponds to algnfile in sonarDB.process_fasta
+			define a filename to permanently store the sequence alignment. Please
+			consider, that an existing file will be overwritten. If None, a
+			temporary file will be created and deleted after processing.
+		args[2] : str
+			corresponds to cache in sonarDB.process_fasta
+			define a cache file (pickle format) that is used to permanently store
+			processed data. Please consider, that an existing file will be
+			overwritten. IfNone, a temporary file will be created and deleted after
+			processing.
+
+		Returns
+		-------
+		tuple
+			returns a tuple consisting of status and the hash of the processed
+			genome sequence. Status False means TimeoutError (genome was not added
+			to the database) while True means genome was successfully added.
+
+		"""
 		fname, algnfile, cache, seqhash, timeout = args
 		try:
-			with timeOut(seconds=timeout):
+			with sonarTimeout(seconds=timeout):
 				self.process_fasta(fname, algnfile, cache)
 		except TimeoutError:
 			return False, seqhash
 		else:
 			return True, seqhash
 
-	def process_fasta(self, fname, algnfile, cache=None):
-		'''
-		Processes a given fasta and prepars the contained genome sequence for database import.
-		Relevant sequence- and alignment-based information are provided in pickle format that
-		is returned or, alternatively, cached in a file.
+	def process_fasta(self, fname, algnfile=None, cache=None):
+		"""
+		function to add a genome sequence from a single FASTA file. The FASTA
+		file has to contain exactly one record.
 
-		Not using pickle cache:
+		Example
+		-------
 
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> db = sonarDB(DOCTESTDB + "_process_fasta_test")
-		>>> data = db.process_fasta("doctest_b117.fna")
+		In this example the path to the database is stored in DOCTESTDB.
+		QRY_FASTA_FILE stores the path of a FASTA file conatining a
+		B.1.1.7 protoype genome sequence.
+
+		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
+		>>> db = sonarDB(DOCTESTDB)
+		>>> data = db.process_fasta(QRY_FASTA_FILE)
 		>>> data[0]
 		'b117'
 		>>> data[1]
@@ -771,7 +1413,35 @@ class sonarDB(object):
 		>>> data[6]
 		'N:D3L ORF8:Q27* ORF8:R52I S:del:68:2 ORF8:Y73C S:del:143:1 N:S235F S:N501Y S:A570D S:P681H S:T716I S:S982A ORF1ab:T1001I S:D1118H ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:1'
 
-		'''
+		Parameters
+		----------
+		fname : str
+			define a valid FASTA file containing exactly one genome record to be
+			added to the SONAR database
+		algnfile : str
+			define a filename to permanently store the sequence alignment. Please
+			consider, that an existing file will be overwritten. If None, a
+			temporary file will be created and deleted after processing.
+		cache : str
+			define a cache file (pickle format) that is used to permanently store
+			processed data. Please consider, that an existing file will be
+			overwritten. IfNone, a temporary file will be created and deleted after
+			processing.
+
+		Returns
+		-------
+		list
+			a list is returned only if data is not stored i a cache file. If cache
+			is None a list is returned consisting of:
+				- accession of processed genome
+				- FASTA header of processed genome
+				- a sub list of nucleotide level variations (see sonarALIGN.dnadiff)
+				- a sub list of amino acid level variations (see sonarALIGN.aadiff)
+				- the formatted nucleotide level profile (see sonarDB.build_profile)
+				- the formatted amino acid level profile (see sonarDB.build_profile)
+				- the complete sequence of the processed genome
+
+		"""
 		with sonarDBManager(self.db, readonly=True) as dbm:
 			record = SeqIO.read(fname, "fasta")
 			acc = record.id
@@ -779,7 +1449,6 @@ class sonarDB(object):
 			seq = str(record.seq.upper())
 			seqhash = self.hash(seq)
 			if not self.seq_exists(seqhash, dbm):
-				#alignment = sonarALIGN(seq, self.refseq, self.refgffObj)
 				alignment = sonarALIGN(fname, self.reffna, algnfile, self.refgffObj)
 				dnadiff = alignment.dnadiff
 				aadiff = alignment.aadiff
@@ -794,19 +1463,35 @@ class sonarDB(object):
 
 			if cache is None:
 				return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
-			
-			with open(cache, "wb") as handle: 
+
+			with open(cache, "wb") as handle:
 				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
 
-	def import_genome_from_fasta(self, *fnames, msg=None, paranoid=True):
-		'''
-		Imports genome from fasta file(s).
+	def import_genome_from_fasta(self, *fnames, msg=None):
+		"""
+		function to import genome sequence(s) from given FASTA file(s) to the
+		SONAR database. Each FASTA file has to contain exactly one record.
 
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
+		Example
+		-------
+
+		In this example the path to the database is stored in DOCTESTDB.
+		QRY_FASTA_FILE stores the path of a FASTA file conatining a
+		B.1.1.7 protoype genome sequence.
+
+		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
-		>>> db.import_genome_from_fasta("doctest_b117.fna")
+		>>> db.import_genome_from_fasta(QRY_FASTA_FILE)
 
-		'''
+		Parameters
+		----------
+		*fnames : str
+			define one or more valid FASTA files. Each file must contain
+			exactly one genome record
+		msg : str
+			define a message used for the progress bar. If None, no progress
+			bar is shown [ None ]
+		"""
 		if not msg is None:
 			rng = tqdm(range(len(fnames)), desc = msg)
 		else:
@@ -815,17 +1500,33 @@ class sonarDB(object):
 		with sonarDBManager(self.db) as dbm:
 			for i in rng:
 				data = self.process_fasta(fnames[i])
-				self.import_genome(*data, dbm=dbm, paranoid=paranoid)
+				self.import_genome(*data, dbm=dbm)
 
-	def import_genome_from_pickle(self, *fnames, msg=None, paranoid=True):
-		'''
-		Imports genome from cached pickle file(s).
+	def import_genome_from_pickle(self, *fnames, msg=None):
+		"""
+		function to import data from pre-processed pickle files (as created by
+		sonarCACHE) to the SONAR database. Each PICKLE  file has to contain
+		exactly one record.
 
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
+		Example
+		-------
+		In this example the path to the database is stored in DOCTESTDB.
+		QRY_PICKLE_FILE stores the pre-processed data obtained from a
+		B.1.1.7 protoype genome sequence.
+
+		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
-		>>> db.import_genome_from_pickle("doctest_b117.pickle")
+		>>> db.import_genome_from_pickle(QRY_PICKLE_FILE)
 
-		'''
+		Parameters
+		----------
+		*fnames : str
+			define one or more valid sonarCHACHE PICKLE files. Each file must
+			contain exactly one genome record
+		msg : str
+			define a message used for the progress bar. If None, no progress
+			bar is shown [ None ]
+		"""
 		if not msg is None:
 			rng = tqdm(range(len(fnames)), desc = msg)
 		else:
@@ -835,13 +1536,20 @@ class sonarDB(object):
 			for i in rng:
 				with open(fnames[i], 'rb') as handle:
 					data = pickle.load(handle, encoding="bytes")
-				self.import_genome(*data, dbm=dbm, paranoid=paranoid)
+				self.import_genome(*data, dbm=dbm)
 
-	def import_genome_from_cache(self, cachedir, msg=None, paranoid=True):
-		'''
-		Imports genome from sonar cache object.
+	def import_genome_from_cache(self, cachedir, msg=None):
+		"""
+		function to import data from a sonarCACHE directory to the SONAR database.
 
-		'''
+		Parameters
+		----------
+		cachedir : str
+			define a valid sonarCACHE directory
+		msg : str
+			define a message used for the progress bar. If None, no progress
+			bar is shown [ None ]
+		"""
 		with sonarCache(cachedir) as cache:
 			seqhashes = list(cache.cache.keys())
 			if not msg is None:
@@ -855,12 +1563,34 @@ class sonarDB(object):
 					seq = cache.get_cached_seq(seqhash)
 					preprocessed_data = cache.load_info(seqhash)[2:]
 					for entry in cache.cache[seqhash]:
-						self.import_genome(*entry, *preprocessed_data, seq, dbm=dbm, paranoid=paranoid)
+						self.import_genome(*entry, *preprocessed_data, seq, dbm=dbm)
 
-	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq, dbm, paranoid=True):
-		'''
-		imports processed genome data to database
-		'''
+	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq, dbm):
+		"""
+		function to import processed data to the SONAR database.
+
+		Parameters
+		----------
+
+		acc : str
+			define the accession of the processed genome
+		descr : str
+			define the FASTA header of the processed genome
+		seqhash : str
+			define the hash (seguid) of the processed genome
+		dnadiff : list
+			define a sub list of nucleotide level variations (see sonarALIGN.dnadiff)
+		aadiff : list
+			define a sub list of amino acid level variations (see sonarALIGN.aadiff)
+		dna_profile : str
+		 	define the formatted nucleotide level profile (see sonarDB.build_profile)
+		prot_profile : str
+			define the formatted amino acid level profile (see sonarDB.build_profile)
+		seq : str
+			define the sequence of the processed genome
+		dbm : str
+			define a sonarDBManager object to use for database transaction
+		"""
 		if not self.genome_exists(acc, descr, seqhash, dbm):
 			self.insert_genome(acc, descr, seqhash, dbm)
 		if not self.seq_exists(seqhash, dbm):
@@ -877,8 +1607,8 @@ class sonarDB(object):
 				if varid is None:
 					varid = self.insert_prot_var(protein, locus, ref, alt, s, e, dbm)
 				self.insert_sequence2prot(seqhash, varid, dbm)
-			if True:
-				self.be_paranoid(acc, seq, dbm, auto_delete=False)
+
+			self.be_paranoid(acc, seq, dbm, auto_delete=False)
 
 	def insert_genome(self, acc, descr, seqhash, dbm):
 		return dbm.insert('genome', ['accession', 'description', 'seqhash'], [acc, descr, seqhash])
@@ -912,10 +1642,9 @@ class sonarDB(object):
 
 	def genome_exists(self, acc, descr, seqhash, dbm):
 		row = self.get_genome_data(acc, dbm=dbm)
-		if row and row[0]['description'] == descr and row[0]['seqhash'] == seqhash:
-			return True
-		else:
+		if not row or (descr is not None and row[0]['description'] != descr) or (seqhash is not None and row[0]['seqhash'] != seqhash):
 			return False
+		return True
 
 	def seq_exists(self, seqhash, dbm):
 		return dbm.select('sequence', fieldList=['COUNT(*)'], whereClause="seqhash = ?", whereVals=[seqhash], orderby=None, fetchone=True, print_sql=False)['COUNT(*)'] > 0
@@ -938,7 +1667,7 @@ class sonarDB(object):
 
 	def get_dna_vars(self, acc, dbm):
 		return dbm.select('dna_view', whereClause="accession = ?", whereVals=[acc], orderby="start DESC")
-		
+
 	def iter_table(self, table):
 		sql = dbm.select('dna', whereClause="ref = ? AND alt = ? AND start = ? and end = ?", whereVals=[ref, alt, start, end], fetchone=True)
 		for row in dbm.select(table):
@@ -947,35 +1676,69 @@ class sonarDB(object):
 	# NOMENCLATURE
 
 	def isdnavar(self, var):
-		'''
-		Returns True if a variant definition is a valid dna variant expression.
+		"""
+		function to validate nucleotide level profiles
 
+		Examples
+		--------
+
+		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
 		>>> db.isdnavar("S:N501Y")
 		False
 		>>> db.isdnavar("A101T")
 		True
 
-		'''
+		Parameters
+		----------
+
+		var : str
+			define the profile to validate
+
+		Returns
+		-------
+
+		bool
+			True if var is a valid nucleotide level profile otherwise False
+		"""
 		return bool(self.dna_var_regex.match(var))
 
 	def isaavar(self, var):
-		'''
-		Returns True if a variant definition is a valid aa variant expression.
+		"""
+		function to validate amino acid level profiles
 
+		Examples
+		--------
+
+		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
 		>>> db.isaavar("S:N501Y")
 		True
 		>>> db.isaavar("A101T")
 		False
 
-		'''
+		Parameters
+		----------
+
+		var : str
+			define the profile to validate
+
+		Returns
+		-------
+
+		bool
+			True if var is a valid amino acid level profile otherwise False
+		"""
 		return bool(self.aa_var_regex.match(var))
 
 	def isdel(self, var):
-		'''
-		Returns True if a variant definition is a valid aa or dna deletion expression.
+		"""
+		function to validate deletion profiles on both nucleotide and amino acid level
 
+		Examples
+		--------
+
+		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
 		>>> db.isdel("del:100-118")
 		False
@@ -984,15 +1747,48 @@ class sonarDB(object):
 		>>> db.isdel("ORF1ab:del:5:2")
 		True
 
-		'''
+		Parameters
+		----------
+
+		var : str
+			define the profile to validate
+
+		Returns
+		-------
+
+		bool
+			True if var is a deletion profile otherwise False
+		"""
 		return bool(self.del_regex.match(var))
 
 	# PROFILE BUILDING
 
 	def build_profile(self, *vars):
-		'''
-		build a profile based on given mutations according to sonarDB's profile syntax
-		'''
+		"""
+		function to build a valid variant profiles based on given variations
+
+		Parameters
+		----------
+
+		vars : list
+			define for each variation to be considered by the profile a list
+			with the following elements:
+			 - reference nucleotide(s) or amino acid(s)
+			 - alternative nucleotide(s) or amino acid(s)
+			 - start position (0-based) related to the genome (nucleotide level profile) or
+			   protein (amino acid level profile)
+			 - end position (0-based) related to the genome (nucleotide level profile) or
+			   protein (amino acid level profile) or None if single nucleotide/amino acid
+			   polymorphism
+			 - protein symbol (None in case of nucleotide level profiles)
+			 - gene locus (None in case of nucleotide level profiles)
+
+		Returns
+		-------
+
+		str
+			valid variant profile
+		"""
 		if len(vars) == 0:
 			return ""
 		profile = []
@@ -1021,9 +1817,36 @@ class sonarDB(object):
 
 	@staticmethod
 	def format_var(ref, alt, start, end, protein=None, locus=None):
-		'''
-		format single mutation based on according to sonarDB's profile syntax
-		'''
+		"""
+		function to build a valid variant profile based on a single variation
+
+		Parameters
+		----------
+
+		ref : str
+			define the reference nucleotide(s) or amino acid(s)
+		alt : str
+			define the alternative nucleotide(s) or amino acid(s)
+		start : int
+			define the start position (0-based) related to the genome (nucleotide
+			level profile) or protein (amino acid level profile)
+		end : int
+			define the end position (0-based) related to the genome (nucleotide
+			level profile) or protein (amino acid level profile) or None if
+			single nucleotide/amino acid polymorphism
+		protein : str
+			define the protein symbol (None in case of nucleotide level profiles)
+			[ None ]
+		locus : str
+			define the gene locus (None in case of nucleotide level profiles)
+			[ None ]
+
+		Returns
+		-------
+
+		str
+			valid variant profile
+		"""
 		if end is None:
 			coord = str(start+1)
 		else:
@@ -1035,10 +1858,27 @@ class sonarDB(object):
 	# MATCHING
 
 	def filter_ambig(self, profile, explicit_code, keep=None):
-		'''
-		Returns a mutation profile that do not include any ambiguous SNP anymore.
-		Mutations listed in keep will be not excluded.
-		'''
+		"""
+		function to filter variations with ambiguities in the alternative allele
+		from a valid nucleotide or amino acid level profile
+
+		Parameters
+		----------
+
+		profile : str
+			valid nucleotide or amino acid level profile
+		explicit_code : dict
+			explicit IUPAC code dictionary to use (as provided by
+			sonarDB.iupac_explicit_nt_code or sonarDB.iupac_explicit_aa_code)
+		keep : list
+			list of single variation profiles to exclude from filtering [ None ]
+
+		Returns
+		-------
+
+		str
+			valid variant profile
+		"""
 		out = []
 		keep = set(keep) if keep else set()
 		for mutation in list(filter(None, profile.split(" "))):
@@ -1053,12 +1893,38 @@ class sonarDB(object):
 
 
 	def pinpoint_mutation(self, mutation, code):
-		'''
-		Returns a set of explicit mutations based on the given possibly ambiguous mutation definition.
-		The mutation definition must follow the covsonar nomenclature system.
+		"""
+		function to generate a set of all profiles consisting of
+		non-ambiguous one-letter codes only that match to a given profile.
+		If the given profile does not contain any ambiguities a list only
+		containing the given profile is returned.
 
-		>>>
-		'''
+		Examples
+		--------
+
+		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
+		>>> db = sonarDB(DOCTESTDB)
+		>>> sorted(db.pinpoint_mutation('A5001N', db.iupac_nt_code))
+		['A5001A', 'A5001B', 'A5001C', 'A5001D', 'A5001G', 'A5001H', 'A5001K', 'A5001M', 'A5001N', 'A5001R', 'A5001S', 'A5001T', 'A5001V', 'A5001W', 'A5001Y']
+		>>> db.pinpoint_mutation('N501Y', db.iupac_aa_code)
+		{'N501Y'}
+
+		Parameters
+		----------
+
+		mutation : str
+			define a valid nucleotide or amino acid level profile that may contain
+			ambiguities
+		code : dict
+			define the IUPAC code dictionary to use (as provided by
+			sonarDB.iupac_nt_code or sonarDB.iupac_aa_code)
+
+		Returns
+		-------
+
+		set
+			set of profiles without ambiguities but matching to given profile
+		"""
 		# extract ALT call from mutation profile
 		match = self.__terminal_letters_regex.search(mutation)
 		if not match:
@@ -1074,10 +1940,30 @@ class sonarDB(object):
 		orig_stat = mutation[:-len(match)]
 		return set([mutation] + [ orig_stat + "".join(x) for x in itertools.product(*options) ])
 
-	def match_builder(self, profile, dna=True, exclusive=False, negate=False):
-		'''
-		build where clause for profile matching.
-		'''
+	def match_builder(self, profile, exclusive=False, negate=False):
+		"""
+		function to build a where clause matching to nucleotide, amino
+		acid or mixed level profiles.
+
+		Parameters
+		----------
+
+		profile : str
+			define a valid nucleotide or amino acid level profile that may contain
+			ambiguities
+		exclusive : bool
+			define if additional variations are allowed for the matched genomes (False)
+			or not (True) [ False ]
+		negate : bool
+			define if the query should be negated (True) or not (False) [ False ]
+
+		Returns
+		-------
+
+		str
+			where clause allowing matching of a given variant profile
+		"""
+
 		# configuring
 		condition = " " if not negate else " NOT "
 		config = {
@@ -1121,13 +2007,55 @@ class sonarDB(object):
 		return clause
 
 	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, zips=None, dates=None, exclusive=False, ambig=False, show_sql=False):
-		'''
-		Provides mutation profile matching against sequences in the database.
-		'''
+		"""
+		function to match genomes in the SONAR database
 
-		# For developers:
-		# Aim is to bring all profile definitions and filters to one and the same
-		# sqllite query to let the database do the actual work
+		Parameters
+		----------
+
+		include_profiles : list
+			define a list of valid nucleotide, amino acid or mixed level profiles
+			that may contain ambiguities to find genomes sharing respective
+			profiles. Variations in each profile are linked by AND operator
+			while the different profiles are linked by OR. [ None ]
+		 exclude_profiles : list
+			define a list of valid nucleotide, amino acid or mixed level profiles
+			that may contain ambiguities to find genomes NOT sharing respective
+			profiles. Variations in each profile are linked by AND operator
+			while the different profiles are linked by OR.
+		accessions : list
+			list of accessions. Only genomes of accessions in this list will be
+			matched. Accessions are negated when starting with ^. [ None ]
+		lineages : list
+			list of pangolin lineages. Only genomes assigend to the respective
+			pangolin lineage  in this list will be matched. Lineages are
+			negated when starting with ^. [ None ]
+		zips : list
+			list of zip codes. Only genomes linked to one of the given zip
+			codes or whose linked zip code starts like one of the given
+			zip codes are matched. zip codes are negated when starting with ^.
+			[ None ]
+		dates : list
+			define list of dates (YYYY-MM-DD) or date ranges (YYYY-MM-DD:YYYY-MM-DD).
+			Only genomes linked to one of the given dates or date ranges are
+			matched.
+		exclusive : bool
+			define if additional variations are allowed for the matched genomes (False)
+			or not (True) [ False ]
+		ambig : bool
+			define if variations including ambiguities should be filtered (True)
+			from teh profiles shown or not (False) [ False ]
+		show_sql : bool
+			define if the assembled SQLite query should be shown on screen (for
+			debugging) [ False ]
+
+		Returns
+		-------
+
+		list
+			list of rows. Each row represents a matching genome and is provided as
+			dictionary with field names as keys.
+		"""
 
 		clause = []
 		vals =[]
@@ -1163,18 +2091,38 @@ class sonarDB(object):
 
 		# adding accession, lineage, zips, and dates based conditions
 		if accessions:
-			clause.append("accession IN (" + " , ".join(['?'] * len(accessions)) + ")")
-			vals.extend(accessions)
+			include_acc = [x for x in accessions if not x.startswith("^")]
+			exclude_acc = [x for x in accessions if x.startswith("^")]
+			if include_acc:
+				clause.append("accession IN (" + " , ".join(['?'] * len(include_acc)) + ")")
+				vals.extend(include_acc)
+			if exclude_acc:
+				clause.append("accession NOT IN (" + " , ".join(['?'] * len(exclude_acc)) + ")")
+				vals.extend(exclude_acc)
 		if lineages:
-			clause.append("lineages IN (" + " ,".join(['?'] * len(lineages))  + ")")
-			vals.extend(lineages)
+			include_lin = [x for x in lineages if not x.startswith("^")]
+			exclude_lin = [x for x in lineages if x.startswith("^")]
+			if include_lin:
+				clause.append("lineage IN (" + " ,".join(['?'] * len(include_lin))  + ")")
+				vals.extend(include_lin)
+			if exclude_acc:
+				clause.append("lineage NOT IN (" + " ,".join(['?'] * len(exclude_acc))  + ")")
+				vals.extend(exclude_acc)
 		if zips:
-			z = []
-			for zp in zips:
-				z.append("zip LIKE '" + str(zp) + "%'")
-			clause.append(" OR ".join(z))
-			if len(z) > 1:
-				clause[-1] = "(" + clause[-1] + ")"
+			include_zip = [x for x in zips if not str(x).startswith("^")]
+			exclude_zip = [x for x in zips if str(x).startswith("^")]
+			if include_zip:
+				z = []
+				for zp in include_zip:
+					z.append("zip LIKE '" + str(zp) + "%'")
+				clause.append(" OR ".join(z))
+				if len(z) > 1:
+					clause[-1] = "(" + clause[-1] + ")"
+			if exclude_zip:
+				z = []
+				for zp in exclude_zip:
+					z.append("zip NOT LIKE '" + str(zp) + "%'")
+				clause.append(" AND ".join(z))
 		if dates:
 			d = []
 			for dt in dates:
@@ -1202,40 +2150,122 @@ class sonarDB(object):
 
 	# VALIDATION
 
-	def restore(self, acc, dbm, aligned=False, seq_return=False):
+	def restore_genome(self, acc, dbm):
+		"""
+		function to restore a genome sequence from the SONAR database
+
+		Parameters
+		----------
+
+		acc : str
+			define the accesion of the genome that should be restored
+		dbm : object
+			define a sonarDBManager handling the database connection
+
+		Raises
+		------
+
+		Each variant site stored in the database is checked, if the linked reference
+		nucleotide is correct. If not, program is terminated and an error shown.
+
+		Returns
+		-------
+
+		tuple
+			tuple of the FASTA header and sequence of the respective genome.
+			None is returned if the given accession does not exist in the
+			database.
+		"""
 		rows = self.get_dna_vars(acc, dbm)
 		if rows:
-			gap = "-" if aligned else ""
+			qryseq = list(self.refseq)
+			for row in rows:
+				if row['start'] is not None:
+					s = row['start']
+					if s >= 0:
+						if row['ref'] != self.refseq[s]:
+							sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
+						qryseq[s] = "" if not row['alt'] else row['alt']
+					else:
+						qryseq = [row['alt']] + qryseq
+			return (">" + rows[0]['description'], "".join(qryseq))
+		return None
+
+	def restore_alignment(self, acc, dbm):
+		"""
+		function to restore a genome alignment from the SONAR database
+
+		Parameters
+		----------
+
+		acc : str
+			define the accesion of the genome whose alignment versus the reference
+			should be restored
+		dbm : object
+			define a sonarDBManager handling the database connection
+
+		Raises
+		------
+
+		Each variant site stored in the database is checked, if the linked reference
+		nucleotide is correct. If not, program is terminated and an error shown.
+
+		Returns
+		-------
+
+		tuple
+			tuple of the FASTA header and aligned sequence of the respective genome
+			followed by the FASTA header and aligned sequence of the reference genome.
+			None is returned if the given accession does not exist in the
+			database.
+		"""
+		rows = self.get_dna_vars(acc, dbm)
+		if rows:
 			refseq = list(self.refseq)
 			qryseq = refseq[:]
 			for row in rows:
-				if not row['start'] is None:
+				if row['start'] is not None:
 					s = row['start']
 					if s >= 0:
-						if row['ref'] != refseq[s]:
+						if row['ref'] != self.refseq[s]:
 							sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
-						qryseq[s] = gap if not row['alt'] else row['alt']
-						if aligned and len(row['alt']) > 1:
+						qryseq[s] = "-" if not row['alt'] else row['alt']
+						if len(row['alt']) > 1:
 							refseq[s] +=  "-" * (len(row['alt'])-1)
 					else:
 						qryseq = [row['alt']] + qryseq
-						if aligned:
-							refseq = ["-" * (len(row['alt']))] + refseq
-			if seq_return:
-				return "".join(qryseq)
-			if aligned:
-				print(">" + self.dbobj.refdescr)
-				print("".join(refseq))
-			print(">" + rows[0]['description'])
-			print("".join(qryseq))
+						refseq = ["-" * (len(row['alt']))] + refseq
+			return  (">" + rows[0]['description'], "".join(qryseq), ">" + self.dbobj.refdescr, "".join(refseq))
+		return None
 
 	def be_paranoid(self, acc, orig_seq, dbm, auto_delete=False):
+		"""
+		function to compare a given sequence with the respective sequence restored
+		from the SONAR database
+
+		Parameters
+		----------
+
+		acc : str
+			define the accesion of the genome that should be validated
+		orig_seq : str
+			define the sequence expected
+		dbm : object
+			define a sonarDBManager handling the database connection
+		auto_delete : bool
+			define if the respective genome should be automatically deleted
+			from the SONAR database if the test fails
+
+		Returns
+		-------
+
+		bool
+			True is returned if expected and restored sequences are not different
+			otherwise False
+		"""
 		orig_seq = orig_seq.upper()
-		restored_seq = self.restore(acc, aligned=False, seq_return=True, dbm=dbm)
+		restored_seq = self.restore_genome(acc, dbm=dbm)[1]
 		if orig_seq != restored_seq:
-			print(">restored_"+acc+"\n" + restored_seq +"\n")
-			print(">orig_seq_"+acc+"\n" + orig_seq +"\n")
-			print()
 			rows = self.get_dna_vars(acc, dbm)
 			writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
 			writer.writeheader()
@@ -1243,15 +2273,8 @@ class sonarDB(object):
 			if auto_delete:
 				self.delete_accession(acc, dbm)
 			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match.", file=sys.stderr)
-
-	def show_seq_diffs(self, seq1, seq2, stderr=False):
-		target = sys.stderr if stderr else None
-		for i,s in enumerate(difflib.ndiff(seq2, seq1)):
-			if s[0]==' ': continue
-			elif s[0]=='-':
-				print(u'wrong "{}" at position {}'.format(s[-1],i), file = target)
-			elif s[0]=='+':
-				print(u'missing "{}" at position {}'.format(s[-1],i), file = target)
+			return False
+		return True
 
 	# OTHER
 
@@ -1261,13 +2284,44 @@ class sonarDB(object):
 			return handle.read().strip()
 
 class sonarCache():
+	"""
+	this object manages permanent and temporary file caches
+
+	Notes
+	-----
+
+	This class should be included via context manager to ensure that accession
+	index is written and cleaning temporary objects is performed after abnormal
+	program termination.
+
+	In the SONAR cache for each unique sequence that has been cached a FASTA file
+	containing the sequence. That files are named by the slugified hash of the
+	sequence they contain while the used FASTA header represent the hash. Pre-processed
+	data provided by the sonarDB.process_fasta is stored in info files als named by
+	the slugified hash of the respective sequence they are related to (PICKLE format).
+	The link between sequence hash and accession(s) is stored in the cache attribute and,
+	when closing the cache, written to the index file (PICKLE format).
+
+    Parameters
+    ----------
+    dir : str
+		define a path to an non-existent, empty or valid SONAR cache directory.
+		If None, a temporary cache directoryis created and deleted after use.
+		[ None ]
+
+    Attributes
+    ----------
+    dirname : str
+		stores the absolute path to the cache directory
+	temp : bool
+		stores True if the cache is temporary and will be deleted after use
+		otherwise False
+	cache : dict
+		stores a dictionary whose keys are hashes of cached genome sequences and
+		and values tuples of linked accessions and FASTA headers
+
+	"""
 	def __init__(self, dir=None):
-		'''
-		following parameters are needed to initialize the class:
-		dbfile = database file (will be created if it does not exists)
-		timeout = busy time out of the database
-		readonly = allow read only access only
-		'''
 		self.temp = not bool(dir)
 		self._idx = None
 		self.cache = defaultdict(set)
@@ -1312,16 +2366,27 @@ class sonarCache():
 
 	@staticmethod
 	def slugify(string):
-		'''
-		Provides a filesystem safe representation of a string.
-		'''
+		"""
+		function to provide a file-system- and collision-safe representation of
+		a given string
+
+		Parameters
+		----------
+
+		string : str
+			define the string to slugify
+
+		Returns
+		-------
+
+		str
+			a file-system- and collision-safe representation of
+			the original string
+		"""
 		return base64.urlsafe_b64encode(string.encode('UTF-8') ).decode('UTF-8')
 
 	@staticmethod
 	def deslugify(string):
-		'''
-		decodes filesystem safe representation of a string.
-		'''
 		return base64.urlsafe_b64decode(string).decode("utf-8")
 
 	@staticmethod
@@ -1329,18 +2394,28 @@ class sonarCache():
 		return sonarCache.deslugify(os.path.basename(fname))[:-5]
 
 	def iter_fasta(self, fname):
-		'''
-		generates an iterator returning the entries of a given FASTA file as tuple of
-		accession, header and sequence.
-		'''
+		"""
+		function to iterate records of a given FASTA file
+
+		Parameters
+		----------
+
+		fname : str
+			define the path to a valid FASTA file
+
+		Returns
+		-------
+
+		tuple
+			for each record a tuple is returned consisting of
+			 - accession
+			 - FASTA header
+			 - upper-case sequence
+		"""
 		for record in SeqIO.read(fname, "fasta"):
 			yield record.id, record.description, str(record.seq).upper()
 
 	def read_fasta(self, fname):
-		'''
-		reads single entry fasta file and returns a tuple of accession, header and sequence.
-		Exception raises if multiple entries are in the respective fasta file.
-		'''
 		record = SeqIO.read(fname, "fasta")
 		return record.id, record.description[1:], str(record.seq).upper()
 
@@ -1349,7 +2424,7 @@ class sonarCache():
 
 	def get_algn_fname(self, seqhash):
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".algn")
-		
+
 	def get_info_fname(self, seqhash):
 		return os.path.join(self.dirname, self.slugify(seqhash) + ".pickle")
 
@@ -1374,11 +2449,16 @@ class sonarCache():
 		with open(self.idx, 'wb') as handle:
 			pickle.dump(self.cache, handle)
 
-	def add_fasta(self, fname, autodelete=False):
-		'''
-		Adds entries of a given fasta file in a sequence-unredundant manner to
-		the cache.
-		'''
+	def add_fasta(self, fname):
+		"""
+		function to cache genomes from a valid FASTA file
+
+		Parameters
+		----------
+
+		fname : str
+			define the path to a valid FASTA file
+		"""
 		for record in SeqIO.parse(fname, "fasta"):
 			acc = record.id
 			descr = record.description
@@ -1418,10 +2498,15 @@ class sonarCache():
 
 if __name__ == "__main__":
 	import doctest
-	global DOCTESTDIR, DOCTESTDB
+	global DOCTESTDIR, DOCTESTDB, QRY_FASTA_FILE, REF_FASTA_FILE
 	print("sonarDB", sonarDB.get_version())
 	print("performing unit tests ...")
 	with TemporaryDirectory() as tmpdirname:
+		this_path = os.path.dirname(os.path.realpath(__file__))
 		DOCTESTDIR = tmpdirname
 		DOCTESTDB = os.path.join(DOCTESTDIR, "testdb")
+		QRY_FASTA_FILE = os.path.join(this_path, "doctest_b117.fna")
+		QRY_PICKLE_FILE = os.path.join(this_path, "doctest_b117.pickle")
+		REF_FASTA_FILE = os.path.join(this_path, "ref.fna")
+		REF_GFF_FILE = os.path.join(this_path, "ref.gff3")
 		print(doctest.testmod(verbose=False))

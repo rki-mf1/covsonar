@@ -138,7 +138,7 @@ class sonar():
 					print(f, file=sys.stderr)
 
 			cache.write_idx(backup=True)
-			
+
 			step += 1
 			msg = "[step " + str(step) + "] importing ... "
 			data = []
@@ -182,7 +182,7 @@ class sonar():
 				fieldList = [x[0] for x in elems]
 				valList = [x[1] for x in elems]
 				dbm.update("genome", fieldList, valList, "accession = ?", [acc])
-				
+
 	def restore(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.db.restore(acc, aligned=False, seq_return=True, dbm=dbm)
@@ -190,7 +190,7 @@ class sonar():
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
-			
+
 	def rows_to_csv(self, rows, na="*** no data ***"):
 		if len(rows) == 0:
 			print(na, file=sys.stderr)
@@ -251,13 +251,13 @@ if __name__ == "__main__":
 			snr.update_metadata(args.pangolin, pangolin=True)
 		else:
 			print("nothing to update.")
-	
-	# restore	
+
+	# restore
 	if args.tool == "restore":
 		for acc in args.acc:
 			print(snr.restore(acc))
 
-	# view	
+	# view
 	if args.tool == "view":
 		snr.view(args.acc)
 
