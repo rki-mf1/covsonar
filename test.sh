@@ -36,14 +36,6 @@ $DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv" --fields accession=ac
 $DIR/sonar.py optimize --db "$db"
 $DIR/sonar.py match --db "$db" | (sed -u 1q; sort) > "$out"
 
-echo "EXPECTED: "
-echo ""
-cat $DIR/test/expected.csv
-echo ""
-echo "GOT: "
-cat "$out"
-echo ""
-
 if diff -q $DIR/test/expected.csv "$out"; then
     echo 'match 1 as expected'
 else
