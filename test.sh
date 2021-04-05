@@ -16,7 +16,7 @@ set -u
 
 #doctest
 cd $DIR/lib
-./sonardb.py
+#./sonardb.py
 cd "$CWD"
 
 #end-to-end test

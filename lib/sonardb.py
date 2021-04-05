@@ -1461,11 +1461,11 @@ class sonarDB(object):
 				dna_profile = None
 				prot_profile = None
 
-			if cache is None:
-				return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
+		if cache is None:
+			return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
 
-			with open(cache, "wb") as handle:
-				pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
+		with open(cache, "wb") as handle:
+			pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
 
 	def import_genome_from_fasta(self, *fnames, msg=None):
 		"""
