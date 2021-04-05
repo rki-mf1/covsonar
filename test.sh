@@ -34,7 +34,7 @@ $DIR/sonar.py add --db "$db" -f "$DIR/test/test.fasta"
 $DIR/sonar.py update --db "$db" --pangolin "$DIR/test/test_pangolin.csv"
 $DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv" --fields accession=accessions zip=regions date=dates gisaid=gisaid ena=ena
 $DIR/sonar.py optimize --db "$db"
-$DIR/sonar.py match --db "$db" | sort > "$out"
+$DIR/sonar.py match --db "$db" | (sed -u 1q; sort) > "$out"
 
 echo "EXPECTED: "
 echo ""
