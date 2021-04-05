@@ -2092,7 +2092,7 @@ class sonarDB(object):
 		# adding accession, lineage, zips, and dates based conditions
 		if accessions:
 			include_acc = [x for x in accessions if not x.startswith("^")]
-			exclude_acc = [x for x in accessions if x.startswith("^")]
+			exclude_acc = [x[1:] for x in accessions if x.startswith("^")]
 			if include_acc:
 				clause.append("accession IN (" + " , ".join(['?'] * len(include_acc)) + ")")
 				vals.extend(include_acc)
@@ -2101,16 +2101,16 @@ class sonarDB(object):
 				vals.extend(exclude_acc)
 		if lineages:
 			include_lin = [x for x in lineages if not x.startswith("^")]
-			exclude_lin = [x for x in lineages if x.startswith("^")]
+			exclude_lin = [x[1:] for x in lineages if x.startswith("^")]
 			if include_lin:
 				clause.append("lineage IN (" + " ,".join(['?'] * len(include_lin))  + ")")
 				vals.extend(include_lin)
-			if exclude_acc:
-				clause.append("lineage NOT IN (" + " ,".join(['?'] * len(exclude_acc))  + ")")
-				vals.extend(exclude_acc)
+			if exclude_lin:
+				clause.append("lineage NOT IN (" + " ,".join(['?'] * len(exclude_lin))  + ")")
+				vals.extend(exclude_lin)
 		if zips:
 			include_zip = [x for x in zips if not str(x).startswith("^")]
-			exclude_zip = [x for x in zips if str(x).startswith("^")]
+			exclude_zip = [x[1:] for x in zips if str(x).startswith("^")]
 			if include_zip:
 				z = []
 				for zp in include_zip:

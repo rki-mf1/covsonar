@@ -89,6 +89,15 @@ else
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
+$DIR/sonar.py match --acc '^NC_045512.2' --lineage '^B.1.1.297' --db "$db" > "$out"
+if diff -q $DIR/test/expected2.csv "$out"; then
+    echo 'match 7 as expected'
+else
+    echo 'match 7 not as expected'
+		diff $DIR/test/expected2.csv "$out"
+	  conda env remove -y --name covsonar_ci
+	  exit 1
+fi
 
 #cleaning
 conda deactivate
