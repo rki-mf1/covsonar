@@ -16,7 +16,7 @@ set -u
 
 #doctest
 cd $DIR/lib
-#./sonardb.py
+./sonardb.py
 cd "$CWD"
 
 #end-to-end test
@@ -63,15 +63,6 @@ else
 fi
 $DIR/sonar.py match -e C1348T -i G1820A --db "$db" > "$out"
 if diff -q $DIR/test/expected2.csv "$out"; then
-    echo 'match 3 as expected'
-else
-    echo 'match 3 not as expected'
-		diff $DIR/test/expected2.csv "$out"
-	  conda env remove -y --name covsonar_ci
-	  exit 1
-fi
-$DIR/sonar.py match --acc test2 --db "$db" > "$out"
-if diff -q $DIR/test/expected2.csv "$out"; then
     echo 'match 4 as expected'
 else
     echo 'match 4 not as expected'
@@ -79,11 +70,20 @@ else
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
-$DIR/sonar.py match --zip 177 --db "$db" > "$out"
+$DIR/sonar.py match --acc test2 --db "$db" > "$out"
 if diff -q $DIR/test/expected2.csv "$out"; then
     echo 'match 5 as expected'
 else
     echo 'match 5 not as expected'
+		diff $DIR/test/expected2.csv "$out"
+	  conda env remove -y --name covsonar_ci
+	  exit 1
+fi
+$DIR/sonar.py match --zip 177 --db "$db" > "$out"
+if diff -q $DIR/test/expected2.csv "$out"; then
+    echo 'match 6 as expected'
+else
+    echo 'match 6 not as expected'
 		diff $DIR/test/expected2.csv "$out"
 	  conda env remove -y --name covsonar_ci
 	  exit 1
