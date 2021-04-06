@@ -577,10 +577,10 @@ class sonarALIGN(object):
 		if temp:
 			os.remove(out_file)
 		if right_align:
-			alignment = self.right_align_gaps(*alignment)
+			alignment = self.left_align_gaps(*alignment)
 		return alignment
 
-	def right_align_gaps(self, query, target):
+	def left_align_gaps(self, query, target):
 		"""
 		function to align gaps to the right in two aligned sequences
 
@@ -608,7 +608,7 @@ class sonarALIGN(object):
 			e = match.end()-1
 			g = "-" * (e-s)
 			while s >= 0 and e < l and target[s] == query[e]:
-				target = target[:s] + g + target[e:]
+				target = target[:s] + g + target[s] + target[e+1:]
 				s -= 1
 				e -= 1
 		return query, target
