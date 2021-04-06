@@ -155,10 +155,10 @@ class sonar():
 	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, sep=",", pangolin=False):
 		updates = defaultdict(dict)
 		if pangolin:
-			with open(fname, "r") as handle:
-				lines = csv.DictReader(handle, delimiter = ',',  quoting=csv.QUOTE_MINIMAL)
+			with open(fname, "r", encoding='utf-8-sig') as handle:
+				lines = csv.DictReader(handle, delimiter = ',', quoting=csv.QUOTE_MINIMAL)
 				for line in lines:
-					acc = line['﻿Sequence name']
+					acc = line['Sequence name']
 					updates[acc]['lineage'] = line['Lineage']
 		elif accCol:
 			with open(fname, "r") as handle:
