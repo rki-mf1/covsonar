@@ -854,7 +854,7 @@ class sonarALIGN(object):
 					qcodon = query[s:e]
 					taa = self.translate(tcodon, cds.translation_table)
 					if "-" in qcodon:
-						yield taa, "", int(s/3), None, cds.symbol, cds.locus
+						yield taa, "~", int(s/3), None, cds.symbol, cds.locus
 					else:
 						qaa = self.translate(qcodon, cds.translation_table)
 						if qaa != taa:
@@ -1276,7 +1276,7 @@ class sonarDB(object):
 	def aa_var_regex(self):
 		if self.__aa_var_regex is None:
 			allowed_symbols = "(?:(?:" + ")|(?:".join(self.refgffObj.symbols) + "))"
-			allowed_letters = "[" + "".join(self.iupac_aa_code.keys()).replace("-", "") + "-" + "]"
+			allowed_letters = "[" + "".join(self.iupac_aa_code.keys()).replace("-", "") + "*~-" + "]"
 			self.__aa_var_regex = re.compile("^" + allowed_symbols + ":(?:(?:del:[0-9]+:[0-9]+)|(?:" + allowed_letters + "[0-9]+" + allowed_letters + "+))$")
 		return self.__aa_var_regex
 
@@ -1928,7 +1928,7 @@ class sonarDB(object):
 		# extract ALT call from mutation profile
 		match = self.__terminal_letters_regex.search(mutation)
 		if not match:
-			return mutation
+			return {mutation, }
 		match = match.group(0)
 
 		# resolve ambiguities
@@ -1981,10 +1981,10 @@ class sonarDB(object):
 
 		# generating clause
 		clause = []
-		vars = set(profile)
+		profile = set(profile)
 		dna_profile_length = 1
 		aa_profile_length = 1
-		for var in vars:
+		for var in profile:
 			if self.isdnavar(var):
 				dna_profile_length += 1 + len(var)
 				conf = config['dna']
@@ -2006,7 +2006,7 @@ class sonarDB(object):
 				clause += " AND length(" + conf['field'] + ") = " + str(aa_profile_length)
 		return clause
 
-	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, zips=None, dates=None, exclusive=False, ambig=False, show_sql=False):
+	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, zips=None, dates=None, exclusive=False, ambig=False, print_sql=False):
 		"""
 		function to match genomes in the SONAR database
 
@@ -2045,7 +2045,7 @@ class sonarDB(object):
 		ambig : bool
 			define if variations including ambiguities should be filtered (True)
 			from teh profiles shown or not (False) [ False ]
-		show_sql : bool
+		print_sql : bool
 			define if the assembled SQLite query should be shown on screen (for
 			debugging) [ False ]
 
@@ -2138,7 +2138,7 @@ class sonarDB(object):
 		# executing the query and storing results
 		clause = " AND ".join(clause)
 		with sonarDBManager(self.db, readonly=True) as dbm:
-			rows = [x for x in dbm.select("essence", whereClause=clause, whereVals=vals)]
+			rows = [x for x in dbm.select("essence", whereClause=clause, whereVals=vals, print_sql=print_sql)]
 
 		# remove ambiguities from database profiles if wished
 		if not ambig:
