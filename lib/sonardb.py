@@ -40,19 +40,19 @@ class sonarTimeout():
 	...
 	TimeoutError: Timeout
 
-    Parameters
-    ----------
+	Parameters
+	----------
 
-    seconds : int
-        define time in seconds until TimeoutError is raised
+	seconds : int
+		define time in seconds until TimeoutError is raised
 	error_message: str
 		define error message to be shown [ 'Timeout' ]
 
-    Attributes
-    ----------
+	Attributes
+	----------
 
-    seconds : int
-        time in seconds when a TimeoutError is raised
+	seconds : int
+		time in seconds when a TimeoutError is raised
 	error_message : str
 		error message to be shown [ 'Timeout' ]
 	"""
@@ -90,16 +90,16 @@ class sonarFiler():
 	>>> os.path.isfile(fname)
 	False
 
-    Parameters
-    ----------
-    fname : str
-        define designated file name to open. If None, a temporary file is
+	Parameters
+	----------
+	fname : str
+		define designated file name to open. If None, a temporary file is
 		created and deleted after use. [ None ]
 
-    Attributes
-    ----------
-    name : str
-        stores file name
+	Attributes
+	----------
+	name : str
+		stores file name
 	basename : str
 		stores file basename
 	path : str
@@ -132,7 +132,7 @@ class sonarCDS(object):
 
 	Notes
 	-----
-    	Please note, that genomic coordinates are processed and returned 0-based
+		Please note, that genomic coordinates are processed and returned 0-based
 		by this object. While start or single coordinates are inclusive,
 		end coordinates of ranges are exclusive, expressed in a mathematical
 		notation: [start, end)
@@ -156,15 +156,15 @@ class sonarCDS(object):
 	>>> cds.range
 	range(155, 170)
 
-    Parameters
-    ----------
-    symbol : str
-        define the symbol of the protein encoded
+	Parameters
+	----------
+	symbol : str
+		define the symbol of the protein encoded
 		(e.g. ORF1ab)
-    start : int
-        define the genomic start coordinate (0-based, inclusive)
-    end : int
-        define the genomic end coordinate (0-based, exclusive)
+	start : int
+		define the genomic start coordinate (0-based, inclusive)
+	end : int
+		define the genomic end coordinate (0-based, exclusive)
 	strand : {'+', '-'}
 		define the genomic strand encoded on
 	seq : str
@@ -175,10 +175,10 @@ class sonarCDS(object):
 		define the genetic code table used for in silico translation (see
 		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
 
-    Attributes
-    ----------
-    symbol : str
-        stores the symbol of the protein encoded
+	Attributes
+	----------
+	symbol : str
+		stores the symbol of the protein encoded
 	start : int
 		stores the genomic start coordinate (0-based, inclusive). The start
 		coordinate is always lower than the end coordinate.
@@ -235,7 +235,7 @@ class sonarGFF(object):
 
 	Notes
 	-----
-    	Please note, that genomic coordinates are processed and returned 0-based
+		Please note, that genomic coordinates are processed and returned 0-based
 		by this object. While start or single coordinates are inclusive,
 		end coordinates of ranges are exclusive, expressed in a mathematical
 		notation: [start, end)
@@ -252,26 +252,26 @@ class sonarGFF(object):
 
 	>>> gff = sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
 
-    Parameters
-    ----------
-    gff3 : str
-        define a path to a valid GFF3 file storing genome annotation
-    fna : int
-        define a path to a valid FASTA file storing the nucleotide
+	Parameters
+	----------
+	gff3 : str
+		define a path to a valid GFF3 file storing genome annotation
+	fna : int
+		define a path to a valid FASTA file storing the nucleotide
 		sequence of the annotated genome
 	translation_table : int
 		define the genetic code table used for in silico translation of CDS (see
 		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
 
-    Attributes
-    ----------
+	Attributes
+	----------
 	translation_table : int
 		stores the genetic code table used for in silico translation of CDS (see
 		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi)
-    cds : list
-        stores a list of sonarCDS objects (one per CDS of the given annotation)
-    coords : dict
-        stores a dictionary with protein symbol as keys and respective 0-based
+	cds : list
+		stores a list of sonarCDS objects (one per CDS of the given annotation)
+	coords : dict
+		stores a dictionary with protein symbol as keys and respective 0-based
 		genomic coordinate tuples (start always lower than end coordinate,
 		start coordinate inclusive, end coordinate exclusive)
 	symbols : list
@@ -449,7 +449,7 @@ class sonarALIGN(object):
 
 	Notes
 	-----
-    	Please note, that genomic coordinates are processed and returned 0-based
+		Please note, that genomic coordinates are processed and returned 0-based
 		by this object. While start or single coordinates are inclusive,
 		end coordinates of ranges are exclusive, expressed in a mathematical
 		notation: [start, end)
@@ -465,12 +465,12 @@ class sonarALIGN(object):
 
 	>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE)
 
-    Parameters
-    ----------
-    query_file : str
-        define a path to a valid FASTA file storing the query genome sequence
-    target_file : str
-        define a path to a valid FASTA file storing the target or reference
+	Parameters
+	----------
+	query_file : str
+		define a path to a valid FASTA file storing the query genome sequence
+	target_file : str
+		define a path to a valid FASTA file storing the target or reference
 		genome sequence
 	out_file : str
 		define a path to an output file that will store the FASTA formatted
@@ -480,14 +480,14 @@ class sonarALIGN(object):
 		define a sonarGFF object storing the annotated CDS of the reference genome
 		[ None ]
 
-    Attributes
-    ----------
+	Attributes
+	----------
 	aligned_query : str
 		stores the aligned upper-case query sequence
-    aligned_target : str
-        stores the aligned upper-case target or reference sequence
-    gff : object
-        stores the sonarGFF object if provided, otherwise None
+	aligned_target : str
+		stores the aligned upper-case target or reference sequence
+	gff : object
+		stores the sonarGFF object if provided, otherwise None
 	dnadiff : list
 		stores a list of tuples for each genomic variation (based on the alignment).
 		Each tuple consists of:
@@ -904,7 +904,7 @@ class sonarDBManager():
 
 	Notes
 	-----
-    	This object should be called using a context manager to ensure rollbacks
+		This object should be called using a context manager to ensure rollbacks
 		on abnormal termination.
 
 	Example
@@ -915,21 +915,21 @@ class sonarDBManager():
 	>>> with sonarDBManager(DOCTESTDB) as dbm:
 	... 	pass
 
-    Parameters
-    ----------
+	Parameters
+	----------
 
-    dbfile : str
-        define a path to a non-existent or valid SONAR database file. If the
+	dbfile : str
+		define a path to a non-existent or valid SONAR database file. If the
 		file does not exist, a SONAR database is created.
 	timeout : int
 		define busy timeout [ -1 ],
 	readonly : bool
 		define if the connection should be read-only [ True ]
 
-    Attributes
-    ----------
-    dbfile : str
-        stores the path to the used SONAR database file.
+	Attributes
+	----------
+	dbfile : str
+		stores the path to the used SONAR database file.
 	connection : object
 		stores the SQLite3 connection
 	cursor : method
@@ -1154,7 +1154,7 @@ class sonarDB(object):
 
 	Notes
 	-----
-    	Please note, that genomic and protein coordinates are processed and
+		Please note, that genomic and protein coordinates are processed and
 		returned 0-based by this object, except for formatted profiles.
 		While start or single coordinates are inclusive, end coordinates of
 		ranges are exclusive, expressed in a mathematical notation: [start, end).
@@ -1168,18 +1168,18 @@ class sonarDB(object):
 
 	>>> db = sonarDB(DOCTESTDB)
 
-    Parameters
-    ----------
-    dbfile : str
+	Parameters
+	----------
+	dbfile : str
 		define a path to a non-existent or valid SONAR database file. If the
 		file does not exist, a SONAR database is created.
 	translation_table : int
 		define the genetic code table used for in silico translation (see
 		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
 
-    Attributes
-    ----------
-    db : str
+	Attributes
+	----------
+	db : str
 		stores the absolute path to the used SONAR database file
 	reffna : str
 		stores the absolute path to the built-in FASTA file containing the reference
@@ -2302,16 +2302,16 @@ class sonarCache():
 	The link between sequence hash and accession(s) is stored in the cache attribute and,
 	when closing the cache, written to the index file (PICKLE format).
 
-    Parameters
-    ----------
-    dir : str
+	Parameters
+	----------
+	dir : str
 		define a path to an non-existent, empty or valid SONAR cache directory.
 		If None, a temporary cache directoryis created and deleted after use.
 		[ None ]
 
-    Attributes
-    ----------
-    dirname : str
+	Attributes
+	----------
+	dirname : str
 		stores the absolute path to the cache directory
 	temp : bool
 		stores True if the cache is temporary and will be deleted after use
