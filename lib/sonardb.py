@@ -853,7 +853,9 @@ class sonarALIGN(object):
 					tcodon = match.group().replace("-", "")
 					qcodon = query[s:e]
 					taa = self.translate(tcodon, cds.translation_table)
-					if "-" in qcodon:
+					if qcodon == "---":
+						yield taa, "", int(s/3), None, cds.symbol, cds.locus
+					elif "-" in qcodon:
 						yield taa, "~", int(s/3), None, cds.symbol, cds.locus
 					else:
 						qaa = self.translate(qcodon, cds.translation_table)

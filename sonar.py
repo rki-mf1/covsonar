@@ -185,7 +185,7 @@ class sonar():
 
 	def restore(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			self.db.restore(acc, aligned=False, seq_return=True, dbm=dbm)
+			return self.db.restore_genome(acc, dbm=dbm)
 
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
@@ -255,7 +255,7 @@ if __name__ == "__main__":
 	# restore
 	if args.tool == "restore":
 		for acc in args.acc:
-			print(snr.restore(acc))
+			print("\n".join(snr.restore(acc)))
 
 	# view
 	if args.tool == "view":
