@@ -520,7 +520,7 @@ class sonarALIGN(object):
 		self.aligned_query, self.aligned_target = self.align_dna(query_file, target_file, out_file)
 		self.gff = sonarGFFObj if sonarGFFObj else None
 		self._indel_regex = re.compile("[^-]-+")
-		self._codon_regex = re.compile(".-*.-*.-*")
+		self._codon_regex = re.compile("[^-]-*.-*.-*")
 		self._starting_gap_regex = re.compile("^-+")
 		self.__dnadiff = None
 		self.__aadiff = None
@@ -853,10 +853,8 @@ class sonarALIGN(object):
 					tcodon = match.group().replace("-", "")
 					qcodon = query[s:e]
 					taa = self.translate(tcodon, cds.translation_table)
-					if qcodon == "---":
+					if "-" in qcodon:
 						yield taa, "", int(s/3), None, cds.symbol, cds.locus
-					elif "-" in qcodon:
-						yield taa, "~", int(s/3), None, cds.symbol, cds.locus
 					else:
 						qaa = self.translate(qcodon, cds.translation_table)
 						if qaa != taa:
@@ -1797,7 +1795,7 @@ class sonarDB(object):
 		if len(vars) == 1:
 			this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[0]
 		else:
-			vars = sorted(vars, key=lambda x: x[2])
+			vars = sorted(vars, key=lambda x: (x[5], x[4], x[2]))
 			for l in range(len(vars)-1):
 				this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[l]
 				next_ref, next_alt, next_start, next_end, next_protein, next_locus = vars[l+1]
@@ -1805,7 +1803,7 @@ class sonarDB(object):
 					var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein)
 					if var not in profile:
 						profile.append(var)
-				elif this_alt == "" and this_start + len(this_ref) == next_start and this_protein == next_protein and this_locus == next_locus:
+				elif this_alt == "" and next_alt == "" and this_start + len(this_ref) == next_start and this_protein == next_protein and this_locus == next_locus:
 					vars[l+1] = (this_ref + next_ref, vars[l+1][1], this_start, next_start, this_protein, this_locus)
 				else:
 					var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein)
