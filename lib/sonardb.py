@@ -520,7 +520,7 @@ class sonarALIGN(object):
 		self.aligned_query, self.aligned_target = self.align_dna(query_file, target_file, out_file)
 		self.gff = sonarGFFObj if sonarGFFObj else None
 		self._indel_regex = re.compile("[^-]-+")
-		self._codon_regex = re.compile("[^-]-*.-*.-*")
+		self._codon_regex = re.compile(".-*.-*.-*")
 		self._starting_gap_regex = re.compile("^-+")
 		self.__dnadiff = None
 		self.__aadiff = None
@@ -789,7 +789,7 @@ class sonarALIGN(object):
 		variables store	the path of FASTA files containing the query and
 		reference genome sequences as well as the reference genome annotation,
 		in that order. The reference is NC_045512.2 while the query is a B.1.1.7
-		prototype sequence without S:D613G variation.
+		prototype sequence.
 
 		Please consider, that a sonarGFF is needed to consider annotation and
 		deduce amino acid level profiles.
@@ -847,19 +847,21 @@ class sonarALIGN(object):
 					query = str(Seq.reverse_complement(self.aligned_query[s:e]))
 					target = str(Seq.reverse_complement(self.aligned_target[s:e]))
 
+				s = 0
 				for match in self._codon_regex.finditer(target):
 					s = match.start()
 					e = match.end()
+					start = int((s-target[:match.start()].count("-"))/3)
 					tcodon = match.group().replace("-", "")
 					qcodon = query[s:e]
 					taa = self.translate(tcodon, cds.translation_table)
 					if "-" in qcodon:
-						yield taa, "", int(s/3), None, cds.symbol, cds.locus
+						yield taa, "", start, None, cds.symbol, cds.locus
 					else:
 						qaa = self.translate(qcodon, cds.translation_table)
 						if qaa != taa:
-							e = None if len(qaa) == 1 else int(s/3) + len(qaa)
-							yield (taa, qaa, int(s/3), e, cds.symbol, cds.locus)
+							e = None if len(qaa) == 1 else start + len(qaa)
+							yield (taa, qaa, start, e, cds.symbol, cds.locus)
 
 	def translate(self, seq, translation_table=1):
 		"""
@@ -1409,9 +1411,9 @@ class sonarDB(object):
 		>>> data[1]
 		'b117 Ideal severe acute respiratory syndrome coronavirus 2 lineage B.1.1.7, complete genome'
 		>>> data[5]
-		'C3267T C5388A T6954C del:11288:8 del:21765:5 del:21991:2 A23063T C23271A C23604A C23709T T24506G G24914C C27972T G28048T A28111G G28280C A28281T T28282A'
+		'C3267T C5388A T6954C del:11288:9 del:21765:6 del:21991:3 A23063T C23271A C23604A C23709T T24506G G24914C C27972T G28048T A28111G G28280C A28281T T28282A C28977T'
 		>>> data[6]
-		'N:D3L ORF8:Q27* ORF8:R52I S:del:68:2 ORF8:Y73C S:del:143:1 N:S235F S:N501Y S:A570D S:P681H S:T716I S:S982A ORF1ab:T1001I S:D1118H ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:1'
+		'ORF1ab:T1001I ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:3 S:del:68:3 S:del:143:2 S:N501Y S:A570D S:P681H S:T716I S:S982A S:D1118H ORF8:Q27* ORF8:R52I ORF8:Y73C N:D3L N:S235F'
 
 		Parameters
 		----------
@@ -1804,12 +1806,13 @@ class sonarDB(object):
 					if var not in profile:
 						profile.append(var)
 				elif this_alt == "" and next_alt == "" and this_start + len(this_ref) == next_start and this_protein == next_protein and this_locus == next_locus:
-					vars[l+1] = (this_ref + next_ref, vars[l+1][1], this_start, next_start, this_protein, this_locus)
+					vars[l+1] = (this_ref + next_ref, "", this_start, next_start+1, this_protein, this_locus)
 				else:
-					var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein)
+					var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus)
 					if var not in profile:
 						profile.append(var)
-		var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein)
+			this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[l+1]
+		var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus)
 		if var not in profile:
 			profile.append(var)
 
