@@ -12,7 +12,6 @@ from Bio import SeqIO
 import numpy as np
 import tempfile
 from collections import defaultdict
-from joblib import Parallel, delayed, parallel_backend
 import itertools
 import re
 from tqdm import tqdm
