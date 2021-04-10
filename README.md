@@ -72,5 +72,22 @@ path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycach
 
 ### 3.2 Importing meta information
 
-Additional meta-information can be added for each genome sequence, namely parentage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the corresponding lineage information to the available genomes.
+Additional meta-information can be added for each genome sequence, namely lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the headline have to be defined as follows:
 
+| expression           | description                                        |
+|----------------------|----------------------------------------------------|
+| accession=_colname1_ | genome accessions are listed in column _colname1_  |
+| lineage=_colname2_   | lineage information is listed in column _colname2_ | 
+| zip=_colname3_       | zip codes are listed in column _colname3_          |
+| date=_colname4_      | sampling dates are listed in column _colname4_     |
+
+```sh
+# activating conda environment if built (see section 2)
+conda activate sonar
+# importing lineage information from pangolin output file 
+# to database 'mydb'
+path/to/covsonar/sonar.py update --pangolin pangolin.csv --db mydb
+# importing zip codes and sampling dates from a custom CSV file
+# to database 'mydb'
+path/to/covsonar/sonar.py update --csv custom.csv --fields accession=acc zip=zip_codes date=sampling --db mydb
+```
