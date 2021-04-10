@@ -35,5 +35,10 @@ conda activate sonar
 
 ### 3.1 Adding genomes to the database
 
-Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import.
+Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file that has to be defined. If the defined database file does not exist, a new database is created.
 
+```sh
+# activate conda environment if built (see section 2)
+cond activate sonar
+# adding all sequences from 'genomes.fasta' to database 'mydb'
+path/to/covsonar/sonar.py add -f genomes.fasta --db mydb
