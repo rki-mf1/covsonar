@@ -93,7 +93,7 @@ path/to/covsonar/sonar.py update --csv custom.csv --fields accession=acc zip=zip
 ```
 
 
-### 3.3 Query genome sequences based on genomic profiles 
+### 3.3 Query genome sequences based on profiles 
 
 Genomic profiles can be defined to align genomes. For this purpose, the variants related to the complete genome of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) must be expressed as follows:
 
@@ -102,4 +102,8 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 | SNP       | ref_nuc _followed by_ ref_pos _followed by_ alt_nuc (e.g. A3451T) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aa (e.g. S:N501Y) |
 | deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) | 
 | insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |  
+
+Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid, or mixed profile, which means that matching genomes must have all defined variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while  `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
+
+To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114.
 
