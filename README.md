@@ -1,9 +1,13 @@
 <img src="logo.png"  width="171" height="200" align="right"><br><br><br><br><br><br><br>
+
+
 # covSonar
+
 covSonar is a database-driven system for handling genomic sequences of SARS-CoV-2 and screening genomic profiles.
 
 
 ## 1. Prerequisites
+
 covSonar has some software-environmental requirements that can most easily be met by building a custom conda environment as described in Section 2.
 
 | software/module       | version  |
@@ -65,4 +69,8 @@ path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8
 path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycache
 ```
 
+
+### 3.2 Importing meta information
+
+Additional meta-information can be added for each genome sequence, namely parentage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the corresponding lineage information to the available genomes.
 
