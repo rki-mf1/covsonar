@@ -91,3 +91,15 @@ path/to/covsonar/sonar.py update --pangolin pangolin.csv --db mydb
 # to database 'mydb'
 path/to/covsonar/sonar.py update --csv custom.csv --fields accession=acc zip=zip_codes date=sampling --db mydb
 ```
+
+
+### 3.3 Query genome sequences based on genomic profiles 
+
+Genomic profiles can be defined to align genomes. For this purpose, the variants related to the complete genome of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) must be expressed as follows:
+
+| typ       | nucleotide level                                                  | amino acid level              |
+|-----------|-------------------------------------------------------------------|-------------------------------|
+| SNP       | ref_nuc _followed by_ ref_pos _followed by_ alt_nuc (e.g. A3451T) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aa (e.g. S:N501Y) |
+| deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) | 
+| insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |  
+
