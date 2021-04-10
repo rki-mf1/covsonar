@@ -59,7 +59,7 @@ The import process can be divided into three stages:
 Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
 
 ```sh
-# activating conda environment if built (see section 2)
+# activating conda environment if built and not active (see section 2)
 conda activate sonar
 # adding all sequences from 'genomes.fasta' to database 'mydb'
 # using eight cpus
@@ -82,7 +82,7 @@ Additional meta-information can be added for each genome sequence, namely lineag
 | date=_colname4_      | sampling dates are listed in column _colname4_     |
 
 ```sh
-# activating conda environment if built (see section 2)
+# activating conda environment if built and not active (see section 2)
 conda activate sonar
 # importing lineage information from pangolin output file 
 # to database 'mydb'
@@ -106,4 +106,11 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid, or mixed profile, which means that matching genomes must have all defined variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while  `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
 
 To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114.
+
+```sh
+# activating conda environment if built and not active (see section 2)
+conda activate sonar
+# matching B.1.1.7 genomes in DB 'mydb' that share an additional "Erik" mutation 
+path/to/covsonar/sonar.py match -i E484K --lineage B.1.1.7 --db mydb
+```
 
