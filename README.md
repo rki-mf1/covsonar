@@ -38,9 +38,9 @@ In covSonar there are several tools that can be called via subcommands.
 | subcommand | purpose                                                |
 |------------|--------------------------------------------------------|
 | add        | to add genome sequences to the database                |
+| update     | to import and replace meta information                 |
 | match      | to query genome sequences sharing a defined profile    | 
 | restore    | to restore genome sequence(s) from the database        |
-| update     | to import and replace meta information                 |
 
 
 ### 3.1 Adding genomes to the database
@@ -48,7 +48,11 @@ In covSonar there are several tools that can be called via subcommands.
 Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file that has to be defined. If the defined database file does not exist, a new database is created.
 
 ```sh
-# activate conda environment if built (see section 2)
-cond activate sonar
+# activating conda environment if built (see section 2)
+conda activate sonar
 # adding all sequences from 'genomes.fasta' to database 'mydb'
-path/to/covsonar/sonar.py add -f genomes.fasta --db mydb
+# using eight cpus
+path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8
+
+
+```
