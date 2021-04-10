@@ -45,7 +45,14 @@ In covSonar there are several tools that can be called via subcommands.
 
 ### 3.1 Adding genomes to the database
 
-Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file that has to be defined. If the defined database file does not exist, a new database is created.
+Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file that has to be defined. If the defined database file does not exist, a new database is created. 
+The import process can be divided into three stages:
+
+1. caching of the sequences to be imported and calculation of sequence hashes.
+2. calculating the pairwise alignment and deriving genomic profiles based on it.
+3. import of the generated data into the database.
+
+Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
 
 ```sh
 # activating conda environment if built (see section 2)
@@ -53,6 +60,9 @@ conda activate sonar
 # adding all sequences from 'genomes.fasta' to database 'mydb'
 # using eight cpus
 path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8
-
-
+# as before, but using a permanent cache directory to store 
+# intermediate files
+path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycache
 ```
+
+
