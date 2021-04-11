@@ -129,7 +129,7 @@ The Output is shown on screen but can be easily rdirected to a file by expanding
 - nucleotide level profile
 - amino acid level profile 
 
-To count the matching genomes only, option `--count` can be used. By default, variations with ambiguities in the alternatie allele (such as N) are not shown which can be changed using the `--ambig` option.
+To count the matching genomes only, option `--count` can be used. By default, variations with ambiguities in the alternate allele (such as N) are not shown which can be changed using the `--ambig` option.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
