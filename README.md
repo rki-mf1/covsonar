@@ -37,7 +37,7 @@ conda activate sonar
 
 ## 3. Usage
 
-In covSonar there are several tools that can be called via subcommands. 
+In covSonar there are several tools that can be called via subcommands.  
 
 | subcommand | purpose                                                |
 |------------|--------------------------------------------------------|
@@ -45,6 +45,15 @@ In covSonar there are several tools that can be called via subcommands.
 | update     | to import and replace meta information                 |
 | match      | to query genome sequences sharing a defined profile    | 
 | restore    | to restore genome sequence(s) from the database        |
+
+Each tool provides a help page that can be accessed with the `-h` option.
+
+```sh
+# activating conda environment if built and not active yet (see section 2)
+conda activate sonar
+# display help page for adding genomes
+path/to/covsonar/sonar.py add -h 
+```
 
 
 ### 3.1 Adding genomes to the database
@@ -58,8 +67,10 @@ The import process can be divided into three stages:
 
 Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
 
+Each sequence to be added is aligned pairwise to the full genome sequence of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) using EMBOSS Stretcher and a gap-open and gap-extend penalty of 16 and 4, respectively. Gaps are left aligned.
+
 ```sh
-# activating conda environment if built and not active (see section 2)
+# activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # adding all sequences from 'genomes.fasta' to database 'mydb'
 # using eight cpus
@@ -82,7 +93,7 @@ Additional meta-information can be added for each genome sequence, namely lineag
 | date=_colname4_      | sampling dates are listed in column _colname4_     |
 
 ```sh
-# activating conda environment if built and not active (see section 2)
+# activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # importing lineage information from pangolin output file 
 # to database 'mydb'
@@ -103,14 +114,34 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 | deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) | 
 | insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |  
 
-Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid, or mixed profile, which means that matching genomes must have all defined variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while  `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
+The position specifications refer to the reference in each case and are 1-based. Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid, or mixed profile, which means that matching genomes must have all defined variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while  `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
 
-To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114.
+To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114. Single dates are formatted as _YYYY-MM-DD_ while date ranges are defined as _from:to_ (_YYYY-MM-DD:YYYY-MM-DD_). 
 
 ```sh
-# activating conda environment if built and not active (see section 2)
+# activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # matching B.1.1.7 genomes in DB 'mydb' that share an additional "Erik" mutation 
-path/to/covsonar/sonar.py match -i E484K --lineage B.1.1.7 --db mydb
+path/to/covsonar/sonar.py match -i S:E484K --lineage B.1.1.7 --db mydb
+# matching genomes in DB 'mydb' sharing the "Nelly" but not the "Erik" mutation
+# and that were sampled in 2020
+path/to/covsonar/sonar.py match -i S:N501Y -e S:E484K --date 2020-01-01:2020-12-31 --db mydb
+# matching genomes in DB 'mydb' sharing the "Nelly" and the "Erik" mutation but not
+# belonging to the B.1.1.7 lineage
+path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb
+```
+
+
+### 3.4 Restore genome sequences from the database
+
+Genome sequences can be restored from the database based on their accessions.
+The restored sequences are combined with their original FASTA header and  shown on the screen. The screen output can be redirected to a file easily by using `>`.
+
+```sh
+# activating conda environment if built and not active yet (see section 2)
+conda activate sonar
+# Restore genome sequences with accessions 'mygenome1' and 'mygenome2' 
+# and write to a fasta file named 'restored.fasta'
+path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 > restored.fasta
 ```
 
