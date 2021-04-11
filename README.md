@@ -147,5 +147,7 @@ path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 > restored.fasta
 
 ## 4 How to contribute
 
-covSonar has been very carefully programmed and tested, but is still in an early stage of development. You can contribute to this project by reporting problems or writing feature requests to the project outputs. Your feedback is very welcome!
+covSonar has been very carefully programmed and tested, but is still in an early stage of development. You can contribute to this project by reporting problems or writing feature requests to the issue section under https://gitlab.com/s.fuchs/covsonar/-/issues
+
+Your feedback is very welcome!
 
