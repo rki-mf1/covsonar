@@ -65,9 +65,9 @@ The import process can be divided into three stages:
 2. calculating the pairwise alignment and deriving genomic profiles based on it.
 3. import of the generated data into the database.
 
-Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
-
 Each sequence to be added is aligned pairwise to the full genome sequence of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) using EMBOSS Stretcher and a gap-open and gap-extend penalty of 16 and 4, respectively. Gaps are left aligned.
+
+Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
