@@ -129,13 +129,15 @@ The Output is shown on screen but can be easily rdirected to a file by expanding
 - nucleotide level profile
 - amino acid level profile 
 
-By deafult, variations with ambiguities in the alternatie allele (such as N) are not shown which can be changed using the `--ambig` option.
+To count the matching genomes only, option `--count` can be used. By default, variations with ambiguities in the alternatie allele (such as N) are not shown which can be changed using the `--ambig` option.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # matching B.1.1.7 genomes in DB 'mydb' that share an additional "Erik" mutation 
 path/to/covsonar/sonar.py match -i S:E484K --lineage B.1.1.7 --db mydb
+# as before but matching genomes are counted only
+path/to/covsonar/sonar.py match -i S:E484K --lineage B.1.1.7 --count --db mydb
 # matching genomes in DB 'mydb' sharing the "Nelly" but not the "Erik" mutation
 # and that were sampled in 2020
 path/to/covsonar/sonar.py match -i S:N501Y -e S:E484K --date 2020-01-01:2020-12-31 --db mydb
