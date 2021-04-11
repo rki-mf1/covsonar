@@ -118,6 +118,19 @@ The position specifications refer to the reference in each case and are 1-based.
 
 To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114. Single dates are formatted as _YYYY-MM-DD_ while date ranges are defined as _from:to_ (_YYYY-MM-DD:YYYY-MM-DD_). 
 
+By default, additional variations are allowed in the matched genomes. Using the `--exclusive` option, genomes with additional variations (including ambiguities such as N) are excluded.
+
+The Output is shown on screen but can be easily rdirected to a file by expanding the command by `> output.csv`. The output contains comma separated values for each matched genome in the following order:
+
+- accession of the matched genome 
+- lineage 
+- zip code 
+- sampling date 
+- nucleotide level profile
+- amino acid level profile 
+
+By deafult, variations with ambiguities in the alternatie allele (such as N) are not shown which can be changed using the `--ambig` option.
+
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
@@ -129,6 +142,8 @@ path/to/covsonar/sonar.py match -i S:N501Y -e S:E484K --date 2020-01-01:2020-12-
 # matching genomes in DB 'mydb' sharing the "Nelly" and the "Erik" mutation but not
 # belonging to the B.1.1.7 lineage
 path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb
+# as before but redirect the ouptut to a CSV file named out.csv
+path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb > out.csv
 ```
 
 
