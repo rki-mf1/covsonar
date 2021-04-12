@@ -1685,7 +1685,8 @@ class sonarDB(object):
 							fs.append(var)
 			if fs:
 				del(row['aa_profile'])
-				row['dna_profile'] = " ".join(fs) 
+                del(row['dna_profile'])
+				row['frameshift_mutations'] = " ".join(fs) 
 				yield row 
 					
 
