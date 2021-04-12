@@ -52,7 +52,7 @@ Each tool provides a help page that can be accessed with the `-h` option.
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # display help page for adding genomes
-path/to/covsonar/sonar.py add -h 
+python path/to/covsonar/sonar.py add -h 
 ```
 
 
@@ -74,10 +74,10 @@ Depending on the number of sequences to be imported and the available system res
 conda activate sonar
 # adding all sequences from 'genomes.fasta' to database 'mydb'
 # using eight cpus
-path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8
+python path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8
 # as before, but using a permanent cache directory to store 
 # intermediate files
-path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycache
+python path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycache
 ```
 
 
@@ -97,10 +97,10 @@ Additional meta-information can be added for each genome sequence, namely lineag
 conda activate sonar
 # importing lineage information from pangolin output file 
 # to database 'mydb'
-path/to/covsonar/sonar.py update --pangolin pangolin.csv --db mydb
+python path/to/covsonar/sonar.py update --pangolin pangolin.csv --db mydb
 # importing zip codes and sampling dates from a custom CSV file
 # to database 'mydb'
-path/to/covsonar/sonar.py update --csv custom.csv --fields accession=acc zip=zip_codes date=sampling --db mydb
+python path/to/covsonar/sonar.py update --csv custom.csv --fields accession=acc zip=zip_codes date=sampling --db mydb
 ```
 
 
@@ -116,7 +116,7 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 
 The position specifications refer to the reference in each case and are 1-based. Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid, or mixed profile, which means that matching genomes must have all defined variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while  `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
 
-To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114. Single dates are formatted as _YYYY-MM-DD_ while date ranges are defined as _from:to_ (_YYYY-MM-DD:YYYY-MM-DD_). 
+To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage ^B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114. Single dates are formatted as _YYYY-MM-DD_ while date ranges are defined as _from:to_ (_YYYY-MM-DD:YYYY-MM-DD_). 
 
 By default, additional variations are allowed in the matched genomes. Using the `--exclusive` option, genomes with additional variations are excluded. Please note, that ambiguities in the query genomes such as N are also considered as variations.
 
@@ -135,17 +135,17 @@ To count the matching genomes only, option `--count` can be used. By default, va
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # matching B.1.1.7 genomes in DB 'mydb' that share an additional "Erik" mutation 
-path/to/covsonar/sonar.py match -i S:E484K --lineage B.1.1.7 --db mydb
+python path/to/covsonar/sonar.py match -i S:E484K --lineage B.1.1.7 --db mydb
 # as before but matching genomes are counted only
-path/to/covsonar/sonar.py match -i S:E484K --lineage B.1.1.7 --count --db mydb
+python path/to/covsonar/sonar.py match -i S:E484K --lineage B.1.1.7 --count --db mydb
 # matching genomes in DB 'mydb' sharing the "Nelly" but not the "Erik" mutation
 # and that were sampled in 2020
-path/to/covsonar/sonar.py match -i S:N501Y -e S:E484K --date 2020-01-01:2020-12-31 --db mydb
+python path/to/covsonar/sonar.py match -i S:N501Y -e S:E484K --date 2020-01-01:2020-12-31 --db mydb
 # matching genomes in DB 'mydb' sharing the "Nelly" and the "Erik" mutation but not
 # belonging to the B.1.1.7 lineage
-path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb
+python path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb
 # as before but redirect the ouptut to a CSV file named out.csv
-path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb > out.csv
+python path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb > out.csv
 ```
 
 
@@ -159,7 +159,7 @@ The restored sequences are combined with their original FASTA header and  shown 
 conda activate sonar
 # Restore genome sequences with accessions 'mygenome1' and 'mygenome2' 
 # and write to a fasta file named 'restored.fasta'
-path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 > restored.fasta
+python path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 > restored.fasta
 ```
 
 ## 4 How to contribute
