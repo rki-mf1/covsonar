@@ -1,4 +1,4 @@
-<img src="logo.png"  width="134" height="134" align="right"><br><br><br><br><br><br><br>
+<img src="logo.png"  width="134" height="134" align="right"><br><br><br><br><br>
 
 
 # covSonar
