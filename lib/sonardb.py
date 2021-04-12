@@ -1669,6 +1669,25 @@ class sonarDB(object):
 
 	def get_dna_vars(self, acc, dbm):
 		return dbm.select('dna_view', whereClause="accession = ?", whereVals=[acc], orderby="start DESC")
+		
+	def iter_frameshifts(self, dbm):
+		for row in dbm.select('essence'):
+			fs = []
+			for var in row['dna_profile'].strip().split(" "):
+				if self.isdel(var):
+					elems = var.split(":")
+					r = set(range(int(elems[1]) - 1, int(elems[1]) - 1 + int(elems[2])))
+					for cds in self.refgffObj.cds:
+						if cds.strand == "-":
+							sys.exit("error: sorry, frameshift detection does not support minus strand cds yet.")
+						i = r.intersection(cds.range)
+						if i and len(i)%3 != 0:
+							fs.append(var)
+			if fs:
+				del(row['aa_profile'])
+				row['dna_profile'] = " ".join(fs) 
+				yield row 
+					
 
 	def iter_table(self, table):
 		sql = dbm.select('dna', whereClause="ref = ? AND alt = ? AND start = ? and end = ?", whereVals=[ref, alt, start, end], fetchone=True)

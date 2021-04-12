@@ -73,6 +73,10 @@ def parse_args():
 	parser_update_input.add_argument('--tsv', metavar="FILE", help="import metadata from a tsv file", type=str, default=None)
 	parser_update.add_argument('--fields', metavar="STR", help="if --csv or --tsv is used, define relevant columns like \"pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}\"", type=str, nargs="+", default=None)
 
+	# create the parser for the "frameshift" command
+	parser_frameshift = subparsers.add_parser('frameshift', parents=[general_parser], help='show all genomes with frameshifts')
+	parser_frameshift.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
+	
 
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
@@ -144,8 +148,8 @@ class sonar():
 			seqhashes = list(cache.cache.keys())
 			self.db.import_genome_from_cache(cache.dirname, msg=msg)
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False):
-		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)
+	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False, show_frame_shifts_only=False):
+		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)	
 		if count:
 			print(len(rows))
 		else:
@@ -189,6 +193,14 @@ class sonar():
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
+			
+	def show_frameshift(self, count=False):
+		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
+			rows = [x for x in self.db.iter_frameshifts(dbm)]		   
+		if count:
+			print(len(rows))
+		else:
+			self.rows_to_csv(rows, na="*** no match ***")			
 
 	def rows_to_csv(self, rows, na="*** no data ***"):
 		if len(rows) == 0:
@@ -259,6 +271,11 @@ if __name__ == "__main__":
 	# view
 	if args.tool == "view":
 		snr.view(args.acc)
+		
+	# frameshift
+	if args.tool == "frameshift":
+		# sanity check
+		snr.show_frameshift(args.count)		
 
 	# optimize
 	if args.tool == "optimize":
