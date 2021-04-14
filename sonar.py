@@ -75,8 +75,9 @@ def parse_args():
 
 	# create the parser for the "frameshift" command
 	parser_frameshift = subparsers.add_parser('frameshift', parents=[general_parser], help='show all genomes with frameshifts')
-	parser_frameshift.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
-	
+	parser_frameshift_out = parser_frameshift.add_mutually_exclusive_group()
+	parser_frameshift_out.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
+	parser_frameshift_out.add_argument('-o', '--out', help="write output to file(please note: the given file will be overwritten).", type=str, default=None)
 
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
@@ -149,7 +150,7 @@ class sonar():
 			self.db.import_genome_from_cache(cache.dirname, msg=msg)
 
 	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False, show_frame_shifts_only=False):
-		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)	
+		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)
 		if count:
 			print(len(rows))
 		else:
@@ -193,20 +194,21 @@ class sonar():
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
-			
-	def show_frameshift(self, count=False):
+
+	def show_frameshift(self, count=False, file=None):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			rows = [x for x in self.db.iter_frameshifts(dbm)]		   
+			rows = [x for x in self.db.iter_frameshifts(dbm)]
 		if count:
 			print(len(rows))
 		else:
-			self.rows_to_csv(rows, na="*** no match ***")			
+			self.rows_to_csv(rows, file=file, na="*** no match ***")
 
-	def rows_to_csv(self, rows, na="*** no data ***"):
+	def rows_to_csv(self, rows, file=None, na="*** no data ***"):
 		if len(rows) == 0:
 			print(na, file=sys.stderr)
 		else:
-			writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
+			file = sys.stdout if file is None else open(file, "w")
+			writer = csv.DictWriter(file, rows[0].keys(), lineterminator=os.linesep)
 			writer.writeheader()
 			writer.writerows(rows)
 
@@ -271,11 +273,11 @@ if __name__ == "__main__":
 	# view
 	if args.tool == "view":
 		snr.view(args.acc)
-		
+
 	# frameshift
 	if args.tool == "frameshift":
 		# sanity check
-		snr.show_frameshift(args.count)		
+		snr.show_frameshift(args.count, args.out)
 
 	# optimize
 	if args.tool == "optimize":
