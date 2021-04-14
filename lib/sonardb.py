@@ -1669,7 +1669,7 @@ class sonarDB(object):
 
 	def get_dna_vars(self, acc, dbm):
 		return dbm.select('dna_view', whereClause="accession = ?", whereVals=[acc], orderby="start DESC")
-		
+
 	def iter_frameshifts(self, dbm):
 		for row in dbm.select('essence'):
 			fs = []
@@ -1686,9 +1686,9 @@ class sonarDB(object):
 			if fs:
 				del(row['aa_profile'])
 				del(row['dna_profile'])
-				row['frameshift_mutations'] = " ".join(fs) 
-				yield row 
-					
+				row['frameshift_mutations'] = " ".join(fs)
+				yield row
+
 
 	def iter_table(self, table):
 		sql = dbm.select('dna', whereClause="ref = ? AND alt = ? AND start = ? and end = ?", whereVals=[ref, alt, start, end], fetchone=True)
@@ -1816,6 +1816,8 @@ class sonarDB(object):
 		profile = []
 		if len(vars) == 1:
 			this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[0]
+			if this_alt == "" and this_end is None:
+				this_end = this_start + len(this_ref)
 		else:
 			vars = sorted(vars, key=lambda x: (x[5], x[4], x[2]))
 			for l in range(len(vars)-1):
@@ -1828,10 +1830,14 @@ class sonarDB(object):
 				elif this_alt == "" and next_alt == "" and this_start + len(this_ref) == next_start and this_protein == next_protein and this_locus == next_locus:
 					vars[l+1] = (this_ref + next_ref, "", this_start, next_start+1, this_protein, this_locus)
 				else:
+					if this_alt == "" and this_end is None:
+						this_end = this_start + len(this_ref)
 					var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus)
 					if var not in profile:
 						profile.append(var)
 			this_ref, this_alt, this_start, this_end, this_protein, this_locus = vars[l+1]
+			if this_alt == "" and this_end is None:
+				this_end = this_start + len(this_ref)
 		var = self.format_var(this_ref, this_alt, this_start, this_end, this_protein, this_locus)
 		if var not in profile:
 			profile.append(var)
