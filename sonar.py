@@ -99,11 +99,6 @@ class sonar():
 		If dir is not defined, a temporary directory will be used as cache.
 		'''
 
-		step = 0
-		if cachedir and os.path.isdir(cachedir):
-			step += 1
-			print("[step", step, "] restoring ... ", file=sys.stderr)
-
 		# create db if necessary
 		if not os.path.isfile(self.dbfile):
 			with sonardb.sonarDBManager(self.dbfile) as dbm:
@@ -112,7 +107,7 @@ class sonar():
 		step = 0
 		if cachedir and os.path.isdir(cachedir):
 			step += 1
-			print("[step", step, "] restoring ... ")
+			print("[step", str(step) + "] restoring ... ")
 
 		with sonardb.sonarCache(cachedir) as cache:
 
@@ -129,17 +124,19 @@ class sonar():
 				this = cache.get_cache_files(seqhash)
 				if not os.path.isfile(this[1]):
 					new.append(list(this) + [seqhash, timeout])
-
-			pool = Pool(processes=cpus)
-			failed = set()
-			for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, new), total=len(new), desc = msg):
-				if not status:
-					failed.update([x[1] for x in cache.cache[seqhash]])
-					del cache.cache[seqhash]
-			if failed:
-				print("timeout warning: following genomes were not added to the database since the respective sequence produced an timeout while aligning:", file=sys.stderr)
-				for f in failed:
-					print(f, file=sys.stderr)
+			if new:
+				pool = Pool(processes=cpus)
+				failed = set()
+				for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, new), total=len(new), desc = msg):
+					if not status:
+						failed.update([x[1] for x in cache.cache[seqhash]])
+						del cache.cache[seqhash]
+				if failed:
+					print("timeout warning: following genomes were not added to the database since the respective sequence produced an timeout while aligning:", file=sys.stderr)
+					for f in failed:
+						print(f, file=sys.stderr)
+			else:
+				step -= 1
 
 			cache.write_idx(backup=True)
 
