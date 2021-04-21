@@ -45,6 +45,7 @@ class sonarTimeout():
 
 	seconds : int
 		define time in seconds until TimeoutError is raised
+		values below 1 will not raise any TimeoutError
 	error_message: str
 		define error message to be shown [ 'Timeout' ]
 
@@ -61,11 +62,13 @@ class sonarTimeout():
 		self.error_message = error_message
 
 	def __enter__(self):
-		signal.signal(signal.SIGALRM, self.handle_timeout)
-		signal.alarm(self.seconds)
+		if self.seconds > 0:
+			signal.signal(signal.SIGALRM, self.handle_timeout)
+			signal.alarm(self.seconds)
 
 	def __exit__(self, type, value, traceback):
-		signal.alarm(0)
+		if self.seconds > 0:
+			signal.alarm(0)
 
 	def handle_timeout(self, signum, frame):
 		raise TimeoutError(self.error_message)
@@ -106,6 +109,8 @@ class sonarFiler():
 		stores absolute file path
 	tmp : bool
 		stores True if it is a temporary file else False
+	handle: file handler
+		opened file handler
 	"""
 	def __init__(self, fname = None):
 		self.fname = fname
@@ -948,7 +953,7 @@ class sonarDBManager():
 
 	def __enter__(self):
 		if not os.path.isfile(self.dbfile) or os.stat(self.dbfile).st_size == 0:
-			self.create_scheme()
+			self.create_tables()
 		self.connection, self.cursor = self.connect()
 		self.start_transaction()
 		return self
@@ -986,7 +991,7 @@ class sonarDBManager():
 	def close(self):
 		self.connection.close()
 
-	def create_scheme(self):
+	def create_tables(self):
 		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "db.sqlite"), 'r') as handle:
 			sql = handle.read()
 		with sqlite3.connect(self.__uri + "?mode=rwc", uri = True) as con:
@@ -1244,6 +1249,7 @@ class sonarDB(object):
 		self.__dna_var_regex = None
 		self.__aa_var_regex = None
 		self.__del_regex = None
+		self.dnavar_regex = re.compile("^([^0-9]*)([0-9]+)([^0-9]*)$")
 
 	# PROPERTIES ON DEMAND
 
@@ -1373,6 +1379,10 @@ class sonarDB(object):
 			processed data. Please consider, that an existing file will be
 			overwritten. IfNone, a temporary file will be created and deleted after
 			processing.
+		args[3] : int
+			timeout in seconds
+			define a timeout in seconds for processing genomes
+			integers below 1 dectivate the timeout.
 
 		Returns
 		-------
@@ -1538,7 +1548,7 @@ class sonarDB(object):
 			for i in rng:
 				with open(fnames[i], 'rb') as handle:
 					data = pickle.load(handle, encoding="bytes")
-				self.import_genome(*data, dbm=dbm)
+				self.import_genome(*data, seq=None, dbm=dbm)
 
 	def import_genome_from_cache(self, cachedir, msg=None):
 		"""
@@ -1589,7 +1599,7 @@ class sonarDB(object):
 		prot_profile : str
 			define the formatted amino acid level profile (see sonarDB.build_profile)
 		seq : str
-			define the sequence of the processed genome
+			define the sequence of the processed genome (can be None, but then no paranoid test is done)
 		dbm : str
 			define a sonarDBManager object to use for database transaction
 		"""
@@ -1610,7 +1620,8 @@ class sonarDB(object):
 					varid = self.insert_prot_var(protein, locus, ref, alt, s, e, dbm)
 				self.insert_sequence2prot(seqhash, varid, dbm)
 
-			self.be_paranoid(acc, seq, dbm, auto_delete=False)
+			if seq:
+				self.be_paranoid(acc, seq, dbm, auto_delete=False)
 
 	def insert_genome(self, acc, descr, seqhash, dbm):
 		return dbm.insert('genome', ['accession', 'description', 'seqhash'], [acc, descr, seqhash])
@@ -2179,9 +2190,9 @@ class sonarDB(object):
 
 	# VALIDATION
 
-	def restore_genome(self, acc, dbm):
+	def restore_genome_using_dnavars(self, acc, dbm):
 		"""
-		function to restore a genome sequence from the SONAR database
+		function to restore a genome sequence from the SONAR database using dna variation table
 
 		Parameters
 		----------
@@ -2207,6 +2218,7 @@ class sonarDB(object):
 		"""
 		rows = self.get_dna_vars(acc, dbm)
 		if rows:
+			prefix = ""
 			qryseq = list(self.refseq)
 			for row in rows:
 				if row['start'] is not None:
@@ -2216,8 +2228,59 @@ class sonarDB(object):
 							sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
 						qryseq[s] = "" if not row['alt'] else row['alt']
 					else:
-						qryseq = [row['alt']] + qryseq
-			return (">" + rows[0]['description'], "".join(qryseq))
+						prefix = row['alt']
+			return (">" + rows[0]['description'], prefix + "".join(qryseq))
+		return None
+
+	def restore_genome_using_dnaprofile(self, acc, dbm):
+		"""
+		function to restore a genome sequence from the SONAR database using dna level profiles
+
+		Parameters
+		----------
+
+		acc : str
+			define the accesion of the genome that should be restored
+		dbm : object
+			define a sonarDBManager handling the database connection
+
+		Raises
+		------
+
+		Each variant site stored in the database is checked, if the linked reference
+		nucleotide is correct. If not, program is terminated and an error shown.
+
+		Returns
+		-------
+
+		tuple
+			tuple of the FASTA header and sequence of the respective genome.
+			None is returned if the given accession does not exist in the
+			database.
+		"""
+		row = dbm.select('essence', whereClause="accession = ?", whereVals=[acc], fetchone=True)
+		if row:
+			qryseq = list(self.refseq)
+			prefix = ""
+			for var in row['dna_profile'].strip().split(" "):
+				if var.startswith("del:"):
+					var = var.split(":")
+					s = int(var[1])-1
+					e = s + int(var[2])
+					for i in range(s, e):
+						qryseq[i] = ""
+				elif var:
+					match = self.dnavar_regex.search(var)
+					pos = int(match.group(2))-1
+					ref = match.group(1)
+					alt = match.group(3)
+					if pos >= 0 and ref != self.refseq[pos]:
+						sys.exit("data error: data inconsistency found for '" + acc + "' (" + ref+ " expected at position " + str(pos+1) + " of the reference sequence, got " + refseq[pos] + ").")
+					if pos == -1:
+						prefix = alt
+					else:
+						qryseq[pos] = alt
+			return (">" + row['description'], prefix + "".join(qryseq))
 		return None
 
 	def restore_alignment(self, acc, dbm):
@@ -2293,15 +2356,26 @@ class sonarDB(object):
 			otherwise False
 		"""
 		orig_seq = orig_seq.upper()
-		restored_seq = self.restore_genome(acc, dbm=dbm)[1]
-		if orig_seq != restored_seq:
-			rows = self.get_dna_vars(acc, dbm)
-			writer = csv.DictWriter(sys.stdout, rows[0].keys(), lineterminator=os.linesep)
-			writer.writeheader()
-			writer.writerows(rows)
+		if orig_seq != self.restore_genome_using_dnavars(acc, dbm=dbm)[1]:
 			if auto_delete:
 				self.delete_accession(acc, dbm)
-			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match.", file=sys.stderr)
+			s = self.restore_genome_using_dnavars(acc, dbm=dbm)[1]
+			for i in range(len(orig_seq)):
+				if orig_seq[i] != s[i]:
+					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
+					break
+			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).", file=sys.stderr)
+			return False
+		if orig_seq != self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]:
+			if auto_delete:
+				self.delete_accession(acc, dbm)
+			s = self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]
+			for i in range(len(orig_seq)):
+				if orig_seq[i] != s[i]:
+					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
+					break
+			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 2).", file=sys.stderr)
+			#print(self.restore_genome_using_dnaprofile(acc, dbm=dbm))
 			return False
 		return True
 
@@ -2390,8 +2464,8 @@ class sonarCache():
 		self.cache = self.load_idx()
 		for seqhash in self.cache:
 			files = self.get_cache_files(seqhash)
-			if not os.path.isfile(files[0]) or not os.path.isfile(files[1]) :
-				sys.exit("cache error: chache is corrupted.")
+			if not os.path.isfile(files[0]) or not os.path.isfile(files[2]) :
+				sys.exit("cache error: cache is corrupted.")
 
 	@staticmethod
 	def slugify(string):
