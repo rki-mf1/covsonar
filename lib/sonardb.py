@@ -2362,7 +2362,7 @@ class sonarDB(object):
 			s = self.restore_genome_using_dnavars(acc, dbm=dbm)[1]
 			for i in range(len(orig_seq)):
 				if orig_seq[i] != s[i]:
-					print(i, orig_seq[i] , "<>", s[i])
+					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
 					break
 			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).", file=sys.stderr)
 			return False
@@ -2372,7 +2372,7 @@ class sonarDB(object):
 			s = self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]
 			for i in range(len(orig_seq)):
 				if orig_seq[i] != s[i]:
-					print(i, orig_seq[i] , "<>", s[i])
+					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
 					break
 			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 2).", file=sys.stderr)
 			#print(self.restore_genome_using_dnaprofile(acc, dbm=dbm))
