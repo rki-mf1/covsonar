@@ -1694,6 +1694,13 @@ class sonarDB(object):
 						i = r.intersection(cds.range)
 						if i and len(i)%3 != 0:
 							fs.append(var)
+				elif var:
+					match = self.dnavar_regex.search(var)
+					pos = int(match.group(2))-1
+					lref = len(match.group(1))
+					lalt = len(match.group(3))
+					if self.refgffObj.iscds(pos) and lalt > lref and (lalt-lref)%3 != 0:
+						fs.append(var)
 			if fs:
 				del(row['aa_profile'])
 				del(row['dna_profile'])
