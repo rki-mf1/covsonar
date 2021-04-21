@@ -2269,7 +2269,7 @@ class sonarDB(object):
 					e = s + int(var[2])
 					for i in range(s, e):
 						qryseq[i] = ""
-				else:
+				elif var:
 					match = self.dnavar_regex.search(var)
 					pos = int(match.group(2))-1
 					ref = match.group(1)
