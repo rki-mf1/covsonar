@@ -189,7 +189,7 @@ class sonar():
 
 	def restore(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			return self.db.restore_genome(acc, dbm=dbm)
+			return self.db.restore_genome_using_dnavars(acc, dbm=dbm)
 
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
