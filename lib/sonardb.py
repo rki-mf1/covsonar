@@ -2498,7 +2498,7 @@ class sonarDB(object):
 					break
 			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).", file=sys.stderr)
 			return False
-		s = self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]	
+		s = self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]
 		if orig_seq != s:
 			if auto_delete:
 				self.delete_accession(acc, dbm)
