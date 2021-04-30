@@ -2596,7 +2596,7 @@ class sonarCache():
 		self.cache = self.load_idx()
 		for seqhash in self.cache:
 			files = self.get_cache_files(seqhash)
-			if not os.path.isfile(files[0]) or not os.path.isfile(files[2]) :
+			if not os.path.isfile(files[0]):
 				sys.exit("cache error: cache is corrupted.")
 
 	@staticmethod
