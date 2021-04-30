@@ -147,7 +147,7 @@ class sonarCDS(object):
 
 	Initiating an sonarCDS object:
 
-	>>> cds = sonarCDS("ORF1", 155, 170, "+", "ATGTTATGAATGGCC")
+	>>> cds = sonarCDS("Loc1", "ORF1", [(155, 170)], ["ATGTTATGAATGGCC"], "+")
 
 	Accessing amino acid sequence (genetic code 1):
 
@@ -204,15 +204,25 @@ class sonarCDS(object):
 		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
 	"""
 
-	def __init__(self, symbol, start, end, strand, seq, locus=None, translation_table=1):
+	def __init__(self, locus, symbol, coords, seqs, strand, translation_table=1):
 		self.symbol = symbol
 		self.locus = locus
-		self.start = min(start, end) # inclusive
-		self.end = max(start, end) # exclusive
+		self.start = coords[0][0] # inclusive
+		self.end = coords[-1][1] # exclusive
 		self.strand = strand
-		self.nuc = seq
+		self.seqs = seqs
+		self.coordlist = coords
+		self.ranges = [range(s, e) for s, e in coords]
 		self.translation_table = translation_table
 		self.__aa = None
+		self.__nuc = None
+		self.__nucposlist = None
+
+	@property
+	def nuc(self):
+		if self.__nuc is None:
+			self.__nuc = "".join(self.seqs)
+		return self.__nuc
 
 	@property
 	def aa(self):
@@ -233,6 +243,125 @@ class sonarCDS(object):
 	@property
 	def range(self):
 		return range(self.start, self.end)
+
+	@property
+	def nucposlist(self):
+		if self.__nucposlist is None:
+			self.__nucposlist = []
+			for r in self.ranges:
+				self.__nucposlist.extend(r)
+		return self.__nucposlist
+
+	def aa_to_nuc_pos(self, x):
+		if y is None:
+			y = x + 1
+
+		if x > self.end or y < self.start:
+			return None
+
+		return self.nucposlist[3*x]
+
+	def iter_coords(self):
+		"""
+		function to iterate over genomic coordinate of the coding part of an
+		annotated coding sequence (CDS).
+
+		Examples
+		--------
+
+		>>> gff=sonarCDS("loc1", "prot1", [(10, 15), (14, 16)], ['ATGTG', 'CTAATGA'], "+")
+		>>> for i in gff.iter_coords():
+		... 	print(i)
+		10
+		11
+		12
+		13
+		14
+		14
+		15
+
+		Parameters
+		----------
+		x : int
+			genomic (start) coordinate (0-based, inclusive)
+		y : int
+			genomic end coordniate (0-based, exclusive) [ None ]
+
+		Returns
+		-------
+		bool
+			True if coordinate(s) within coding part of CDS, False otherwise.
+
+		"""
+		for r in self.ranges:
+			for i in r:
+				yield i
+
+	def is_exon(self, x, y=None):
+		"""
+		function to check if a given genomic coordinate (range) overlaps with the
+		coding part of this coding sequence (CDS).
+
+		Examples
+		--------
+
+		>>> gff=sonarCDS("loc1", "prot1", [(10, 15), (25, 32)], ['ATGTG', 'CTAATGA'], "+")
+		>>> gff.is_exon(10)
+		True
+		>>> gff.is_exon(16)
+		False
+
+		Parameters
+		----------
+		x : int
+			genomic (start) coordinate (0-based, inclusive)
+		y : int
+			genomic end coordniate (0-based, exclusive) [ None ]
+
+		Returns
+		-------
+		bool
+			True if coordinate(s) are within or overlapping with this exons of
+			the CDS, False otherwise.
+
+		"""
+		x = {x,} if y is None else set(range(x,y))
+		for this_range in self.ranges:
+			if x.intersection(this_range):
+				return True
+		return False
+
+	def is_cds(self, x, y=None):
+		"""
+		function to check if a given genomic coordinate (range) overlaps with
+		this coding sequence (CDS).
+
+		Examples
+		--------
+
+		>>> gff=sonarCDS("loc1", "prot1", [(10, 15), (25, 32)], ['ATGTG', 'CTAATGA'], "+")
+		>>> gff.is_cds(10)
+		True
+		>>> gff.is_cds(16)
+		True
+
+		Parameters
+		----------
+		x : int
+			genomic (start) coordinate (0-based, inclusive)
+		y : int
+			genomic end coordniate (0-based, exclusive) [ None ]
+
+		Returns
+		-------
+		bool
+			True if coordinate(s) are within or overlapping with this CDS, False otherwise.
+
+		"""
+		x = {x,} if y is None else set(range(x,y))
+		if x.intersection(range(self.start, self.end)):
+			return True
+		return False
 
 class sonarGFF(object):
 	"""
@@ -288,22 +417,23 @@ class sonarGFF(object):
 		self.translation_table = translation_table
 		self.cds = self.process_gff3(gff3, fna)
 		self.coords = { x.symbol: (x.start, x.end) for x in self.cds }
-		self.symbols = [x.symbol for x in self.cds ]
+		self.ranges = { x.symbol: x.ranges for x in self.cds }
+		self.symbols = [ x.symbol for x in self.cds ]
 
-	def iscds(self, x, y=None):
+	def in_any_exon(self, x, y=None):
 		"""
-		function to check if a given genomic coordinate (range) overlaps with an
-		annotated coding sequence (CDS).
+		function to check if a given genomic coordinate (range) overlaps with the
+		coding region of any annotated coding sequence (CDS).
 
 		Examples
 		--------
 
 		>>> gff=sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
-		>>> gff.iscds(21562)
+		>>> gff.in_any_exon(21562)
 		True
-		>>> gff.iscds(25384)
+		>>> gff.in_any_exon(25384)
 		False
-		>>> gff.iscds(25380, 25384)
+		>>> gff.in_any_exon(25380, 25384)
 		True
 
 		Parameters
@@ -319,53 +449,26 @@ class sonarGFF(object):
 			True if coordinate(s) within CDS, False otherwise.
 
 		"""
-		if y is None:
-			y = x + 1
-		r = range(x, y)
-		for start, end in self.coords.values():
-			if x < end and start < y:
+		for cds in self.cds:
+			if cds.is_exon(x, y):
 				return True
 		return False
 
-	def convert_pos_to_dna(self, protein_symbol, x):
+	def in_any_cds(self, x, y=None):
 		"""
-		function to convert a protein-based coordinate to a genomic coordinate
+		function to check if a given genomic coordinate (range) overlaps with an
+		annotated coding sequence (CDS).
 
 		Examples
 		--------
 
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
 		>>> gff=sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
-		>>> gff.convert_pos_to_dna("S", 4)
-		21574
-
-		Parameters
-		----------
-		protein_symbol : str
-			define the protein based on its symbol
-		x : int
-			define the position within the protein (0-based, inclusive)
-
-		Returns
-		-------
-		int
-			lower-bound genomic coordinate (0-based) where the respective protein
-			position is encoded
-		"""
-		return x*3 + self.coords[protein_symbol][0]
-
-	def convert_pos_to_aa(self, x, y=None):
-		"""
-		function to convert a genomic coordinate (range) to amino acid positions
-		of the rexpective protein encoded
-
-		Examples
-		--------
-
-		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
-		>>> gff=sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
-		>>> gff.convert_pos_to_aa(265,274)
-		('ORF1ab', 0, 3)
+		>>> gff.in_any_cds(21562)
+		True
+		>>> gff.in_any_cds(25384)
+		False
+		>>> gff.in_any_cds(25380, 25384)
+		True
 
 		Parameters
 		----------
@@ -376,21 +479,14 @@ class sonarGFF(object):
 
 		Returns
 		-------
-		tuple
-		   tuple of respective protein symbol, 0-based start position within the
-		   protein (inclusive), 0-based end position within the protein (exclusive)
-		   or None if givben position is not in an annotated CDS.
+		bool
+			True if coordinate(s) within CDS, False otherwise.
 
 		"""
-		y = x + 1  if y is None else y
-		for symbol, coords in self.coords.items():
-			if x >= coords[0] and y <= coords[1]:
-				x = floor((x - coords[0])/3)
-				if y is None:
-					return (symbol, x, None)
-				y = floor((y - coords[0])/3)
-				return (symbol, x, y)
-		return None
+		for cds in self.cds:
+			if cds.is_cds(x, y):
+				return True
+		return False
 
 	def process_gff3(self, gff, fna):
 		"""
@@ -401,7 +497,7 @@ class sonarGFF(object):
 
 		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
 		>>> gff = sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
-		>>> gff.coords == {'ORF1ab': (265, 21555), 'S': (21562, 25384), 'ORF3a': (25392, 26220), 'E': (26244, 26472), 'M': (26522, 27191), 'ORF6': (27201, 27387), 'ORF7a': (27393, 27759), 'ORF7b': (27755, 27887), 'ORF8': (27893, 28259),'N': (28273, 29533), 'ORF10': (29557, 29674)}
+		>>> gff.coords == {'ORF1a': (265, 13483), 'ORF1ab': (265, 21555), 'S': (21562, 25384), 'ORF3a': (25392, 26220), 'E': (26244, 26472), 'M': (26522, 27191), 'ORF6': (27201, 27387), 'ORF7a': (27393, 27759), 'ORF7b': (27755, 27887), 'ORF8': (27893, 28259),'N': (28273, 29533), 'ORF10': (29557, 29674)}
 		True
 
 		Parameters
@@ -422,30 +518,49 @@ class sonarGFF(object):
 
 		symbol_regex = re.compile("gene=([^;]+)(?:;|$)")
 		locus_regex = re.compile("locus_tag=([^;]+)(?:;|$)")
+		id_regex = re.compile("ID=([^;]+)(?:;|$)")
 
 		record = SeqIO.read(fna, "fasta")
 		gseq = str(record.seq).upper()
 
 		with open(gff, "r") as handle:
-			cds = set()
+			cds = {}
 			for line in handle:
 				fields = line.rstrip("\r\n").split("\t")
 				if line.startswith("#") or len(fields) < 7:
 					continue
 				if fields[2] == "CDS":
-					symbol = symbol_regex.search(fields[-1])
-					symbol = symbol.groups(1)[0] if symbol else None
-					locus = locus_regex.search(fields[-1])
-					locus = locus.groups(1)[0] if locus else None
+					id = id_regex.search(fields[-1]).groups(1)[0]
+					symbol = symbol_regex.search(fields[-1]).groups(1)[0]
+					locus = locus_regex.search(fields[-1]).groups(1)[0]
 					strand = fields[6]
 					s = int(fields[3])-1
 					e = int(fields[4])
-					dna = gseq[s:e]
-					if strand == "-":
-						dna = str(Seq.reverse_complement(dna))
-					cds.add((symbol, s, e, strand, dna, locus, self.translation_table))
-		cds = sorted(cds, key=lambda x: x[1])
-		return [sonarCDS(*x) for x in cds]
+					if id not in cds:
+						cds[id] = {
+							'locus': locus,
+							'symbol': symbol,
+							'coords': [(s, e)],
+							'strand': strand
+							}
+					elif id in cds:
+						if symbol != cds[id]['symbol']:
+							sys.exit("gff3 error: multiple symbols for locus " + locus)
+						if strand != cds[id]['strand']:
+							sys.exit("gff3 error: different strands for locus " + locus)
+						cds[id]['coords'].append((s, e))
+
+		cdsobjs = []
+		for locus, data in cds.items():
+			seqs = []
+			for s, e in data['coords']:
+				if data['strand'] == "+":
+					seqs.append(gseq[s:e])
+				else:
+					seqs.append(str(Seq.reverse_complement(gseq[s:e])))
+			cdsobjs.append(sonarCDS(data['locus'], data['symbol'], data['coords'], seqs, data['strand'], self.translation_table))
+
+		return sorted(cdsobjs, key=lambda x: x.start)
 
 class sonarALIGN(object):
 	"""
@@ -809,6 +924,12 @@ class sonarALIGN(object):
 		('S', '', 3674, None, 'ORF1ab', 'GU280_gp01')
 		('G', '', 3675, None, 'ORF1ab', 'GU280_gp01')
 		('F', '', 3676, None, 'ORF1ab', 'GU280_gp01')
+		('T', 'I', 1000, None, 'ORF1a', 'GU280_gp01')
+		('A', 'D', 1707, None, 'ORF1a', 'GU280_gp01')
+		('I', 'T', 2229, None, 'ORF1a', 'GU280_gp01')
+		('S', '', 3674, None, 'ORF1a', 'GU280_gp01')
+		('G', '', 3675, None, 'ORF1a', 'GU280_gp01')
+		('F', '', 3676, None, 'ORF1a', 'GU280_gp01')
 		('I', '', 67, None, 'S', 'GU280_gp02')
 		('H', '', 68, None, 'S', 'GU280_gp02')
 		('V', '', 69, None, 'S', 'GU280_gp02')
@@ -843,16 +964,20 @@ class sonarALIGN(object):
 		"""
 		if self.gff:
 			for cds in self.gff.cds:
-				s = self.align_pos(cds.start)
-				e = self.align_pos(cds.end)
-				if cds.strand == "+":
-					query = self.aligned_query[s:e]
-					target = self.aligned_target[s:e]
-				else:
-					query = str(Seq.reverse_complement(self.aligned_query[s:e]))
-					target = str(Seq.reverse_complement(self.aligned_target[s:e]))
+				query = []
+				target = []
+				for s, e in cds.coordlist:
+					s = self.align_pos(s)
+					e = self.align_pos(e)
+					query.append(self.aligned_query[s:e])
+					target.append(self.aligned_target[s:e])
+				query = "".join(query)
+				target = "".join(target)
 
-				s = 0
+				if cds.strand == "-":
+					query.append(str(Seq.reverse_complement(query)))
+					target.append(str(Seq.reverse_complement(target)))
+
 				for match in self._codon_regex.finditer(target):
 					s = match.start()
 					e = match.end()
@@ -1423,7 +1548,7 @@ class sonarDB(object):
 		>>> data[5]
 		'C3267T C5388A T6954C del:11288:9 del:21765:6 del:21991:3 A23063T C23271A C23604A C23709T T24506G G24914C C27972T G28048T A28111G G28280C A28281T T28282A C28977T'
 		>>> data[6]
-		'ORF1ab:T1001I ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:3 S:del:68:3 S:del:143:2 S:N501Y S:A570D S:P681H S:T716I S:S982A S:D1118H ORF8:Q27* ORF8:R52I ORF8:Y73C N:D3L N:S235F'
+		'ORF1a:T1001I ORF1a:A1708D ORF1a:I2230T ORF1a:del:3675:3 ORF1ab:T1001I ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:3 S:del:68:3 S:del:143:2 S:N501Y S:A570D S:P681H S:T716I S:S982A S:D1118H ORF8:Q27* ORF8:R52I ORF8:Y73C N:D3L N:S235F'
 
 		Parameters
 		----------
@@ -2363,20 +2488,20 @@ class sonarDB(object):
 			otherwise False
 		"""
 		orig_seq = orig_seq.upper()
-		if orig_seq != self.restore_genome_using_dnavars(acc, dbm=dbm)[1]:
+		s = self.restore_genome_using_dnavars(acc, dbm=dbm)[1]
+		if orig_seq != s:
 			if auto_delete:
 				self.delete_accession(acc, dbm)
-			s = self.restore_genome_using_dnavars(acc, dbm=dbm)[1]
 			for i in range(len(orig_seq)):
 				if orig_seq[i] != s[i]:
 					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
 					break
 			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).", file=sys.stderr)
 			return False
-		if orig_seq != self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]:
+		s = self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]
+		if orig_seq != s:
 			if auto_delete:
 				self.delete_accession(acc, dbm)
-			s = self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]
 			for i in range(len(orig_seq)):
 				if orig_seq[i] != s[i]:
 					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])

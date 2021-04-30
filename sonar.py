@@ -100,10 +100,6 @@ class sonar():
 		'''
 
 		# create db if necessary
-		if not os.path.isfile(self.dbfile):
-			with sonardb.sonarDBManager(self.dbfile) as dbm:
-				pass
-
 		step = 0
 		if cachedir and os.path.isdir(cachedir):
 			step += 1
@@ -120,10 +116,13 @@ class sonar():
 			step += 1
 			msg = "[step " + str(step) + "] processing ..."
 			new = []
-			for seqhash in cache.cache:
-				this = cache.get_cache_files(seqhash)
-				if not os.path.isfile(this[1]):
-					new.append(list(this) + [seqhash, timeout])
+			with sonardb.sonarDBManager(self.dbfile) as dbm:
+				for seqhash in cache.cache:
+					for acc, descr in cache.cache[seqhash]:
+						if not self.db.genome_exists(acc, descr, seqhash, dbm):
+							this = cache.get_cache_files(seqhash)
+							if not os.path.isfile(this[1]):
+								new.append(list(this) + [seqhash, timeout])
 			if new:
 				pool = Pool(processes=cpus)
 				failed = set()
@@ -186,7 +185,7 @@ class sonar():
 
 	def restore(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			return self.db.restore_genome_using_dnavars(acc, dbm=dbm)
+			return self.db.restore_using_dnavars(acc, dbm=dbm)
 
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
