@@ -3,19 +3,22 @@ PRAGMA foreign_keys = OFF;
 
 CREATE TABLE IF NOT EXISTS sequence (
 	seqhash VARCHAR(40) NOT NULL PRIMARY KEY
-);
+) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS genome (
 	accession VARCHAR(150) NOT NULL PRIMARY KEY,
 	description TEXT,
 	seqhash VARCHAR(40) NOT NULL,
 	lineage VARCHAR(40),
-	zip VARCHAR(10),
+	zip TEXT,
 	date TEXT,
 	gisaid VARCHAR(100),
 	ena VARCHAR(100),
+	source VARCHAR(100),
+	collection VARCHAR(100),
+	lab VARCHAR(100),
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
-);
+) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS sequence2dna (
 	seqhash VARCHAR(40) NOT NULL,
@@ -23,7 +26,7 @@ CREATE TABLE IF NOT EXISTS sequence2dna (
 	PRIMARY KEY(seqhash, varid),
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash),
 	FOREIGN KEY(varid) REFERENCES dna(varid)
-);
+) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS sequence2prot (
 	seqhash VARCHAR(40) NOT NULL,
@@ -31,7 +34,7 @@ CREATE TABLE IF NOT EXISTS sequence2prot (
 	PRIMARY KEY(seqhash, varid),
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash),
 	FOREIGN KEY(varid) REFERENCES prot(varid)
-);
+) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS dna (
 	varid INTEGER PRIMARY KEY,
@@ -39,9 +42,8 @@ CREATE TABLE IF NOT EXISTS dna (
 	end INTEGER,
 	ref VARCHAR(1000) NOT NULL,
 	alt VARCHAR(1000) NOT NULL,
-	FOREIGN KEY(varid) REFERENCES sequence2dna(varid)
+	UNIQUE(start, end, alt, ref)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dna ON dna (start, end, ref, alt);
 
 CREATE TABLE IF NOT EXISTS prot (
 	varid INTEGER PRIMARY KEY,
@@ -51,22 +53,23 @@ CREATE TABLE IF NOT EXISTS prot (
 	end INTEGER,
 	ref VARCHAR(1000) NOT NULL,
 	alt VARCHAR(1000) NOT NULL,
-	FOREIGN KEY(varid) REFERENCES sequence2prot(varid)
+	UNIQUE(protein, locus, start, end, alt, ref)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_prot ON prot(protein, locus, start, end, ref, alt);
 
 CREATE TABLE IF NOT EXISTS profile (
-	seqhash VARCHAR(40) NOT NULL,
+	seqhash VARCHAR(40) NOT NULL PRIMARY KEY,
 	dna_profile TEXT NOT NULL,
-	aa_profile TEXT NOT NULL,
-	PRIMARY KEY(seqhash)
-);
+	aa_profile TEXT NOT NULL
+) WITHOUT ROWID;
 
 CREATE VIEW IF NOT EXISTS essence
 AS
 SELECT
 	accession,
 	description,
+	lab,
+	source,
+	collection,
 	gisaid,
 	ena,
 	zip,
@@ -85,6 +88,9 @@ AS
 SELECT
 	accession,
 	description,
+	lab,
+	source,
+	collection,
 	gisaid,
 	ena,
 	zip,
@@ -106,6 +112,9 @@ AS
 SELECT
 	accession,
 	description,
+	lab,
+	source,
+	collection,
 	gisaid,
 	ena,
 	zip,

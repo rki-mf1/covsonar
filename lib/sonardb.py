@@ -27,6 +27,10 @@ import signal
 import csv
 from time import sleep
 
+def get_version():
+	with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
+		return handle.read().strip()
+
 class sonarTimeout():
 	"""
 	this class is a helper class raising a TimeoutError within a defined context
@@ -1122,151 +1126,274 @@ class sonarDBManager():
 		with sqlite3.connect(self.__uri + "?mode=rwc", uri = True) as con:
 			con.executescript(sql)
 
-	def select(self, table, fieldList=['*'], whereClause=None, whereVals=None, orderby=None, fetchone=False, print_sql=False):
-		"""
-		generic function to perform a SELECT query on the SONAR database.
+	# INSERTING DATA
 
-		Parameters
-		----------
-		table : str
-			define table to select data from
-		fieldList : list
-			define a list of field names to select. By default all fields are selected
-			[ ['*'] ]
-		whereClause : str
-			define a where expression for conditional select. The expression has
-			not to be introduced by 'where'. The actual values will be inserted
-			syntax-safely and, thus, have to be replaced by ? within the clause
-			(e.g. 'accession = ?'). [ None ]
-		whereVals : list
-			list of ordered values to be inserted into the whereClause. [ None ]
-		orderby : str
-			define an 'order by' expression to order results [ None ]
-		fetchone : bool
-			define wether only one (set True) or all (set False) rows should be
-			returned. [ False ]
-		print_sql : bool
-			define if assembled query should be printed on screen
-			(e.g. for debugging) [ False ]
+	def insert_genome(self, acc, descr, seqhash):
+		sql = "INSERT INTO genome (accession, description, seqhash) VALUES(?, ?, ?);"
+		self.cursor.execute(sql, [acc, descr, seqhash])
+		return acc
 
-		Returns
-		-------
-		list
-			list of selected rows. Each row is represented as a dictionary with
-			selected field names as keys.
-		"""
-		sql = "SELECT " + "".join(fieldList) + " FROM " + table
-		if whereClause:
-			sql += " WHERE " + whereClause
+	def insert_sequence(self, seqhash):
+		sql = "INSERT OR IGNORE INTO sequence (seqhash) VALUES(?);"
+		self.cursor.execute(sql, [seqhash])
+		return seqhash
+
+	def insert_profile(self, seqhash, dna_profile, aa_profile):
+		dna_profile = " " + dna_profile.strip() + " "
+		aa_profile = " " + aa_profile.strip() + " "
+		sql = "INSERT OR IGNORE INTO profile (seqhash, dna_profile, aa_profile) VALUES(?, ?, ?);"
+		self.cursor.execute(sql, [seqhash, dna_profile, aa_profile])
+		return seqhash
+
+	def insert_dna_var(self, seqhash, ref, alt, start, end):
+		if end is None:
+			end = start + 1
+		sql = "INSERT OR IGNORE INTO dna (varid, start, end, ref, alt) VALUES(?, ?, ?, ?, ?);"
+		self.cursor.execute(sql, [None, start, end, ref, alt])
+		#sys.exit([sql, None, start, end, ref, alt])
+		sql = "SELECT varid FROM dna WHERE start = ? AND end = ? AND alt = ? AND ref = ?;"
+		varid = self.cursor.execute(sql, [start, end, alt, ref]).fetchone()['varid']
+		sql = "INSERT OR IGNORE INTO sequence2dna (seqhash, varid) VALUES(?, ?);"
+		self.cursor.execute(sql, [seqhash, varid])
+		return varid
+
+	def insert_prot_var(self, seqhash, protein, locus, ref, alt, start, end):
+		if end is None:
+			end = start + 1
+		sql = "INSERT OR IGNORE INTO prot (varid, protein, locus, start, end, ref, alt) VALUES(?, ?, ?, ?, ?, ?, ?);"
+		self.cursor.execute(sql, [None, protein, locus, start, end, ref, alt])
+		sql = "SELECT varid FROM prot WHERE protein = ? AND locus = ? AND start = ? AND end = ? AND alt = ? AND ref = ?;"
+		varid = self.cursor.execute(sql, [protein, locus, start, end, alt, ref]).fetchone()['varid']
+		sql = "INSERT OR IGNORE INTO sequence2prot (seqhash, varid) VALUES(?, ?);"
+		self.cursor.execute(sql, [seqhash, varid])
+		return varid
+
+	# DELETING DATA
+
+	def delete_genome(self, acc):
+		sql = "DELETE FROM genome WHERE accession = ?;"
+		self.cursor.execute(sql, [acc])
+
+	# SELECTING DATA
+
+	def genome_exists(self, acc, descr=None, seqhash=None):
+		sql = "SELECT COUNT(*) FROM genome WHERE accession = ?"
+		vals = [acc]
+		if descr:
+			sql += " AND descr = ?"
+			vals.append(descr)
+		if seqhash:
+			sql += " AND seqhash = ?"
+			vals.append(seqhash)
+		return self.cursor.execute(sql + ";", vals).fetchone()['COUNT(*)'] > 0
+
+	def seq_exists(self, seqhash):
+		sql = "SELECT COUNT(*) FROM sequence WHERE seqhash = ?;"
+		return self.cursor.execute(sql, [seqhash]).fetchone()['COUNT(*)'] > 0
+
+	def get_genomes(self, acc):
+		sql = "SELECT * FROM genome WHERE accession = ?;"
+		return self.cursor.execute(sql, [acc]).fetchone()
+
+	def get_dna_varid(self, ref, alt, pos):
+		sql = "SELECT varid FROM dna WHERE pos = ? AND alt = ? AND ref = ?;"
+		row = self.cursor.execute(sql, [pos, alt, ref]).fetchone()
+		if row:
+			return row['varid']
+		return None
+
+	def get_prot_varid(self, protein, locus, ref, alt, pos):
+		sql = "SELECT varid FROM prot WHERE protein = ? AND locus = ? AND pos = ? AND alt = ? AND ref = ?;"
+		row = self.cursor.execute(sql, [protein, locus, ref, alt, pos]).fetchone()
+		if row:
+			return row['varid']
+		return None
+
+	def get_dna_vars(self, acc):
+		sql = "SELECT description, start, end, alt, ref FROM dna_view WHERE accession = ?;"
+		return self.cursor.execute(sql, [acc]).fetchall()
+
+	def get_dna_profile(self, acc):
+		sql = "SELECT dna_profile FROM essence WHERE accession = ?;"
+		row = self.cursor.execute(sql, [acc]).fetchone()
+		if not row:
+			return None
+		return row['dna_profile']
+
+	def iter_table(self, table):
+		sql = "SELECT * FROM " + table + ";"
+		for row in self.cursor.execute(sql, [acc]).fetchall():
+			yield row
+
+	# MATCHING PROFILES
+
+	def get_dna_profile_condition(self, *profiles, negate=False):
+		op = " NOT " if negate else " "
+		clause = ["dna_profile" + op + "LIKE '% " + x + " %'" for x in profiles]
+		return " AND ".join(clause)
+
+	def get_aa_profile_condition(self, *profiles, negate=False):
+		op = " NOT " if negate else " "
+		clause = ["aa_profile" + op + "LIKE '% " + x + " %'" for x in profiles]
+		return " AND ".join(clause)
+
+	def get_accession_condition(self, *accessions, negate=False):
+		op = " NOT " if negate else " "
+		return "accession" + op + "IN (" + ", ".join(['?'] * len(accessions)) + ")"
+
+	def get_lineage_condition(self, *accessions, negate=False):
+		op = " NOT " if negate else " "
+		return "lineage" + op + "IN (" + ", ".join(['?'] * len(accessions)) + ")"
+
+	def get_zip_condition(self, *zips, negate=False):
+		op = " NOT " if negate else " "
+		logic = " AND " if negate else " OR "
+		clause = ["zip" + op + "LIKE '" + x + "%'" for x in zips]
+		if not negate and len(clause) > 1:
+			return "(" + logic.join(clause) + ")"
+		return logic.join(clause)
+
+	def get_date_condition(self, *dates, negate=False):
+		op = " NOT " if negate else " "
+		op2 = " != " if negate else " = "
+		logic = " AND " if negate else " OR "
+		clause = []
+		for date in dates:
+			if ":" in date:
+				x, y = date.split(":")
+				clause.append("(date" + op + "BETWEEN '" + x + "' AND '" + y + "')")
+			else:
+				clause.append("date " + op2 + date)
+		if not negate and len(clause) > 1:
+			return "(" + logic.join(clause) + ")"
+		return logic.join(clause)
+
+	def match(self,
+			  include_profiles=[],
+			  exclude_profiles=[],
+			  include_acc=[],
+			  exclude_acc=[],
+			  include_lin=[],
+			  exclude_lin=[],
+			  include_zip=[],
+			  exclude_zip=[],
+			  include_dates=[],
+			  exclude_dates=[]):
+
+		where_clause = []
+		where_vals = []
+		# accessions
+		if include_acc:
+			where_clause.append(self.get_accession_condition(*include_acc))
+			where_vals.extend(include_acc)
+		if exclude_acc:
+			where_clause.append(self.get_accession_condition(*exclude_acc, negate=True))
+			where_vals.extend(exclude_acc)
+
+		# lineage
+		if include_lin:
+			where_clause.append(self.get_lineage_condition(*include_lin))
+			where_vals.extend(include_lin)
+		if exclude_lin:
+			where_clause.append(self.get_lineage_condition(*exclude_lin, negate=True))
+			where_vals.extend(exclude_lin)
+
+		# zip
+		if include_zip:
+			where_clause.append(self.get_zip_condition(*include_zip))
+		if exclude_zip:
+			where_clause.append(self.get_zip_condition(*exclude_zip, negate=True))
+
+		# date
+		if include_dates:
+			where_clause.append(self.get_date_condition(*include_dates))
+		if exclude_dates:
+			where_clause.extend(self.get_date_condition(*exclude_dates, negate=True))
+
+		# profiles
+		if include_profiles:
+			profile_clause = []
+			for profile in include_profiles:
+				if not profile['dna'] and not profile['aa']:
+					continue
+				profile_clause.append([])
+				if len(profile['dna']) > 0:
+					profile_clause[-1].append(self.get_dna_profile_condition(*profile['dna']))
+				if len(profile['aa']) > 0:
+					profile_clause[-1].append(self.get_aa_profile_condition(*profile['aa']))
+				if len(profile_clause[-1]) > 1:
+					profile_clause[-1] = "(" + " AND ".join(profile_clause[-1]) + ")"
+				else:
+					profile_clause[-1] = profile_clause[-1][0]
+				if len(profile_clause) > 1:
+					where_clause.append("(" + " OR ".join(profile_clause) + ")")
+				else:
+					where_clause.append(profile_clause[0])
+
+		if exclude_profiles:
+			profile_clause = []
+			for profile in exclude_profiles:
+				if not profile['dna'] and not profile['aa']:
+					continue
+				profile_clause.append([])
+				if profile['dna']:
+					profile_clause[-1].append(self.get_dna_profile_condition(*profile['dna'], negate=True))
+				if profile['aa']:
+					profile_clause[-1].append(self.get_aa_profile_condition(*profile['aa'], negate=True))
+				if len(profile_clause[-1]) > 1:
+					profile_clause[-1] = "(" + " AND ".join(profile_clause) + ")"
+				else:
+					profile_clause[-1] = profile_clause[-1][0]
+				if len(profile_clause) > 1:
+					where_clause.append("(" + " OR ".join(profile_clause) + ")")
+				else:
+					where_clause.append(profile_clause[0])
+
+		if where_clause:
+			sql =  "SELECT * FROM essence WHERE " + " AND ".join(where_clause) + ";"
 		else:
-			whereVals = []
-		if orderby:
-			sql += " ORDER BY " + orderby
-		if print_sql:
-			print(sql)
-		self.cursor.execute(sql, whereVals)
-		if fetchone:
-			return self.cursor.fetchone()
-		return self.cursor.fetchall()
+			sql = "SELECT * FROM essence;"
 
-	def delete(self, table, whereClause=None, whereVals=None, print_sql=False):
-		"""
-		generic function to perform a DELETE request on the SONAR database.
+		return self.cursor.execute(sql, where_vals).fetchall()
 
-		Parameters
-		----------
-		table : str
-			define table to delete data from
-		whereClause : str
-			define a where expression for conditional deletions. The expression has
-			not to be introduced by 'where'. The actual values will be inserted
-			syntax-safely and, thus, have to be replaced by ? within the clause
-			(e.g. 'accession = ?'). [ None ]
-		whereVals : list
-			list of ordered values to be inserted into the whereClause. [ None ]
-		print_sql : bool
-			define if assembled query should be printed on screen
-			(e.g. for debugging) [ False ]
-		"""
-		sql = "DELETE FROM " + table
-		if whereClause:
-			sql += " WHERE " + whereClause
-		else:
-			whereVals = []
-		if print_sql:
-			print(sql)
-		self.cursor.execute(sql, whereVals)
+	# UPDATE DATA
 
-	def insert(self, table, fieldList, valList, ignore=False, print_sql=False):
-		"""
-		generic function to perform an INSERT request on the SONAR database.
+	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, gisaid = None, ena = None, collection = None, source = None, lab = None):
+		expr = []
+		vals = []
+		if description is not None:
+			expr.append("description")
+			vals.append(description)
+		if lineage is not None:
+			expr.append("lineage")
+			vals.append(lineage)
+		if zip is not None:
+			expr.append("zip")
+			vals.append(zip)
+		if gisaid is not None:
+			expr.append("gisaid")
+			vals.append(gisaid)
+		if date is not None:
+			expr.append("date")
+			vals.append(date)
+		if ena is not None:
+			expr.append("ena")
+			vals.append(ena)
+		if collection is not None:
+			expr.append("collection")
+			vals.append(collection)
+		if source is not None:
+			expr.append("source")
+			vals.append(source)
+		if lab is not None:
+			expr.append("lab")
+			vals.append(lab)
+		vals.append(acc)
+		setexpr = ", ".join([x + " = ?" for x in expr])
+		sql = "UPDATE genome SET "+ setexpr + " WHERE accession = ?;"
+		self.cursor.execute(sql, vals)
 
-		Parameters
-		----------
-		table : str
-			define table to insert data to
-		fieldList : list
-			define a list of field names into which the data should be inserted
-		valList : list
-			define a list of values to be inserted. The values will be inserted
-			in the same order as they appear and the field names have been defined
-			in fieldList.
-		ignore : bool
-			define if INSERT can be ignored [ False ]
-		print_sql : bool
-			define if assembled query should be printed on screen
-			(e.g. for debugging) [ False ]
-
-		Returns
-		-------
-		int
-			id of modified row
-		"""
-		ignore = "" if not ignore else "OR IGNORE "
-		sql = "INSERT " + ignore + "INTO " + table + "(" + ", ".join(fieldList) + ") VALUES (" + ", ".join(['?']*len(valList)) + ")"
-		if print_sql:
-			print(sql)
-		self.cursor.execute(sql, valList)
-		if self.cursor.lastrowid:
-			return self.cursor.lastrowid
-		where = " AND ".join([x + "= ?" for x in fieldList])
-		rowid = self.select(table, ['rowid'], where, valList)[0]['rowid']
-		return rowid
-
-	def update(self, table, fieldList, valList, whereClause, whereVals, print_sql=False):
-		"""
-		generic function to perform an UPDATE query on the SONAR database.
-
-		Parameters
-		----------
-		table : str
-			define table to select data from
-		fieldList : list
-			define a list of field names to be updated
-		valList : list
-			define a list of values to be inserted. The values will be inserted
-			in the same order as they appear and the field names have been defined
-			in fieldList.
-		whereClause : str
-			define a where expression. The expression has
-			not to be introduced by 'where'. The actual values will be inserted
-			syntax-safely and, thus, have to be replaced by ? within the clause
-			(e.g. 'accession = ?').
-		whereVals : list
-			list of ordered values to be inserted into the whereClause.
-		orderby : str
-			define an 'order by' expression to order results [ None ]
-		fetchone : bool
-			define wether only one (set True) or all (set False) rows should be
-			returned. [ False ]
-		print_sql : bool
-			define if assembled query should be printed on screen
-			(e.g. for debugging) [ False ]
-		"""
-		sql = "UPDATE " + table + " SET " + ", ".join([ str(x) + "= ?" for x in fieldList ]) + " WHERE " + whereClause
-		if print_sql:
-			print(sql)
-		self.cursor.execute(sql, valList + whereVals)
+	# MISC
 
 	@staticmethod
 	def optimize(dbfile):
@@ -1374,6 +1501,7 @@ class sonarDB(object):
 		self.__dna_var_regex = None
 		self.__aa_var_regex = None
 		self.__del_regex = None
+		self.__codedict = None
 		self.dnavar_regex = re.compile("^([^0-9]*)([0-9]+)([^0-9]*)$")
 
 	# PROPERTIES ON DEMAND
@@ -1381,8 +1509,8 @@ class sonarDB(object):
 	@property
 	def refseq(self):
 		if not self.__refseq:
-			with open(self.reffna, "r") as handle:
-				self.__refseq = "".join([x.strip().upper() for x in handle.readlines()[1:]])
+			record = SeqIO.read(self.reffna, "fasta")
+			self.__refseq = self.harmonize(record.seq)
 		return self.__refseq
 
 	@property
@@ -1459,6 +1587,24 @@ class sonarDB(object):
  			self.__iupac_ambig_aa_code = set([ x for x in self.iupac_aa_code if len(self.iupac_aa_code[x]) > 1 ])
 		return self.__iupac_ambig_aa_code
 
+	@property
+	def codedict(self):
+		if self.__codedict is None:
+ 			self.__codedict = {
+							   "dna": {
+										"field": "dna_profile",
+										"code": self.iupac_nt_code,
+										"explicit_code": self.iupac_explicit_nt_code
+									  },
+								"aa": {
+										"field": "aa_profile",
+										"code": self.iupac_aa_code,
+										"explicit_code": self.iupac_explicit_aa_code
+								}
+							  }
+
+		return self.__codedict
+
 	# DATA IMPORT
 
 	@staticmethod
@@ -1479,6 +1625,24 @@ class sonarDB(object):
 
 		"""
 		return seguid(seq)
+
+	@staticmethod
+	def harmonize(seq):
+		"""
+		static function to return a sequence in upper case format and with T instead of U
+
+		Parameters
+		----------
+		seq : str
+			define a sequence to harmonize
+
+		Returns
+		-------
+		str
+			sequence
+
+		"""
+		return str(seq).upper().replace("U", "T")
 
 	def multi_process_fasta_wrapper(self, args):
 		"""
@@ -1517,18 +1681,19 @@ class sonarDB(object):
 			to the database) while True means genome was successfully added.
 
 		"""
-		fname, algnfile, cache, seqhash, timeout = args
+		fname, algnfile, picklefile, seqhash, timeout = args
 		try:
 			with sonarTimeout(seconds=timeout):
-				self.process_fasta(fname, algnfile, cache)
+				self.process_fasta(fname, algnfile, picklefile)
 		except TimeoutError:
 			return False, seqhash
 		else:
 			return True, seqhash
 
-	def process_fasta(self, fname, algnfile=None, cache=None):
+	def process_fasta(self, fname, algnfile=None, pickle_file=None):
 		"""
-		function to add a genome sequence from a single FASTA file. The FASTA
+		function to process a genome sequence from a single FASTA file, if
+		the respective sequence is not in the database. The FASTA
 		file has to contain exactly one record.
 
 		Example
@@ -1541,13 +1706,13 @@ class sonarDB(object):
 		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
 		>>> data = db.process_fasta(QRY_FASTA_FILE)
-		>>> data[0]
+		>>> data['acc']
 		'b117'
-		>>> data[1]
+		>>> data['descr']
 		'b117 Ideal severe acute respiratory syndrome coronavirus 2 lineage B.1.1.7, complete genome'
-		>>> data[5]
+		>>> data['dna_profile']
 		'C3267T C5388A T6954C del:11288:9 del:21765:6 del:21991:3 A23063T C23271A C23604A C23709T T24506G G24914C C27972T G28048T A28111G G28280C A28281T T28282A C28977T'
-		>>> data[6]
+		>>> data['prot_profile']
 		'ORF1a:T1001I ORF1a:A1708D ORF1a:I2230T ORF1a:del:3675:3 ORF1ab:T1001I ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:3 S:del:68:3 S:del:143:2 S:N501Y S:A570D S:P681H S:T716I S:S982A S:D1118H ORF8:Q27* ORF8:R52I ORF8:Y73C N:D3L N:S235F'
 
 		Parameters
@@ -1559,52 +1724,50 @@ class sonarDB(object):
 			define a filename to permanently store the sequence alignment. Please
 			consider, that an existing file will be overwritten. If None, a
 			temporary file will be created and deleted after processing.
-		cache : str
-			define a cache file (pickle format) that is used to permanently store
-			processed data. Please consider, that an existing file will be
-			overwritten. IfNone, a temporary file will be created and deleted after
-			processing.
+		pickle_file : str
+			define a filname to store the dictionary in pickle format instead of
+			returning it.  Please consider, that an existing file will be
+			overwritten. [ None ]
+		allow_update : bool
+			if true, known
 
 		Returns
 		-------
-		list
-			a list is returned only if data is not stored i a cache file. If cache
-			is None a list is returned consisting of:
-				- accession of processed genome
-				- FASTA header of processed genome
-				- a sub list of nucleotide level variations (see sonarALIGN.dnadiff)
-				- a sub list of amino acid level variations (see sonarALIGN.aadiff)
-				- the formatted nucleotide level profile (see sonarDB.build_profile)
-				- the formatted amino acid level profile (see sonarDB.build_profile)
-				- the complete sequence of the processed genome
-
+		dictionary
+			a dictionary is returned. The dictionary has following keys and values
+			(None if present in the database) and can be directly used as kwargs for the import_genome function of this class:
+				- acc: accession of processed genome
+				- descr: FASTA header of processed genome
+				- dnadiff: a sub list of nucleotide level variations (see sonarALIGN.dnadiff)
+				- aadiff: a sub list of amino acid level variations (see sonarALIGN.aadiff)
+				- dna_profile: the formatted nucleotide level profile (see sonarDB.build_profile)
+				- prot_profile: the formatted amino acid level profile (see sonarDB.build_profile)
 		"""
-		with sonarDBManager(self.db, readonly=True) as dbm:
-			record = SeqIO.read(fname, "fasta")
-			acc = record.id
-			descr = record.description
-			seq = str(record.seq.upper())
-			seqhash = self.hash(seq)
-			if not self.seq_exists(seqhash, dbm):
-				alignment = sonarALIGN(fname, self.reffna, algnfile, self.refgffObj)
-				dnadiff = alignment.dnadiff
-				aadiff = alignment.aadiff
-				dna_profile = self.build_profile(*dnadiff)
-				prot_profile = self.build_profile(*aadiff)
-			else:
-				alignment = None
-				dnadiff = None
-				aadiff = None
-				dna_profile = None
-				prot_profile = None
+		record = SeqIO.read(fname, "fasta")
+		seq = self.harmonize(record.seq)
+		seqhash = self.hash(seq)
+		data = {
+			'acc': record.id,
+			'descr': record.description,
+			'seqhash': seqhash
+		}
 
-		if cache is None:
-			return [acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq]
+		alignment = sonarALIGN(fname, self.reffna, algnfile, self.refgffObj)
+		data['dnadiff'] = alignment.dnadiff
+		data['aadiff'] = alignment.aadiff
+		data['dna_profile'] = self.build_profile(*data['dnadiff'])
+		data['prot_profile'] = self.build_profile(*data['aadiff'])
 
-		with open(cache, "wb") as handle:
-			pickle.dump([acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile], handle)
+		if pickle_file:
+			with open(pickle_file, "wb") as handle:
+				pickle.dump(data, handle)
+			return
 
-	def import_genome_from_fasta(self, *fnames, msg=None):
+		data['seq'] = seq
+		return data
+
+
+	def import_genome_from_fasta_files(self, *fnames, msg=None):
 		"""
 		function to import genome sequence(s) from given FASTA file(s) to the
 		SONAR database. Each FASTA file has to contain exactly one record.
@@ -1618,7 +1781,7 @@ class sonarDB(object):
 
 		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
-		>>> db.import_genome_from_fasta(QRY_FASTA_FILE)
+		>>> db.import_genome_from_fasta_files(QRY_FASTA_FILE)
 
 		Parameters
 		----------
@@ -1627,7 +1790,7 @@ class sonarDB(object):
 			exactly one genome record
 		msg : str
 			define a message used for the progress bar. If None, no progress
-			bar is shown [ None ]
+			bar is shown. [ None ]
 		"""
 		if not msg is None:
 			rng = tqdm(range(len(fnames)), desc = msg)
@@ -1636,46 +1799,10 @@ class sonarDB(object):
 
 		with sonarDBManager(self.db) as dbm:
 			for i in rng:
-				data = self.process_fasta(fnames[i])
-				self.import_genome(*data, dbm=dbm)
+				self.import_genome(**self.process_fasta(fnames[i]))
 
-	def import_genome_from_pickle(self, *fnames, msg=None):
-		"""
-		function to import data from pre-processed pickle files (as created by
-		sonarCACHE) to the SONAR database. Each PICKLE  file has to contain
-		exactly one record.
 
-		Example
-		-------
-		In this example the path to the database is stored in DOCTESTDB.
-		QRY_PICKLE_FILE stores the pre-processed data obtained from a
-		B.1.1.7 protoype genome sequence.
-
-		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
-		>>> db = sonarDB(DOCTESTDB)
-		>>> db.import_genome_from_pickle(QRY_PICKLE_FILE)
-
-		Parameters
-		----------
-		*fnames : str
-			define one or more valid sonarCHACHE PICKLE files. Each file must
-			contain exactly one genome record
-		msg : str
-			define a message used for the progress bar. If None, no progress
-			bar is shown [ None ]
-		"""
-		if not msg is None:
-			rng = tqdm(range(len(fnames)), desc = msg)
-		else:
-			rng = range(len(fnames))
-
-		with sonarDBManager(self.db) as dbm:
-			for i in rng:
-				with open(fnames[i], 'rb') as handle:
-					data = pickle.load(handle, encoding="bytes")
-				self.import_genome(*data, seq=None, dbm=dbm)
-
-	def import_genome_from_cache(self, cachedir, msg=None):
+	def import_genome_from_cache(self, cachedir, acc_dict, msg=None):
 		"""
 		function to import data from a sonarCACHE directory to the SONAR database.
 
@@ -1683,26 +1810,31 @@ class sonarDB(object):
 		----------
 		cachedir : str
 			define a valid sonarCACHE directory
+		acc_dict : dict
+			define a dictionary (key: sequence hash, value: set of assigned accessions)
+			to import to the database
 		msg : str
 			define a message used for the progress bar. If None, no progress
 			bar is shown [ None ]
 		"""
+		seqhashes = list(acc_dict.keys())
+		if not msg is None:
+			rng = tqdm(range(len(seqhashes)), desc = msg)
+		else:
+			rng = range(len(seqhashes))
+
 		with sonarCache(cachedir) as cache:
-			seqhashes = list(cache.cache.keys())
-			if not msg is None:
-				rng = tqdm(range(len(seqhashes)), desc = msg)
-			else:
-				rng = range(len(seqhashes))
+			for i in rng:
+				seqhash = seqhashes[i]
+				seq = cache.get_cached_seq(seqhash)
+				preprocessed_data = cache.load_info(seqhash)
+				for entry in acc_dict[seqhash]:
+					preprocessed_data['acc'] = entry[0]
+					preprocessed_data['descr'] = entry[1]
+					self.import_genome(**preprocessed_data, seq=seq)
 
-			with sonarDBManager(self.db) as dbm:
-				for i in rng:
-					seqhash = seqhashes[i]
-					seq = cache.get_cached_seq(seqhash)
-					preprocessed_data = cache.load_info(seqhash)[2:]
-					for entry in cache.cache[seqhash]:
-						self.import_genome(*entry, *preprocessed_data, seq, dbm=dbm)
 
-	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq, dbm):
+	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq):
 		"""
 		function to import processed data to the SONAR database.
 
@@ -1728,115 +1860,47 @@ class sonarDB(object):
 		dbm : str
 			define a sonarDBManager object to use for database transaction
 		"""
-		if not self.genome_exists(acc, descr, seqhash, dbm):
-			self.insert_genome(acc, descr, seqhash, dbm)
-		if not self.seq_exists(seqhash, dbm):
-			self.insert_sequence(seqhash, dbm)
-			self.insert_profile(seqhash, dna_profile, prot_profile, dbm)
+		with sonarDBManager(self.db) as dbm:
+			dbm.insert_genome(acc, descr, seqhash)
+			dbm.seq_exists(seqhash)
+			dbm.insert_sequence(seqhash)
+			dbm.insert_profile(seqhash, dna_profile, prot_profile)
 			for ref, alt, s, e, _, __ in dnadiff:
-				varid = self.get_dna_varid(ref, alt, s, e, dbm)
-				if varid is None:
-					varid = self.insert_dna_var(ref, alt, s, e, dbm)
-					self.insert_sequence2dna(seqhash, varid, dbm)
+				dbm.insert_dna_var(seqhash, ref, alt, s, e)
 
 			for ref, alt, s, e, protein, locus in aadiff:
-				varid = self.get_prot_varid(protein, locus, ref, alt, s, e, dbm)
-				if varid is None:
-					varid = self.insert_prot_var(protein, locus, ref, alt, s, e, dbm)
-				self.insert_sequence2prot(seqhash, varid, dbm)
+				dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
 
-			if seq:
-				self.be_paranoid(acc, seq, dbm, auto_delete=False)
+		if seq:
+			self.be_paranoid(acc, seq, True)
 
-	def insert_genome(self, acc, descr, seqhash, dbm):
-		return dbm.insert('genome', ['accession', 'description', 'seqhash'], [acc, descr, seqhash])
 
-	def insert_sequence(self, seqhash, dbm):
-		return dbm.insert('sequence', ['seqhash'], [seqhash], ignore=True)
-
-	def insert_profile(self, seqhash, dna_profile, aa_profile, dbm):
-		dna_profile = " " + dna_profile.strip() + " "
-		aa_profile = " " + aa_profile.strip() + " "
-		return dbm.insert('profile', ['seqhash', 'dna_profile', 'aa_profile'], [seqhash, dna_profile, aa_profile], ignore=True)
-
-	def insert_dna_var(self, ref, alt, start, end, dbm):
-		return dbm.insert('dna', ['varid', 'ref', 'alt', 'start', 'end'], [None, ref, alt, start, end], ignore=True)
-
-	def insert_sequence2dna(self, seqhash, varid, dbm):
-		return dbm.insert('sequence2dna', ('seqhash', 'varid'), [seqhash, varid], ignore=True)
-
-	def insert_prot_var(self, protein, locus, ref, alt, start, end, dbm):
-		return dbm.insert('prot', ['varid', 'protein', 'locus', 'ref', 'alt', 'start', 'end'], [None, protein, locus, ref, alt, start, end], ignore=True)
-
-	def insert_sequence2prot(self, seqhash, varid, dbm):
-		return dbm.insert('sequence2prot', ['seqhash', 'varid'], [seqhash, varid], ignore=True)
-
-	# DELETE DATA
-
-	def delete_accession(self, acc, dbm):
-		dbm.delete("genome", whereClause="accession = ?", whereVals=[acc], print_sql=False)
-
-	# DATA SELECTS
-
-	def genome_exists(self, acc, descr, seqhash, dbm):
-		row = self.get_genome_data(acc, dbm=dbm)
-		if not row or (descr is not None and row[0]['description'] != descr) or (seqhash is not None and row[0]['seqhash'] != seqhash):
-			return False
-		return True
-
-	def seq_exists(self, seqhash, dbm):
-		return dbm.select('sequence', fieldList=['COUNT(*)'], whereClause="seqhash = ?", whereVals=[seqhash], orderby=None, fetchone=True, print_sql=False)['COUNT(*)'] > 0
-
-	def get_genome_data(self, *accs, dbm):
-		where = " OR ".join(["accession = ?"] * len(accs))
-		return dbm.select('genome', whereClause=where, whereVals=accs)
-
-	def get_dna_varid(self, ref, alt, start, end, dbm):
-		row = dbm.select('dna', whereClause="ref = ? AND alt = ? AND start = ? and end = ?", whereVals=[ref, alt, start, end], fetchone=True)
-		if row:
-			return row['varid']
-		return None
-
-	def get_prot_varid(self, protein, locus, ref, alt, start, end, dbm):
-		row = dbm.select('prot', whereClause="protein = ? AND locus = ? AND ref = ? AND alt = ? AND start = ? AND end = ?", whereVals=[protein, locus, ref, alt, start, end], fetchone=True)
-		if row:
-			return row['varid']
-		return None
-
-	def get_dna_vars(self, acc, dbm):
-		return dbm.select('dna_view', whereClause="accession = ?", whereVals=[acc], orderby="start DESC")
-
-	def iter_frameshifts(self, dbm):
-		for row in dbm.select('essence'):
-			fs = []
-			for var in row['dna_profile'].strip().split(" "):
-				if self.isdel(var):
-					elems = var.split(":")
-					r = set(range(int(elems[1]) - 1, int(elems[1]) - 1 + int(elems[2])))
-					for cds in self.refgffObj.cds:
-						if cds.strand == "-":
-							sys.exit("error: sorry, frameshift detection does not support minus strand cds yet.")
-						i = r.intersection(cds.range)
-						if i and len(i)%3 != 0:
+	def iter_frameshifts(self):
+		with sonarDBManager(self.db) as dbm:
+			for row in dbm.iter_table('essence'):
+				fs = []
+				for var in row['dna_profile'].strip().split(" "):
+					if self.isdel(var):
+						elems = var.split(":")
+						r = set(range(int(elems[1]) - 1, int(elems[1]) - 1 + int(elems[2])))
+						for cds in self.refgffObj.cds:
+							if cds.strand == "-":
+								sys.exit("error: sorry, frameshift detection does not support minus strand cds yet.")
+							i = r.intersection(cds.range)
+							if i and len(i)%3 != 0:
+								fs.append(var)
+					elif var:
+						match = self.dnavar_regex.search(var)
+						pos = int(match.group(2))-1
+						lref = len(match.group(1))
+						lalt = len(match.group(3))
+						if self.refgffObj.iscds(pos) and lalt > lref and (lalt-lref)%3 != 0:
 							fs.append(var)
-				elif var:
-					match = self.dnavar_regex.search(var)
-					pos = int(match.group(2))-1
-					lref = len(match.group(1))
-					lalt = len(match.group(3))
-					if self.refgffObj.iscds(pos) and lalt > lref and (lalt-lref)%3 != 0:
-						fs.append(var)
-			if fs:
-				del(row['aa_profile'])
-				del(row['dna_profile'])
-				row['frameshift_mutations'] = " ".join(fs)
-				yield row
-
-
-	def iter_table(self, table):
-		sql = dbm.select('dna', whereClause="ref = ? AND alt = ? AND start = ? and end = ?", whereVals=[ref, alt, start, end], fetchone=True)
-		for row in dbm.select(table):
-			yield row
+				if fs:
+					del(row['aa_profile'])
+					del(row['dna_profile'])
+					row['frameshift_mutations'] = " ".join(fs)
+					yield row
 
 	# NOMENCLATURE
 
@@ -2112,7 +2176,7 @@ class sonarDB(object):
 		orig_stat = mutation[:-len(match)]
 		return set([mutation] + [ orig_stat + "".join(x) for x in itertools.product(*options) ])
 
-	def match_builder(self, profile, exclusive=False, negate=False):
+	def extend_profile(self, profile):
 		"""
 		function to build a where clause matching to nucleotide, amino
 		acid or mixed level profiles.
@@ -2136,49 +2200,15 @@ class sonarDB(object):
 			where clause allowing matching of a given variant profile
 		"""
 
-		# configuring
-		condition = " " if not negate else " NOT "
-		config = {
-				   "dna": {
-							"field": "dna_profile",
-					  		"code": self.iupac_nt_code,
-					  		"explicit_code": self.iupac_explicit_nt_code
-						  },
-					"aa": {
-							"field": "aa_profile",
-							"code": self.iupac_aa_code,
-							"explicit_code": self.iupac_explicit_aa_code
-					}
-				  }
-
-		# generating clause
-		clause = []
 		profile = set(profile)
-		dna_profile_length = 1
-		aa_profile_length = 1
+		extended_profile = {'aa': [], 'dna': []}
 		for var in profile:
-			if self.isdnavar(var):
-				dna_profile_length += 1 + len(var)
-				conf = config['dna']
-			else:
-				aa_profile_length += 1 + len(var)
-				conf = config['aa']
-			for v in self.pinpoint_mutation(var, conf['code']):
-				clause.append(conf['field'] + condition + "LIKE '% " + v + " %'")
+			key = "dna" if self.isdnavar(var) else "aa"
+			extended_profile[key].extend([v for v in self.pinpoint_mutation(var, self.codedict[key]['code'])])
+		return extended_profile
 
-		clause = " AND ".join(clause)
 
-		# add exclusiveness condition not allowing additional mutations
-		if exclusive:
-			if dna_profile_length > 1 and aa_profile_length > 1:
-				sys.exit("input error: exclusive profiles must be defined on dna OR protein level only.")
-			if dna_profile_length > 0:
-				clause += " AND length(" + conf['field'] + ") = " + str(dna_profile_length)
-			elif aa_profile_length > 0:
-				clause += " AND length(" + conf['field'] + ") = " + str(aa_profile_length)
-		return clause
-
-	def match(self, include_profiles=None, exclude_profiles=None, accessions=None, lineages=None, zips=None, dates=None, exclusive=False, ambig=False, print_sql=False):
+	def match(self, include_profiles=[], exclude_profiles=[], accessions=[], lineages=[], zips=[], dates=[], ambig=False, count=False):
 		"""
 		function to match genomes in the SONAR database
 
@@ -2211,15 +2241,9 @@ class sonarDB(object):
 			define list of dates (YYYY-MM-DD) or date ranges (YYYY-MM-DD:YYYY-MM-DD).
 			Only genomes linked to one of the given dates or date ranges are
 			matched.
-		exclusive : bool
-			define if additional variations are allowed for the matched genomes (False)
-			or not (True) [ False ]
 		ambig : bool
 			define if variations including ambiguities should be filtered (True)
 			from teh profiles shown or not (False) [ False ]
-		print_sql : bool
-			define if the assembled SQLite query should be shown on screen (for
-			debugging) [ False ]
 
 		Returns
 		-------
@@ -2244,76 +2268,41 @@ class sonarDB(object):
 
 		# adding conditions of profiles to include to where clause
 		if include_profiles:
-			includes = []
-			for profile in include_profiles:
-				includes.append(self.match_builder(profile, exclusive=exclusive, negate=False))
-			if len(includes) > 1:
-				includes = [ "(" + x + ")" if " AND " in x else x for x in includes ]
-			clause.append(" OR ".join(includes))
-			if len(includes) > 1:
-				clause[-1] = "(" + clause[-1] + ")"
+			include_profiles = [ self.extend_profile(x) for x in include_profiles ]
 
 		# adding conditions of profiles to exclude to where clause
 		if exclude_profiles:
-			excludes = []
-			for profile in exclude_profiles:
-				excludes.append(self.match_builder(profile, exclusive=exclusive, negate=True))
-			excludes = [ "(" + x + ")" if " AND " in x else x for x in excludes ]
-			clause.append(" AND ".join(excludes))
+			exclude_profiles = [ self.extend_profile(x) for x in exclude_profiles ]
 
 		# adding accession, lineage, zips, and dates based conditions
-		if accessions:
-			include_acc = [x for x in accessions if not x.startswith("^")]
-			exclude_acc = [x[1:] for x in accessions if x.startswith("^")]
-			if include_acc:
-				clause.append("accession IN (" + " , ".join(['?'] * len(include_acc)) + ")")
-				vals.extend(include_acc)
-			if exclude_acc:
-				clause.append("accession NOT IN (" + " , ".join(['?'] * len(exclude_acc)) + ")")
-				vals.extend(exclude_acc)
-		if lineages:
-			include_lin = [x for x in lineages if not x.startswith("^")]
-			exclude_lin = [x[1:] for x in lineages if x.startswith("^")]
-			if include_lin:
-				clause.append("lineage IN (" + " ,".join(['?'] * len(include_lin))  + ")")
-				vals.extend(include_lin)
-			if exclude_lin:
-				clause.append("lineage NOT IN (" + " ,".join(['?'] * len(exclude_lin))  + ")")
-				vals.extend(exclude_lin)
-		if zips:
-			include_zip = [x for x in zips if not str(x).startswith("^")]
-			exclude_zip = [x[1:] for x in zips if str(x).startswith("^")]
-			if include_zip:
-				z = []
-				for zp in include_zip:
-					z.append("zip LIKE '" + str(zp) + "%'")
-				clause.append(" OR ".join(z))
-				if len(z) > 1:
-					clause[-1] = "(" + clause[-1] + ")"
-			if exclude_zip:
-				z = []
-				for zp in exclude_zip:
-					z.append("zip NOT LIKE '" + str(zp) + "%'")
-				clause.append(" AND ".join(z))
-		if dates:
-			d = []
-			for dt in dates:
-				if ":" in dt:
-					x, y = dt.split(":")
-					d.append("(date BETWEEN '" + x + "' AND '" + y + "')")
-				else:
-					d.append("date = " + dt)
-			clause.append(" OR ".join(d))
-			if len(d) > 1:
-				clause[-1] = "(" + clause[-1] + ")"
+		include_acc = [x for x in accessions if not x.startswith("^")]
+		exclude_acc = [x[1:] for x in accessions if x.startswith("^")]
 
-		# executing the query and storing results
-		clause = " AND ".join(clause)
+		include_lin = [x for x in lineages if not x.startswith("^")]
+		exclude_lin = [x[1:] for x in lineages if x.startswith("^")]
+
+		include_zip = [x for x in zips if not str(x).startswith("^")]
+		exclude_zip = [x[1:] for x in zips if str(x).startswith("^")]
+
+		include_dates = [x for x in dates if not str(x).startswith("^")]
+		exclude_dates = [x[1:] for x in dates if str(x).startswith("^")]
+
+		# query
 		with sonarDBManager(self.db, readonly=True) as dbm:
-			rows = [x for x in dbm.select("essence", whereClause=clause, whereVals=vals, print_sql=print_sql)]
+			rows = dbm.match(
+					  include_profiles,
+					  exclude_profiles,
+					  include_acc,
+					  exclude_acc,
+					  include_lin,
+					  exclude_lin,
+					  include_zip,
+					  exclude_zip,
+					  include_dates,
+					  exclude_dates)
 
 		# remove ambiguities from database profiles if wished
-		if not ambig:
+		if not ambig and not count:
 			keep = [item for sublist in include_profiles for item in sublist] if include_profiles else None
 			for i in range(len(rows)):
 				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code, keep)
@@ -2322,7 +2311,7 @@ class sonarDB(object):
 
 	# VALIDATION
 
-	def restore_genome_using_dnavars(self, acc, dbm):
+	def restore_genome_using_dnavars(self, acc):
 		"""
 		function to restore a genome sequence from the SONAR database using dna variation table
 
@@ -2348,23 +2337,30 @@ class sonarDB(object):
 			None is returned if the given accession does not exist in the
 			database.
 		"""
-		rows = self.get_dna_vars(acc, dbm)
-		if rows:
-			prefix = ""
-			qryseq = list(self.refseq)
-			for row in rows:
-				if row['start'] is not None:
+		with sonarDBManager(self.db, readonly=True) as dbm:
+			rows = dbm.get_dna_vars(acc)
+			if rows:
+				prefix = ""
+				qryseq = list(self.refseq)
+				for row in rows:
+					if row['start'] is None:
+						continue
 					s = row['start']
 					if s >= 0:
 						if row['ref'] != self.refseq[s]:
-							sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + refseq[s] + ").")
-						qryseq[s] = "" if not row['alt'] else row['alt']
+							sys.exit("data error: data inconsistency found for '" + acc + "' (" + row['ref']+ " expected at position " + str(s+1) + " of the reference sequence, got " + self.refseq[s] + ").")
+						qryseq[s] = row['alt']
 					else:
 						prefix = row['alt']
-			return (">" + rows[0]['description'], prefix + "".join(qryseq))
-		return None
+				return ">" + rows[0]['description'], prefix + "".join(qryseq)
+			else:
+				return None
+				rows = dbm.get_genomes(acc)
+				if rows is None:
+					sys.exit("error: " + acc + " not found.")
+				return ">" + rows['description'], self.refseq
 
-	def restore_genome_using_dnaprofile(self, acc, dbm):
+	def restore_genome_using_dnaprofile(self, acc):
 		"""
 		function to restore a genome sequence from the SONAR database using dna level profiles
 
@@ -2390,32 +2386,37 @@ class sonarDB(object):
 			None is returned if the given accession does not exist in the
 			database.
 		"""
-		row = dbm.select('essence', whereClause="accession = ?", whereVals=[acc], fetchone=True)
-		if row:
-			qryseq = list(self.refseq)
-			prefix = ""
-			for var in row['dna_profile'].strip().split(" "):
-				if var.startswith("del:"):
-					var = var.split(":")
-					s = int(var[1])-1
-					e = s + int(var[2])
-					for i in range(s, e):
-						qryseq[i] = ""
-				elif var:
-					match = self.dnavar_regex.search(var)
-					pos = int(match.group(2))-1
-					ref = match.group(1)
-					alt = match.group(3)
-					if pos >= 0 and ref != self.refseq[pos]:
-						sys.exit("data error: data inconsistency found for '" + acc + "' (" + ref+ " expected at position " + str(pos+1) + " of the reference sequence, got " + refseq[pos] + ").")
-					if pos == -1:
-						prefix = alt
-					else:
-						qryseq[pos] = alt
-			return (">" + row['description'], prefix + "".join(qryseq))
-		return None
+		with sonarDBManager(self.db, readonly=True) as dbm:
+			profile = dbm.get_dna_profile(acc)
+			if profile:
+				qryseq = list(self.refseq)
+				prefix = ""
+				for var in profile.strip().split(" "):
+					if var.startswith("del:"):
+						var = var.split(":")
+						s = int(var[1])-1
+						e = s + int(var[2])
+						for i in range(s, e):
+							qryseq[i] = ""
+					elif var:
+						match = self.dnavar_regex.search(var)
+						pos = int(match.group(2))-1
+						ref = match.group(1)
+						alt = match.group(3)
+						if pos >= 0 and ref != self.refseq[pos]:
+							sys.exit("data error: data inconsistency found for '" + acc + "' (" + ref+ " expected at position " + str(pos+1) + " of the reference sequence, got " + self.refseq[pos] + ").")
+						if pos == -1:
+							prefix = alt
+						else:
+							qryseq[pos] = alt
+				return prefix + "".join(qryseq)
+			else:
+				row = dbm.get_genomes(acc)
+				if row is None:
+					sys.exit("error: " + acc + " not found.")
+				return ">" + row['description'], self.refseq
 
-	def restore_alignment(self, acc, dbm):
+	def restore_alignment(self, acc):
 		"""
 		function to restore a genome alignment from the SONAR database
 
@@ -2443,7 +2444,8 @@ class sonarDB(object):
 			None is returned if the given accession does not exist in the
 			database.
 		"""
-		rows = self.get_dna_vars(acc, dbm)
+		with sonarDBManager(self.db, readonly=True) as dbm:
+			row = dbm.get_dna_vars(acc)
 		if rows:
 			refseq = list(self.refseq)
 			qryseq = refseq[:]
@@ -2459,8 +2461,9 @@ class sonarDB(object):
 					else:
 						qryseq = [row['alt']] + qryseq
 						refseq = ["-" * (len(row['alt']))] + refseq
-			return  (">" + rows[0]['description'], "".join(qryseq), ">" + self.dbobj.refdescr, "".join(refseq))
+			return  ">" + rows[0]['description'], "".join(qryseq), ">" + self.dbobj.refdescr, "".join(refseq)
 		return None
+
 
 	def be_paranoid(self, acc, orig_seq, dbm, auto_delete=False):
 		"""
@@ -2487,8 +2490,19 @@ class sonarDB(object):
 			True is returned if expected and restored sequences are not different
 			otherwise False
 		"""
-		orig_seq = orig_seq.upper()
-		s = self.restore_genome_using_dnavars(acc, dbm=dbm)[1]
+		orig_seq = self.harmonize(orig_seq)
+
+		s = self.restore_genome_using_dnavars(acc)[1]
+		if orig_seq != s:
+			if auto_delete:
+				self.delete_accession(acc)
+			for i in range(len(orig_seq)):
+				if orig_seq[i] != s[i]:
+					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
+					break
+			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).")
+
+		s = self.restore_genome_using_dnaprofile(acc)
 		if orig_seq != s:
 			if auto_delete:
 				self.delete_accession(acc, dbm)
@@ -2496,27 +2510,8 @@ class sonarDB(object):
 				if orig_seq[i] != s[i]:
 					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
 					break
-			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).", file=sys.stderr)
-			return False
-		s = self.restore_genome_using_dnaprofile(acc, dbm=dbm)[1]
-		if orig_seq != s:
-			if auto_delete:
-				self.delete_accession(acc, dbm)
-			for i in range(len(orig_seq)):
-				if orig_seq[i] != s[i]:
-					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
-					break
-			print("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 2).", file=sys.stderr)
-			#print(self.restore_genome_using_dnaprofile(acc, dbm=dbm))
-			return False
+			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 2).")
 		return True
-
-	# OTHER
-
-	@staticmethod
-	def get_version():
-		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
-			return handle.read().strip()
 
 class sonarCache():
 	"""
@@ -2560,6 +2555,9 @@ class sonarCache():
 		self.temp = not bool(dir)
 		self._idx = None
 		self.cache = defaultdict(set)
+		self._fasta_ext = ".fasta"
+		self._info_ext = ".info"
+		self._algn_ext = ".algn"
 
 		if self.temp:
 			self.dirname = mkdtemp(prefix=".sonarCache_")
@@ -2584,20 +2582,13 @@ class sonarCache():
 			self._idx = os.path.join(self.dirname, "cache.idx")
 		return self._idx
 
+	@property
+	def accdict(self):
+		cached_acc
+
 	def checkdir(self):
 		if not os.path.isdir(self.dirname):
 			os.makedirs(self.dirname)
-		elif os.listdir(self.dirname):
-			self.restore_cache()
-
-	def restore_cache(self):
-		if not os.path.isfile(self.idx):
-			sys.exit("chache error: index file missing.")
-		self.cache = self.load_idx()
-		for seqhash in self.cache:
-			files = self.get_cache_files(seqhash)
-			if not os.path.isfile(files[0]) or not os.path.isfile(files[2]) :
-				sys.exit("cache error: cache is corrupted.")
 
 	@staticmethod
 	def slugify(string):
@@ -2625,8 +2616,8 @@ class sonarCache():
 		return base64.urlsafe_b64decode(string).decode("utf-8")
 
 	@staticmethod
-	def seqhash_from_fasta_name(fname):
-		return sonarCache.deslugify(os.path.basename(fname))[:-5]
+	def get_seqhash_from_fasta_name(fname):
+		return sonarCache.deslugify(os.path.basename(fname))[:-len(self._fasta_ext)]
 
 	def iter_fasta(self, fname):
 		"""
@@ -2650,21 +2641,29 @@ class sonarCache():
 		for record in SeqIO.read(fname, "fasta"):
 			yield record.id, record.description, str(record.seq).upper()
 
-	def read_fasta(self, fname):
-		record = SeqIO.read(fname, "fasta")
+	def read_cached_fasta(self, seqhash):
+		record = SeqIO.read(self.get_fasta_fname(seqhash), "fasta")
 		return record.id, record.description[1:], str(record.seq).upper()
 
+	def get_cached_filename(self, seqhash, ext=""):
+		basename = self.slugify(seqhash)
+		return os.path.join(self.dirname, basename[:2], basename + ext)
+
 	def get_fasta_fname(self, seqhash):
-		return os.path.join(self.dirname, self.slugify(seqhash) + ".fasta")
+		return self.get_cached_filename(seqhash, self._fasta_ext)
 
 	def get_algn_fname(self, seqhash):
-		return os.path.join(self.dirname, self.slugify(seqhash) + ".algn")
+		return self.get_cached_filename(seqhash, self._algn_ext)
 
 	def get_info_fname(self, seqhash):
-		return os.path.join(self.dirname, self.slugify(seqhash) + ".pickle")
+		return self.get_cached_filename(seqhash, self._info_ext)
 
-	def get_cache_files(self, seqhash):
-		return self.get_fasta_fname(seqhash), self.get_algn_fname(seqhash), self.get_info_fname(seqhash)
+	def prep_cached_files(self, seqhash):
+		fasta = self.get_fasta_fname(seqhash)
+		algn = self.get_algn_fname(seqhash)
+		info = self.get_info_fname(seqhash)
+		os.makedirs(os.path.dirname(fasta), exist_ok=True)
+		return fasta, algn, info
 
 	def load_info(self, seqhash):
 		with open(self.get_info_fname(seqhash), 'rb') as handle:
@@ -2684,7 +2683,14 @@ class sonarCache():
 		with open(self.idx, 'wb') as handle:
 			pickle.dump(self.cache, handle)
 
-	def add_fasta(self, fname):
+	def get_acc_dict(self):
+		accdict = {}
+		for seqhash, accset in self.cache.items():
+			for acc, descr in accset:
+				accdict[acc] = seqhash
+		return accdict
+
+	def add_seq(self, seqhash, seq):
 		"""
 		function to cache genomes from a valid FASTA file
 
@@ -2694,32 +2700,14 @@ class sonarCache():
 		fname : str
 			define the path to a valid FASTA file
 		"""
-		for record in SeqIO.parse(fname, "fasta"):
-			acc = record.id
-			descr = record.description
-			seq = str(record.seq).upper()
-			seqhash = sonarDB.hash(seq)
-			fasta, align, info = self.get_cache_files(seqhash)
+		fasta, align, info = self.prep_cached_files(seqhash)
 
-			#check or create cached fasta file
-			if os.path.isfile(fasta):
-				if seq != self.get_cached_seq(seqhash):
-					sys.exit("cache error: sequence collision for hash '" + seqhash + "'.")
-			else:
-				with open(fasta, "w") as handle:
-					handle.write(">" + seqhash + os.linesep + seq)
-
-			# check for accession collision
-			entry = (acc, descr)
-			found_seqhashes = []
-			for key in self.cache:
-				if acc in [x[0] for x in self.cache[key]]:
-					found_seqhashes.append(key)
-			if found_seqhashes:
-				if len(found_seqhashes) > 1 or found_seqhashes[0] != seqhash:
-					sys.exit("cache error: accession collision for '" + acc + "'.")
-			else:
-				self.cache[seqhash].add(entry)
+		# check for sequence hash collision
+		if not os.path.isfile(fasta):
+			with open(fasta, "w") as handle:
+				handle.write(">" + seqhash + os.linesep + seq)
+		elif seq != self.read_cached_fasta(seqhash)[2]:
+			sys.exit("cache error: sequence hash collision for hash '" + seqhash + "'.")
 
 	def get_cached_seqhashes(self):
 		return set(self.cache.keys())
@@ -2729,12 +2717,12 @@ class sonarCache():
 			yield self.get_fasta_fname(x)
 
 	def get_cached_seq(self, seqhash):
-		return self.read_fasta(self.get_fasta_fname(seqhash))[-1]
+		return self.read_cached_fasta(seqhash)[-1]
 
 if __name__ == "__main__":
 	import doctest
 	global DOCTESTDIR, DOCTESTDB, QRY_FASTA_FILE, REF_FASTA_FILE
-	print("sonarDB", sonarDB.get_version())
+	print("sonarDB", get_version())
 	print("performing unit tests ...")
 	with TemporaryDirectory() as tmpdirname:
 		this_path = os.path.dirname(os.path.realpath(__file__))

@@ -41,17 +41,16 @@ def parse_args():
 	parser_add_input.add_argument('-d', '--dir', metavar="DIR", help="add all fasta files (ending with \".fasta\" or \".fna\") from a given directory or directories", type=str, nargs="+", default=None)
 	parser_add.add_argument('-c', '--cache', metavar="DIR", help="use (and restore data from) a given cache (if not set, a temporary cache is used and deleted after import)", type=str, default=None)
 	parser_add.add_argument('-t', '--timeout', metavar="INT", help="timout for aligning sequences in seconds (default: 600)", type=int, default=600)
-	#parser_add.add_argument('--paranoid', help="activate checks on seguid sequence collisions", action="store_true")
+	parser_add.add_argument('--force', help="force updating of accessions if description or sequence has changed", action="store_true")
 
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
-	parser_match.add_argument('--include', '-i', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=None)
-	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=None)
-	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=None)
-	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=None)
-	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=int,  nargs="+", default=None)
-	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str)
-	parser_match.add_argument('--exclusive', help="do not allow additional mutations", action="store_true")
+	parser_match.add_argument('--include', '-i', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=[])
+	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=[])
+	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
+	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
 	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
@@ -93,10 +92,10 @@ class sonar():
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 
-	def add(self, fnames=None, cachedir=None, cpus=1, timeout=600):
+	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True):
 		'''
-		Adds genome sequence(s) from the given FASTA file(s) to the database.
-		If dir is not defined, a temporary directory will be used as cache.
+		Adds genome sequence(s) from given FASTA file(s) to the database.
+		If cachedir is not defined, a temporary directory will be used as cache.
 		'''
 
 		# create db if necessary
@@ -108,64 +107,78 @@ class sonar():
 		with sonardb.sonarCache(cachedir) as cache:
 
 			# add fasta files to cache
-			if fnames:
-				step += 1
-				msg = "[step " + str(step) + "] caching ...   "
+			step += 1
+			msg = "[step " + str(step) + "] caching ...   "
+			to_process = []
+			to_import = defaultdict(set)
+			with sonardb.sonarDBManager(self.dbfile) as dbm:
 				for i in tqdm(range(len(fnames)), desc = msg):
-					cache.add_fasta(fnames[i])
+					for record in SeqIO.parse(fnames[i], "fasta"):
+						acc = record.id
+						descr = record.description
+						seq = self.db.harmonize(record.seq)
+						seqhash = self.db.hash(seq)
+						genome_data = dbm.get_genomes(acc)
+
+						if genome_data:
+							if genome_data['seqhash'] != seqhash:
+								if not force:
+									sys.exit("database error: " + acc + " exists in the database with a different sequence (use --force to allow updating)")
+								dbm.delete_genome(acc)
+							elif genome_data['description'] != descr:
+								if not force:
+									sys.exit("database error: " + acc + " exists in the database with a different description (use --force to allow updating)")
+								dbm.update_genome(acc, description = descr)
+								continue
+							else:
+								continue
+
+						if seqhash not in to_import and not dbm.seq_exists(seqhash):
+							algn = cache.get_algn_fname(seqhash)
+							fasta = cache.get_fasta_fname(seqhash)
+							info = cache.get_info_fname(seqhash)
+							to_process.append([fasta, algn, info, seqhash, timeout])
+							cache.add_seq(seqhash, seq)
+
+						to_import[seqhash].add((acc, descr))
+
 			step += 1
 			msg = "[step " + str(step) + "] processing ..."
-			new = []
-			with sonardb.sonarDBManager(self.dbfile) as dbm:
-				for seqhash in cache.cache:
-					for acc, descr in cache.cache[seqhash]:
-						if not self.db.genome_exists(acc, descr, seqhash, dbm):
-							this = cache.get_cache_files(seqhash)
-							if not os.path.isfile(this[1]):
-								new.append(list(this) + [seqhash, timeout])
-			if new:
-				pool = Pool(processes=cpus)
-				failed = set()
-				for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, new), total=len(new), desc = msg):
-					if not status:
-						failed.update([x[1] for x in cache.cache[seqhash]])
-						del cache.cache[seqhash]
+			pool = Pool(processes=cpus)
+			failed = set()
+			for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, to_process), total=len(to_process), desc = msg):
+				if not status:
+					failed.update([x[1] for x in cache.cache[seqhash]])
 				if failed:
 					print("timeout warning: following genomes were not added to the database since the respective sequence produced an timeout while aligning:", file=sys.stderr)
 					for f in failed:
 						print(f, file=sys.stderr)
-			else:
-				step -= 1
-
-			cache.write_idx(backup=True)
 
 			step += 1
 			msg = "[step " + str(step) + "] importing ... "
-			data = []
-			seqhashes = list(cache.cache.keys())
-			self.db.import_genome_from_cache(cache.dirname, msg=msg)
+			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg)
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig, count=False, show_frame_shifts_only=False):
-		rows = self.db.match(include_profiles, exclude_profiles, accessions, lineages, zips, dates, exclusive, ambig)
+	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, ambig, count=False, show_frame_shifts_only=False):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, ambig=ambig)
 		if count:
 			print(len(rows))
 		else:
 			self.rows_to_csv(rows, na="*** no match ***")
 
-	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, sep=",", pangolin=False):
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, sep=",", pangolin=False):
 		updates = defaultdict(dict)
 		if pangolin:
 			with open(fname, "r", encoding='utf-8-sig') as handle:
 				lines = csv.DictReader(handle, delimiter = ',', quoting=csv.QUOTE_MINIMAL)
 				for line in lines:
-					acc = line['Sequence name']
+					acc = line['Sequence name'].split(" ")[0]
 					updates[acc]['lineage'] = line['Lineage']
 		elif accCol:
 			with open(fname, "r") as handle:
 				lines = csv.DictReader(handle, delimiter = sep)
 				for line in lines:
 					acc = line[accCol]
-					if lineageCol and (acc not in updates or 'lineage' not in updates[acc]) :
+					if lineageCol and (acc not in updates or 'lineage' not in updates[acc]):
 						updates[acc]['lineage'] = line[lineageCol]
 					if zipCol:
 						updates[acc]['zip'] = line[zipCol]
@@ -175,13 +188,15 @@ class sonar():
 						updates[acc]['gisaid'] = line[gisaidCol]
 					if enaCol:
 						updates[acc]['ena'] = line[enaCol]
-
+					if collectionCol:
+						updates[acc]['collection'] = line[collectionCol]
+					if sourceCol:
+						updates[acc]['source'] = line[sourceCol]
+					if labCol:
+						updates[acc]['lab'] = line[labCol]
 		with sonardb.sonarDBManager(self.dbfile) as dbm:
 			for acc, update in updates.items():
-				elems = update.items()
-				fieldList = [x[0] for x in elems]
-				valList = [x[1] for x in elems]
-				dbm.update("genome", fieldList, valList, "accession = ?", [acc])
+				dbm.update_genome(acc, **update)
 
 	def restore(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
@@ -208,9 +223,8 @@ class sonar():
 			writer.writeheader()
 			writer.writerows(rows)
 
-
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol"}
+	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "source": "source", "lab": "labCol"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
@@ -235,7 +249,7 @@ if __name__ == "__main__":
 		if not args.file and not args.cache:
 			sys.exit("nothing to add.")
 
-		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, timeout=args.timeout)
+		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout)
 
 	# match
 	if args.tool == "match":
@@ -245,7 +259,7 @@ if __name__ == "__main__":
 			for d in args.date:
 				if not regex.match(d):
 					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.exclusive, args.ambig, args.count)
+		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.ambig, args.count)
 
 	# update
 	if args.tool == "update":
