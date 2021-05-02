@@ -34,8 +34,8 @@ $DIR/sonar.py add --db "$db" -f "$DIR/test/test.fasta"
 $DIR/sonar.py update --db "$db" --pangolin "$DIR/test/test_pangolin.csv"
 $DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv" --fields accession=accessions zip=regions date=dates gisaid=gisaid ena=ena
 $DIR/sonar.py optimize --db "$db"
-$DIR/sonar.py match --db "$db" | (sed -u 1q; sort) > "$out"
 
+$DIR/sonar.py match --db "$db" | (sed -u 1q; sort) > "$out"
 if diff -q $DIR/test/expected.csv "$out"; then
     echo 'match 1 as expected'
 else
@@ -80,7 +80,7 @@ else
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
-$DIR/sonar.py match --zip 177 --db "$db" > "$out"
+$DIR/sonar.py match --zip 0177 --db "$db" > "$out"
 if diff -q $DIR/test/expected2.csv "$out"; then
     echo 'match 6 as expected'
 else
@@ -98,6 +98,9 @@ else
 	  conda env remove -y --name covsonar_ci
 	  exit 1
 fi
+
+echo "database update test"
+$DIR/sonar.py add --db "$db" -f "$DIR/test/test.fasta"
 
 #cleaning
 conda deactivate
