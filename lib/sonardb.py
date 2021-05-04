@@ -1251,10 +1251,14 @@ class sonarDBManager():
 		op = " NOT " if negate else " "
 		return "accession" + op + "IN (" + ", ".join(['?'] * len(accessions)) + ")"
 
-	def get_lineage_condition(self, *accessions, negate=False):
+	def get_lineage_condition(self, *lineages, negate=False):
 		op = " NOT " if negate else " "
-		return "lineage" + op + "IN (" + ", ".join(['?'] * len(accessions)) + ")"
+		return "lineage" + op + "IN (" + ", ".join(['?'] * len(lineages)) + ")"
 
+	def get_lab_condition(self, *labs, negate=False):
+		op = " NOT " if negate else " "
+		return "lab" + op + "IN (" + ", ".join(['?'] * len(labs)) + ")"
+		
 	def get_zip_condition(self, *zips, negate=False):
 		op = " NOT " if negate else " "
 		logic = " AND " if negate else " OR "
@@ -1288,7 +1292,9 @@ class sonarDBManager():
 			  include_zip=[],
 			  exclude_zip=[],
 			  include_dates=[],
-			  exclude_dates=[]):
+			  exclude_dates=[],
+			  include_lab=[],
+			  exclude_lab=[]):
 
 		where_clause = []
 		where_vals = []
@@ -1307,6 +1313,14 @@ class sonarDBManager():
 		if exclude_lin:
 			where_clause.append(self.get_lineage_condition(*exclude_lin, negate=True))
 			where_vals.extend(exclude_lin)
+			
+		# lab
+		if include_lab:
+			where_clause.append(self.get_lab_condition(*include_lab))
+			where_vals.extend(include_lab)
+		if exclude_lab:
+			where_clause.append(self.get_lab_condition(*exclude_lab, negate=True))
+			where_vals.extend(exclude_lab)
 
 		# zip
 		if include_zip:
@@ -2229,7 +2243,7 @@ class sonarDB(object):
 		return extended_profile
 
 
-	def match(self, include_profiles=[], exclude_profiles=[], accessions=[], lineages=[], zips=[], dates=[], ambig=False, count=False):
+	def match(self, include_profiles=[], exclude_profiles=[], accessions=[], lineages=[], zips=[], dates=[], labs = [], ambig=False, count=False):
 		"""
 		function to match genomes in the SONAR database
 
@@ -2308,6 +2322,10 @@ class sonarDB(object):
 		include_dates = [x for x in dates if not str(x).startswith("^")]
 		exclude_dates = [x[1:] for x in dates if str(x).startswith("^")]
 
+		include_labs = [x for x in labs if not str(x).startswith("^")]
+		exclude_labs = [x[1:] for x in labs if str(x).startswith("^")]
+
+
 		# query
 		with sonarDBManager(self.db, readonly=True) as dbm:
 			rows = dbm.match(
@@ -2320,7 +2338,9 @@ class sonarDB(object):
 					  include_zip,
 					  exclude_zip,
 					  include_dates,
-					  exclude_dates)
+					  exclude_dates,
+					  include_labs,
+					  exclude_labs)
 
 		# remove ambiguities from database profiles if wished
 		if not ambig and not count:
