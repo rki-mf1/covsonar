@@ -208,7 +208,7 @@ class sonar():
 
 	def show_frameshift(self, count=False, file=None):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			rows = [x for x in self.db.iter_frameshifts(dbm)]
+			rows = [x for x in self.db.iter_frameshifts()]
 		if count:
 			print(len(rows))
 		else:

@@ -1220,10 +1220,20 @@ class sonarDBManager():
 			return None
 		return row['dna_profile']
 
-	def iter_table(self, table):
+	def count_genomes(self):
+		sql = "SELECT COUNT(*) FROM essence;"
+		row = self.cursor.execute(sql).fetchone()
+		return int(row['COUNT(*)'])
+
+	def iter_table(self, table, batch_size=1000000):
 		sql = "SELECT * FROM " + table + ";"
-		for row in self.cursor.execute(sql, [acc]).fetchall():
-			yield row
+		c = self.cursor.execute(sql)
+		while True:
+			rows = c.fetchmany(batch_size)
+			if not rows:
+				break
+			for row in rows:
+				yield row
 
 	# MATCHING PROFILES
 
@@ -1876,31 +1886,42 @@ class sonarDB(object):
 
 
 	def iter_frameshifts(self):
-		with sonarDBManager(self.db) as dbm:
-			for row in dbm.iter_table('essence'):
-				fs = []
-				for var in row['dna_profile'].strip().split(" "):
-					if self.isdel(var):
-						elems = var.split(":")
-						r = set(range(int(elems[1]) - 1, int(elems[1]) - 1 + int(elems[2])))
-						for cds in self.refgffObj.cds:
-							if cds.strand == "-":
-								sys.exit("error: sorry, frameshift detection does not support minus strand cds yet.")
-							i = r.intersection(cds.range)
-							if i and len(i)%3 != 0:
-								fs.append(var)
-					elif var:
-						match = self.dnavar_regex.search(var)
-						pos = int(match.group(2))-1
-						lref = len(match.group(1))
-						lalt = len(match.group(3))
-						if self.refgffObj.iscds(pos) and lalt > lref and (lalt-lref)%3 != 0:
-							fs.append(var)
-				if fs:
-					del(row['aa_profile'])
-					del(row['dna_profile'])
-					row['frameshift_mutations'] = " ".join(fs)
-					yield row
+		cds = []
+		for ranges in self.refgffObj.ranges.values():
+			this = []
+			for r in ranges:
+				this.extend(list(r))
+			cds.append((len(this), tuple(this), set(this)))
+
+		with sonarDBManager(self.db, readonly=True) as dbm:
+			with tqdm(total=dbm.count_genomes(), desc="screening for frame shifts") as pbar:
+				for row in dbm.iter_table('essence'):
+					fs = []
+					for var in row['dna_profile'].strip().split(" "):
+						if var.startswith("del:"):
+							elems = var.split(":")
+							s = int(elems[1]) - 1
+							e = s + int(elems[2])
+							for l, pos, _ in cds:
+								if (l - len([x for x in pos if x >= s and x < e ]))%3 != 0:
+									fs.append(var)
+									break
+						elif var:
+							match = self.dnavar_regex.search(var)
+							pos = int(match.group(2))-1
+							lref = len(match.group(1))
+							lalt = len(match.group(3))
+							if lalt > lref and (lalt-lref)%3 != 0:
+								for l, _, poss in cds:
+									if pos in poss:
+										fs.append(var)
+										break
+					pbar.update(1)
+					if fs:
+						del(row['aa_profile'])
+						del(row['dna_profile'])
+						row['frameshift_mutations'] = " ".join(fs)
+						yield row
 
 	# NOMENCLATURE
 
