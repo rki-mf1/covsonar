@@ -100,7 +100,7 @@ else
 fi
 
 echo "database update test"
-$DIR/sonar.py add --db "$db" -f "$DIR/test/test.fasta"
+$DIR/sonar.py add --db "$db" -f "$DIR/test/test2.fasta"
 
 #cleaning
 conda deactivate
