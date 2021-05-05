@@ -169,7 +169,7 @@ class sonarCDS(object):
 	----------
 	symbol : str
 		define the symbol of the protein encoded
-		(e.g. ORF1ab)
+		(e.g. ORF1b)
 	start : int
 		define the genomic start coordinate (0-based, inclusive)
 	end : int
@@ -501,7 +501,7 @@ class sonarGFF(object):
 
 		>>> os.chdir(os.path.dirname(os.path.realpath(__file__)))
 		>>> gff = sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
-		>>> gff.coords == {'ORF1a': (265, 13483), 'ORF1ab': (265, 21555), 'S': (21562, 25384), 'ORF3a': (25392, 26220), 'E': (26244, 26472), 'M': (26522, 27191), 'ORF6': (27201, 27387), 'ORF7a': (27393, 27759), 'ORF7b': (27755, 27887), 'ORF8': (27893, 28259),'N': (28273, 29533), 'ORF10': (29557, 29674)}
+		>>> gff.coords == {'ORF1a': (265, 13483), 'ORF1b': (265, 21555), 'S': (21562, 25384), 'ORF3a': (25392, 26220), 'E': (26244, 26472), 'M': (26522, 27191), 'ORF6': (27201, 27387), 'ORF7a': (27393, 27759), 'ORF7b': (27755, 27887), 'ORF8': (27893, 28259),'N': (28273, 29533), 'ORF10': (29557, 29674)}
 		True
 
 		Parameters
@@ -922,12 +922,12 @@ class sonarALIGN(object):
 		>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE, sonarGFFObj=gff)
 		>>> for x in algn.iter_aa_vars():
 		... 	print(x)
-		('T', 'I', 1000, None, 'ORF1ab', 'GU280_gp01')
-		('A', 'D', 1707, None, 'ORF1ab', 'GU280_gp01')
-		('I', 'T', 2229, None, 'ORF1ab', 'GU280_gp01')
-		('S', '', 3674, None, 'ORF1ab', 'GU280_gp01')
-		('G', '', 3675, None, 'ORF1ab', 'GU280_gp01')
-		('F', '', 3676, None, 'ORF1ab', 'GU280_gp01')
+		('T', 'I', 1000, None, 'ORF1b', 'GU280_gp01')
+		('A', 'D', 1707, None, 'ORF1b', 'GU280_gp01')
+		('I', 'T', 2229, None, 'ORF1b', 'GU280_gp01')
+		('S', '', 3674, None, 'ORF1b', 'GU280_gp01')
+		('G', '', 3675, None, 'ORF1b', 'GU280_gp01')
+		('F', '', 3676, None, 'ORF1b', 'GU280_gp01')
 		('T', 'I', 1000, None, 'ORF1a', 'GU280_gp01')
 		('A', 'D', 1707, None, 'ORF1a', 'GU280_gp01')
 		('I', 'T', 2229, None, 'ORF1a', 'GU280_gp01')
@@ -1737,7 +1737,7 @@ class sonarDB(object):
 		>>> data['dna_profile']
 		'C3267T C5388A T6954C del:11288:9 del:21765:6 del:21991:3 A23063T C23271A C23604A C23709T T24506G G24914C C27972T G28048T A28111G G28280C A28281T T28282A C28977T'
 		>>> data['prot_profile']
-		'ORF1a:T1001I ORF1a:A1708D ORF1a:I2230T ORF1a:del:3675:3 ORF1ab:T1001I ORF1ab:A1708D ORF1ab:I2230T ORF1ab:del:3675:3 S:del:68:3 S:del:143:2 S:N501Y S:A570D S:P681H S:T716I S:S982A S:D1118H ORF8:Q27* ORF8:R52I ORF8:Y73C N:D3L N:S235F'
+		'ORF1a:T1001I ORF1a:A1708D ORF1a:I2230T ORF1a:del:3675:3 ORF1b:T1001I ORF1b:A1708D ORF1b:I2230T ORF1b:del:3675:3 S:del:68:3 S:del:143:2 S:N501Y S:A570D S:P681H S:T716I S:S982A S:D1118H ORF8:Q27* ORF8:R52I ORF8:Y73C N:D3L N:S235F'
 
 		Parameters
 		----------
@@ -2008,7 +2008,7 @@ class sonarDB(object):
 		False
 		>>> db.isdel("del:100:18")
 		True
-		>>> db.isdel("ORF1ab:del:5:2")
+		>>> db.isdel("ORF1b:del:5:2")
 		True
 
 		Parameters

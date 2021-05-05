@@ -139,7 +139,7 @@ class sonar():
 							fasta = cache.get_fasta_fname(seqhash)
 							info = cache.get_info_fname(seqhash)
 							to_process.append([fasta, algn, info, seqhash, timeout])
-							cache.add_seq(seqhash, seq)
+						cache.add_seq(seqhash, seq)
 
 						to_import[seqhash].add((acc, descr))
 
