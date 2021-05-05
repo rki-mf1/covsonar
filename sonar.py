@@ -51,7 +51,7 @@ def parse_args():
 	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
 	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
-	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])	
+	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
@@ -134,7 +134,10 @@ class sonar():
 							else:
 								continue
 
-						if seqhash not in to_import and not dbm.seq_exists(seqhash):
+						if dbm.seq_exists(seqhash):
+							cache.prep_cached_files(seqhash)
+							cache.write_info(seqhash)
+						elif seqhash not in to_import:
 							algn = cache.get_algn_fname(seqhash)
 							fasta = cache.get_fasta_fname(seqhash)
 							info = cache.get_info_fname(seqhash)

@@ -1258,7 +1258,7 @@ class sonarDBManager():
 	def get_lab_condition(self, *labs, negate=False):
 		op = " NOT " if negate else " "
 		return "lab" + op + "IN (" + ", ".join(['?'] * len(labs)) + ")"
-		
+
 	def get_zip_condition(self, *zips, negate=False):
 		op = " NOT " if negate else " "
 		logic = " AND " if negate else " OR "
@@ -1313,7 +1313,7 @@ class sonarDBManager():
 		if exclude_lin:
 			where_clause.append(self.get_lineage_condition(*exclude_lin, negate=True))
 			where_vals.extend(exclude_lin)
-			
+
 		# lab
 		if include_lab:
 			where_clause.append(self.get_lab_condition(*include_lab))
@@ -1858,7 +1858,7 @@ class sonarDB(object):
 					self.import_genome(**preprocessed_data, seq=seq)
 
 
-	def import_genome(self, acc, descr, seqhash, dnadiff, aadiff, dna_profile, prot_profile, seq):
+	def import_genome(self, acc, descr, seqhash, dnadiff=None, aadiff=None, dna_profile=None, prot_profile=None, seq=None):
 		"""
 		function to import processed data to the SONAR database.
 
@@ -1886,14 +1886,15 @@ class sonarDB(object):
 		"""
 		with sonarDBManager(self.db) as dbm:
 			dbm.insert_genome(acc, descr, seqhash)
-			dbm.seq_exists(seqhash)
-			dbm.insert_sequence(seqhash)
-			dbm.insert_profile(seqhash, dna_profile, prot_profile)
-			for ref, alt, s, e, _, __ in dnadiff:
-				dbm.insert_dna_var(seqhash, ref, alt, s, e)
 
-			for ref, alt, s, e, protein, locus in aadiff:
-				dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
+			if not dnadiff is None:
+				dbm.insert_sequence(seqhash)
+				dbm.insert_profile(seqhash, dna_profile, prot_profile)
+				for ref, alt, s, e, _, __ in dnadiff:
+					dbm.insert_dna_var(seqhash, ref, alt, s, e)
+
+					for ref, alt, s, e, protein, locus in aadiff:
+						dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
 
 		if seq:
 			self.be_paranoid(acc, seq, True)
@@ -2710,7 +2711,8 @@ class sonarCache():
 		with open(self.get_info_fname(seqhash), 'rb') as handle:
 			return pickle.load(handle, encoding="bytes")
 
-	def write_info(self, seqhash, data):
+	def write_info(self, seqhash, data={}):
+		data['seqhash'] = seqhash
 		with open(self.get_info_fname(seqhash), 'wb') as handle:
 			pickle.dump(data, handle)
 
