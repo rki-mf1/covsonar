@@ -28,10 +28,6 @@ import csv
 from time import sleep
 from contextlib import ExitStack
 
-def get_version():
-	with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
-		return handle.read().strip()
-
 class sonarTimeout():
 	"""
 	this class is a helper class raising a TimeoutError within a defined context
@@ -1162,6 +1158,9 @@ class sonarDBManager():
 		with sqlite3.connect(self.__uri + "?mode=rwc", uri = True) as con:
 			con.executescript(sql)
 
+	def get_db_version(self):
+		return self.cursor.execute('pragma user_version').fetchone()['user_version']
+
 	# INSERTING DATA
 
 	def insert_genome(self, acc, descr, seqhash):
@@ -1256,9 +1255,31 @@ class sonarDBManager():
 		return row['dna_profile']
 
 	def count_genomes(self):
-		sql = "SELECT COUNT(*) FROM essence;"
+		sql = "SELECT COUNT(accession) FROM genome;"
 		row = self.cursor.execute(sql).fetchone()
-		return int(row['COUNT(*)'])
+		return int(row['COUNT(accession)'])
+
+	def count_sequences(self):
+		sql = "SELECT COUNT(seqhash) FROM sequence;"
+		row = self.cursor.execute(sql).fetchone()
+		return int(row['COUNT(seqhash)'])
+
+	def count_labs(self):
+		sql = "SELECT COUNT(DISTINCT lab) FROM genome;"
+		row = self.cursor.execute(sql).fetchone()
+		return int(row['COUNT(DISTINCT lab)'])
+
+	def info_data_types(self):
+		sql = "SELECT source, collection, COUNT(accession) as genome_count FROM genome GROUP BY source, collection ORDER BY source, collection;"
+		return self.cursor.execute(sql).fetchall()
+
+	def get_earliest_import(self):
+		sql = "SELECT MIN(imported) as import FROM genome;"
+		return self.cursor.execute(sql).fetchone()['import']
+
+	def get_latest_import(self):
+		sql = "SELECT MAX(imported) as import FROM genome;"
+		return self.cursor.execute(sql).fetchone()['import']
 
 	def iter_table(self, table, batch_size=1000):
 		sql = "SELECT * FROM " + table + ";"
@@ -1874,7 +1895,7 @@ class sonarDB(object):
 
 		>>> a = os.remove(DOCTESTDB) if os.path.exists(DOCTESTDB) else None
 		>>> db = sonarDB(DOCTESTDB)
-		>>> db.import_genome_from_fasta_files(QRY_FASTA_FILE)
+		>>> db.import_genome_from_fasta_files(QRY_FASTA_FILE, disable_progressbar=True)
 
 		Parameters
 		----------
@@ -2642,6 +2663,11 @@ class sonarDB(object):
 				sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 2).")
 		return True
 
+	@staticmethod
+	def get_version():
+		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
+			return handle.read().strip()
+
 class sonarCache():
 	"""
 	this object manages permanent and temporary file caches
@@ -2852,7 +2878,7 @@ class sonarCache():
 if __name__ == "__main__":
 	import doctest
 	global DOCTESTDIR, DOCTESTDB, QRY_FASTA_FILE, REF_FASTA_FILE
-	print("sonarDB", get_version())
+	print("sonarDB", sonarDB.get_version())
 	print("performing unit tests ...")
 	with TemporaryDirectory() as tmpdirname:
 		this_path = os.path.dirname(os.path.realpath(__file__))

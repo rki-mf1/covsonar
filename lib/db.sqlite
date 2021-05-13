@@ -14,9 +14,10 @@ CREATE TABLE IF NOT EXISTS genome (
 	date TEXT,
 	gisaid VARCHAR(100),
 	ena VARCHAR(100),
-	source VARCHAR(100),
-	collection VARCHAR(100),
-	lab VARCHAR(100),
+	source VARCHAR(100) DEFAULT 'NA',
+	collection VARCHAR(100) DEFAULT 'NA',
+	lab VARCHAR(100) DEFAULT 'NA',
+	imported TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
 ) WITHOUT ROWID;
 

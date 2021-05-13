@@ -9,19 +9,11 @@ import csv
 import argparse
 from lib import sonardb
 from Bio import SeqIO
-import numpy as np
-import tempfile
+from tempfile import mkstemp
 from collections import defaultdict
-import itertools
 import re
 from tqdm import tqdm
-import difflib
-import glob
-from time import sleep
-import shutil
-import traceback
 from multiprocessing import Pool
-import types
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -62,7 +54,6 @@ def parse_args():
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
 	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, nargs = "+", required=True)
-	# parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
 
 	#create the parser for the "view" command
 	parser_view = subparsers.add_parser('view', parents=[general_parser], help='show dna profile.')
@@ -83,6 +74,10 @@ def parse_args():
 	parser_frameshift_out.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_frameshift_out.add_argument('-o', '--out', help="write output to file(please note: the given file will be overwritten).", type=str, default=None)
 
+	# create the parser for the "info" command
+	parser_info= subparsers.add_parser('info', help='show info')
+	parser_info.add_argument('--db', metavar="DB_DIR", help="sonar database directory (optional)", type=str, default=None)
+
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
 
@@ -93,7 +88,7 @@ def parse_args():
 
 class sonar():
 	def __init__(self, db, gff=None):
-		self.dbfile = db
+		self.dbfile = db if db else mkstemp()[1]
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 
@@ -115,6 +110,13 @@ class sonar():
 				print("[step", str(step) + "] restoring ... ")
 
 		with sonardb.sonarCache(cachedir) as cache, sonardb.sonarDBManager(self.dbfile) as dbm:
+			# db status
+			if not quiet:
+				dbstatus ={
+						'genomes': dbm.count_genomes(),
+						'seqs': dbm.count_sequences(),
+						'labs': dbm.count_labs(),
+				}
 
 			# add fasta files to cache
 			step += 1
@@ -178,6 +180,23 @@ class sonar():
 				print(msg)
 			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg, dbm=dbm, disable_progressbar=disable_progressbar)
 
+			# db status
+			if not quiet:
+				new_dbstatus ={
+						'genomes': dbm.count_genomes(),
+						'seqs': dbm.count_sequences(),
+						'labs': dbm.count_labs(),
+				}
+
+				print("number of genomes:")
+				print("\twas:   " + str(dbstatus['genomes']))
+				print("\tnow:   " + str(new_dbstatus['genomes']))
+				print("\tadded: " + str(new_dbstatus['genomes']-dbstatus['genomes']))
+				print("number of unique sequences:")
+				print("\twas:   " + str(dbstatus['seqs']))
+				print("\tnow:   " + str(new_dbstatus['seqs']))
+				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
+
 	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, show_frame_shifts_only=False):
 		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig)
 		if count:
@@ -233,6 +252,28 @@ class sonar():
 		else:
 			self.rows_to_csv(rows, file=file, na="*** no match ***")
 
+	def show_system_info(self):
+		print("sonarDB version:       ", self.db.get_version())
+		print("reference genome:      ", self.db.refdescr)
+		print("reference length:      ", str(len(self.db.refseq)) + "bp")
+		print("annotated proteins:    ", ", ".join(self.db.refgffObj.symbols))
+		print("used translation table:", self.db.translation_table)
+
+	def show_db_info(self):
+		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
+			print("database path:         ", dbm.dbfile)
+			print("database version:      ", dbm.get_db_version())
+			print("database size:         ", self.get_db_size())
+			print("genomes:               ", dbm.count_genomes())
+			print("unique sequences:      ", dbm.count_sequences())
+			print("labs:                  ", dbm.count_labs())
+			print("earliest genome import:", dbm.get_earliest_import())
+			print("latest genome import:  ", dbm.get_latest_import())
+			print()
+			print("source\tcollection\tgenomes")
+			for row in dbm.info_data_types():
+				print( row['source'] + "\t" + row['collection'] + "\t" + str(row['genome_count']))
+
 	def rows_to_csv(self, rows, file=None, na="*** no data ***"):
 		if len(rows) == 0:
 			print(na, file=sys.stderr)
@@ -241,6 +282,14 @@ class sonar():
 			writer = csv.DictWriter(file, rows[0].keys(), lineterminator=os.linesep)
 			writer.writeheader()
 			writer.writerows(rows)
+
+	def get_db_size(self, decimal_places=3):
+		size = os.path.getsize(self.dbfile)
+		for unit in ['B','KiB','MiB','GiB','TiB']:
+			if size < 1024.0:
+				break
+			size /= 1024.0
+		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
 	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "source": "source", "lab": "labCol"}
@@ -307,6 +356,14 @@ if __name__ == "__main__":
 	if args.tool == "frameshift":
 		# sanity check
 		snr.show_frameshift(args.count, args.out)
+
+	# frameshift
+	if args.tool == "info":
+		snr.show_system_info()
+		if args.db:
+			print()
+			snr.show_db_info()
+
 
 	# optimize
 	if args.tool == "optimize":
