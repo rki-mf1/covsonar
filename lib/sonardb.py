@@ -1860,7 +1860,7 @@ class sonarDB(object):
 		return data
 
 
-	def import_genome_from_fasta_files(self, *fnames, dbm=None, msg=None):
+	def import_genome_from_fasta_files(self, *fnames, dbm=None, msg=None, disable_progressbar=False):
 		"""
 		function to import genome sequence(s) from given FASTA file(s) to the
 		SONAR database. Each FASTA file has to contain exactly one record.
@@ -1885,19 +1885,14 @@ class sonarDB(object):
 			define a message used for the progress bar. If None, no progress
 			bar is shown. [ None ]
 		"""
-		if not msg is None:
-			rng = tqdm(range(len(fnames)), desc = msg)
-		else:
-			rng = range(len(fnames))
-
 		with ExitStack() as stack:
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db))
-			for i in rng:
+			for i in tqdm(range(len(fnames)), desc = msg, disable=disable_progressbar):
 				self.import_genome(**self.process_fasta(fnames[i]), dbm=dbm)
 
 
-	def import_genome_from_cache(self, cachedir, acc_dict, dbm=None, msg=None):
+	def import_genome_from_cache(self, cachedir, acc_dict, dbm=None, msg=None, disable_progressbar=False):
 		"""
 		function to import data from a sonarCACHE directory to the SONAR database.
 
@@ -1913,15 +1908,10 @@ class sonarDB(object):
 			bar is shown [ None ]
 		"""
 		seqhashes = list(acc_dict.keys())
-		if not msg is None:
-			rng = tqdm(range(len(seqhashes)), desc = msg)
-		else:
-			rng = range(len(seqhashes))
-
 		with ExitStack() as stack, sonarCache(cachedir) as cache:
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db))
-			for i in rng:
+			for i in tqdm(range(len(seqhashes)), desc = msg, disable = disable_progressbar):
 				seqhash = seqhashes[i]
 				seq = cache.get_cached_seq(seqhash)
 				preprocessed_data = cache.load_info(seqhash)
@@ -1975,7 +1965,7 @@ class sonarDB(object):
 			if seq:
 				self.be_paranoid(acc, seq, auto_delete=True, dbm=dbm)
 
-	def iter_frameshifts(self, dbm=None):
+	def iter_frameshifts(self, msg="screening for frame shifts", dbm=None, disable_progressbar=False):
 		cds = []
 		for ranges in self.refgffObj.ranges.values():
 			this = []
@@ -1986,7 +1976,7 @@ class sonarDB(object):
 		with ExitStack() as stack:
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
-			with tqdm(total=dbm.count_genomes(), desc="screening for frame shifts") as pbar:
+			with tqdm(total=dbm.count_genomes(), desc=msg,disable=disable_progressbar) as pbar:
 				for row in dbm.iter_table('essence'):
 					fs = []
 					for var in row['dna_profile'].strip().split(" "):

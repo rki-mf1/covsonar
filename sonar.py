@@ -42,6 +42,8 @@ def parse_args():
 	parser_add.add_argument('-c', '--cache', metavar="DIR", help="use (and restore data from) a given cache (if not set, a temporary cache is used and deleted after import)", type=str, default=None)
 	parser_add.add_argument('-t', '--timeout', metavar="INT", help="timout for aligning sequences in seconds (default: 600)", type=int, default=600)
 	parser_add.add_argument('--force', help="force updating of accessions if description or sequence has changed", action="store_true")
+	parser_add.add_argument('--noprogress', '-p', help="do not show any progress bar", action="store_true")
+	parser_add.add_argument('--quiet', '-q', help="do not show any output", action="store_true")
 
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
@@ -95,27 +97,35 @@ class sonar():
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 
-	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True):
+	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False):
 		'''
 		Adds genome sequence(s) from given FASTA file(s) to the database.
 		If cachedir is not defined, a temporary directory will be used as cache.
 		'''
 
+		# set display options
+		disable_progressbar = False if not quiet and not noprogress else True
+		print_steps = True if not quiet and noprogress else False
+
 		# create db if necessary
 		step = 0
 		if cachedir and os.path.isdir(cachedir):
 			step += 1
-			print("[step", str(step) + "] restoring ... ")
+			if print_steps:
+				print("[step", str(step) + "] restoring ... ")
 
 		with sonardb.sonarCache(cachedir) as cache, sonardb.sonarDBManager(self.dbfile) as dbm:
 
 			# add fasta files to cache
 			step += 1
 			msg = "[step " + str(step) + "] caching ...   "
+			if print_steps:
+				print(msg)
+
 			to_process = []
 			to_import = defaultdict(set)
 
-			for i in tqdm(range(len(fnames)), desc = msg):
+			for i in tqdm(range(len(fnames)), desc = msg, disable = disable_progressbar):
 				for record in SeqIO.parse(fnames[i], "fasta"):
 					acc = record.id
 					descr = record.description
@@ -150,9 +160,11 @@ class sonar():
 
 			step += 1
 			msg = "[step " + str(step) + "] processing ..."
+			if print_steps:
+				print(msg)
 			pool = Pool(processes=cpus)
 			failed = set()
-			for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, to_process), total=len(to_process), desc = msg):
+			for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, to_process), total=len(to_process), desc = msg, disable = disable_progressbar):
 				if not status:
 					failed.update([x[1] for x in cache.cache[seqhash]])
 				if failed:
@@ -162,7 +174,9 @@ class sonar():
 
 			step += 1
 			msg = "[step " + str(step) + "] importing ... "
-			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg, dbm=dbm)
+			if print_steps:
+				print(msg)
+			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg, dbm=dbm, disable_progressbar=disable_progressbar)
 
 	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, show_frame_shifts_only=False):
 		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig)
@@ -254,7 +268,7 @@ if __name__ == "__main__":
 		if not args.file and not args.cache:
 			sys.exit("nothing to add.")
 
-		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout)
+		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout, quiet=args.quiet, noprogress=args.noprogress)
 
 	# match
 	if args.tool == "match":
