@@ -52,6 +52,8 @@ def parse_args():
 	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
 	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
 	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--source', metavar="STR", help="match genomes of the given data source only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 
@@ -105,46 +107,46 @@ class sonar():
 			step += 1
 			print("[step", str(step) + "] restoring ... ")
 
-		with sonardb.sonarCache(cachedir) as cache:
+		with sonardb.sonarCache(cachedir) as cache, sonardb.sonarDBManager(self.dbfile) as dbm:
 
 			# add fasta files to cache
 			step += 1
 			msg = "[step " + str(step) + "] caching ...   "
 			to_process = []
 			to_import = defaultdict(set)
-			with sonardb.sonarDBManager(self.dbfile) as dbm:
-				for i in tqdm(range(len(fnames)), desc = msg):
-					for record in SeqIO.parse(fnames[i], "fasta"):
-						acc = record.id
-						descr = record.description
-						seq = self.db.harmonize(record.seq)
-						seqhash = self.db.hash(seq)
-						genome_data = dbm.get_genomes(acc)
 
-						if genome_data:
-							if genome_data['seqhash'] != seqhash:
-								if not force:
-									sys.exit("database error: " + acc + " exists in the database with a different sequence (use --force to allow updating)")
-								dbm.delete_genome(acc)
-							elif genome_data['description'] != descr:
-								if not force:
-									sys.exit("database error: " + acc + " exists in the database with a different description (use --force to allow updating)")
-								dbm.update_genome(acc, description = descr)
-								continue
-							else:
-								continue
+			for i in tqdm(range(len(fnames)), desc = msg):
+				for record in SeqIO.parse(fnames[i], "fasta"):
+					acc = record.id
+					descr = record.description
+					seq = self.db.harmonize(record.seq)
+					seqhash = self.db.hash(seq)
+					genome_data = dbm.get_genomes(acc)
 
-						if dbm.seq_exists(seqhash):
-							cache.prep_cached_files(seqhash)
-							cache.write_info(seqhash)
-						elif seqhash not in to_import:
-							algn = cache.get_algn_fname(seqhash)
-							fasta = cache.get_fasta_fname(seqhash)
-							info = cache.get_info_fname(seqhash)
-							to_process.append([fasta, algn, info, seqhash, timeout])
-						cache.add_seq(seqhash, seq)
+					if genome_data:
+						if genome_data['seqhash'] != seqhash:
+							if not force:
+								sys.exit("database error: " + acc + " exists in the database with a different sequence (use --force to allow updating)")
+							dbm.delete_genome(acc)
+						elif genome_data['description'] != descr:
+							if not force:
+								sys.exit("database error: " + acc + " exists in the database with a different description (use --force to allow updating)")
+							dbm.update_genome(acc, description = descr)
+							continue
+						else:
+							continue
 
-						to_import[seqhash].add((acc, descr))
+					if dbm.seq_exists(seqhash):
+						cache.prep_cached_files(seqhash)
+						cache.write_info(seqhash)
+					elif seqhash not in to_import:
+						algn = cache.get_algn_fname(seqhash)
+						fasta = cache.get_fasta_fname(seqhash)
+						info = cache.get_info_fname(seqhash)
+						to_process.append([fasta, algn, info, seqhash, timeout])
+					cache.add_seq(seqhash, seq)
+
+					to_import[seqhash].add((acc, descr))
 
 			step += 1
 			msg = "[step " + str(step) + "] processing ..."
@@ -160,10 +162,10 @@ class sonar():
 
 			step += 1
 			msg = "[step " + str(step) + "] importing ... "
-			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg)
+			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg, dbm=dbm)
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, ambig, count=False, show_frame_shifts_only=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, ambig=ambig)
+	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, show_frame_shifts_only=False):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig)
 		if count:
 			print(len(rows))
 		else:
@@ -262,7 +264,7 @@ if __name__ == "__main__":
 			for d in args.date:
 				if not regex.match(d):
 					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.ambig, args.count)
+		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.source, args.ambig, args.count)
 
 	# update
 	if args.tool == "update":

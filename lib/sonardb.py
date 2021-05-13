@@ -26,6 +26,7 @@ import itertools
 import signal
 import csv
 from time import sleep
+from contextlib import ExitStack
 
 def get_version():
 	with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
@@ -58,8 +59,8 @@ class sonarTimeout():
 
 	seconds : int
 		time in seconds when a TimeoutError is raised
-	error_message : str
-		error message to be shown [ 'Timeout' ]
+	error_message : str [ 'Timeout' ]
+		error message to be shown
 	"""
 	def __init__(self, seconds, error_message='Timeout'):
 		self.seconds = seconds
@@ -99,9 +100,9 @@ class sonarFiler():
 
 	Parameters
 	----------
-	fname : str
+	fname : str [ None ]
 		define designated file name to open. If None, a temporary file is
-		created and deleted after use. [ None ]
+		created and deleted after use.
 
 	Attributes
 	----------
@@ -156,7 +157,7 @@ class sonarCDS(object):
 	Accessing amino acid sequence (genetic code 1):
 
 	>>> cds.aa
-	'ML'
+	'ML*MA'
 
 	Accessing CDS coordinates or genome range:
 
@@ -176,13 +177,13 @@ class sonarCDS(object):
 		define the genomic end coordinate (0-based, exclusive)
 	strand : {'+', '-'}
 		define the genomic strand encoded on
-	seq : str
-		define the nucleotide sequence
-	locus: str
-		define the gene locus accession number [ None ]
-	translation_table : int
+	seqs : list
+		define a list of exon nucleotide sequences
+	locus: str [ None ]
+		define the gene locus accession number
+	translation_table : int [ 1 ]
 		define the genetic code table used for in silico translation (see
-		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi)
 
 	Attributes
 	----------
@@ -194,18 +195,22 @@ class sonarCDS(object):
 	end : int
 		stores the genomic end coordinate (0-based, exclusive). The end
 		coordinate is always greater than the start coordinate.
-	coords : tuple
-		stores a tuple of start and end coordinate
-	range :	range
-		stores an range from start to end coordinate
+	coordlist : list
+		stores a list of tuple of start and end coordinates of all exons
+	ranges : range
+		stores a range from start to end coordinate
+	ranges : list
+		stores a list of exon ranges
 	nuc : str
-		stores the nucleotide sequence
+		stores the coding nucleotide sequence (joined exons)
 	aa : str
-		stores the in silico translated amino acid sequence from start to the
-		first in-frame stop codon.
-	translation_table : int
+		stores the in silico translated amino acid sequence from start to end.
+	coding_positions: list
+		stores all genomic positions part of the coding sequences of this gene
+		as ordered list
+	translation_table : int [ 1 ]
 		stores the genetic code table used for in silico translation (see
-		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi)
 	"""
 
 	def __init__(self, locus, symbol, coords, seqs, strand, translation_table=1):
@@ -220,7 +225,7 @@ class sonarCDS(object):
 		self.translation_table = translation_table
 		self.__aa = None
 		self.__nuc = None
-		self.__nucposlist = None
+		self.__coding_positions = None
 
 	@property
 	def nuc(self):
@@ -230,14 +235,14 @@ class sonarCDS(object):
 
 	@property
 	def aa(self):
-		nuc = self.nuc if self.strand == "+" else str(Seq(self.nuc).reverse_complement())
 		if self.__aa is None:
+			nuc = self.nuc if self.strand == "+" else str(Seq(self.nuc).reverse_complement())
 			l = len(nuc)
 			if l%3 == 1:
 				l = -1
 			elif l%3 == 2:
 				l = -2
-			self.__aa = str(Seq.translate(nuc[:l], table=self.translation_table, to_stop=True))
+			self.__aa = str(Seq.translate(nuc[:l], table=self.translation_table))
 		return self.__aa
 
 	@property
@@ -249,12 +254,12 @@ class sonarCDS(object):
 		return range(self.start, self.end)
 
 	@property
-	def nucposlist(self):
-		if self.__nucposlist is None:
-			self.__nucposlist = []
+	def coding_positions(self):
+		if self.__coding_positions is None:
+			self.__coding_positions = []
 			for r in self.ranges:
-				self.__nucposlist.extend(r)
-		return self.__nucposlist
+				self.__coding_positions.extend(r)
+		return self.__coding_positions
 
 	def aa_to_nuc_pos(self, x):
 		if y is None:
@@ -263,7 +268,7 @@ class sonarCDS(object):
 		if x > self.end or y < self.start:
 			return None
 
-		return self.nucposlist[3*x]
+		return self.coding_positions[3*x]
 
 	def iter_coords(self):
 		"""
@@ -297,9 +302,8 @@ class sonarCDS(object):
 			True if coordinate(s) within coding part of CDS, False otherwise.
 
 		"""
-		for r in self.ranges:
-			for i in r:
-				yield i
+		for i in self.coding_positions:
+			yield i
 
 	def is_exon(self, x, y=None):
 		"""
@@ -319,8 +323,8 @@ class sonarCDS(object):
 		----------
 		x : int
 			genomic (start) coordinate (0-based, inclusive)
-		y : int
-			genomic end coordniate (0-based, exclusive) [ None ]
+		y : int [ None ]
+			genomic end coordniate (0-based, exclusive)
 
 		Returns
 		-------
@@ -353,8 +357,8 @@ class sonarCDS(object):
 		----------
 		x : int
 			genomic (start) coordinate (0-based, inclusive)
-		y : int
-			genomic end coordniate (0-based, exclusive) [ None ]
+		y : int [ None ]
+			genomic end coordniate (0-based, exclusive)
 
 		Returns
 		-------
@@ -363,7 +367,7 @@ class sonarCDS(object):
 
 		"""
 		x = {x,} if y is None else set(range(x,y))
-		if x.intersection(range(self.start, self.end)):
+		if x.intersection(self.range):
 			return True
 		return False
 
@@ -412,6 +416,14 @@ class sonarGFF(object):
 		stores a dictionary with protein symbol as keys and respective 0-based
 		genomic coordinate tuples (start always lower than end coordinate,
 		start coordinate inclusive, end coordinate exclusive)
+	ranges : dict
+		stores a dictionary with protein symbol as keys and respective list of
+		coding ranges
+	cds_positions : set
+		stores a set of all genomic positions annotated within a coding gene
+		(includes exons and introns).
+	exon_positions : set
+		stores a set of all genomic positions within annotated exons.
 	symbols : list
 		stores a list of protein symbols
 
@@ -423,6 +435,28 @@ class sonarGFF(object):
 		self.coords = { x.symbol: (x.start, x.end) for x in self.cds }
 		self.ranges = { x.symbol: x.ranges for x in self.cds }
 		self.symbols = [ x.symbol for x in self.cds ]
+		self.__cds_positions = None
+		self.__exon_positions = None
+
+	@property
+	def cds_positions(self):
+		if self.__cds_positions is None:
+			positions = set()
+			for ranges in self.ranges.values():
+				for r in ranges:
+					positions.update(r)
+			self.__cds_positions = positions
+		return self.__cds_positions
+
+	@property
+	def exon_positions(self):
+		if self.__exon_positions is None:
+			positions = set()
+			for ranges in self.ranges.values():
+				for r in ranges:
+					positions.update(r)
+			self.__exon_positions = positions
+		return self.__exon_positions
 
 	def in_any_exon(self, x, y=None):
 		"""
@@ -444,8 +478,8 @@ class sonarGFF(object):
 		----------
 		x : int
 			genomic (start) coordinate (0-based, inclusive)
-		y : int
-			genomic end coordniate (0-based, exclusive) [ None ]
+		y : int [ None ]
+			genomic end coordniate (0-based, exclusive)
 
 		Returns
 		-------
@@ -453,10 +487,11 @@ class sonarGFF(object):
 			True if coordinate(s) within CDS, False otherwise.
 
 		"""
-		for cds in self.cds:
-			if cds.is_exon(x, y):
-				return True
-		return False
+		x = {x, } if y is None else range(x, y)
+		if self.exon_positions.intersection(x):
+			return True
+		else:
+			return False
 
 	def in_any_cds(self, x, y=None):
 		"""
@@ -487,10 +522,11 @@ class sonarGFF(object):
 			True if coordinate(s) within CDS, False otherwise.
 
 		"""
-		for cds in self.cds:
-			if cds.is_cds(x, y):
-				return True
-		return False
+		x = {x, } if y is None else range(x, y)
+		if self.cds_positions.intersection(x):
+			return True
+		else:
+			return False
 
 	def process_gff3(self, gff, fna):
 		"""
@@ -706,7 +742,7 @@ class sonarALIGN(object):
 
 	def left_align_gaps(self, query, target):
 		"""
-		function to align gaps to the right in two aligned sequences
+		function to align gaps to the left in two aligned sequences
 
 		Parameters
 		----------
@@ -1095,7 +1131,7 @@ class sonarDBManager():
 				print("rollback", file=sys.stderr)
 				self.rollback()
 		elif self.__mode == "rwc":
-			self.connection.commit()
+			self.commit()
 		self.close()
 
 	def __del__(self):
@@ -1145,19 +1181,18 @@ class sonarDBManager():
 		self.cursor.execute(sql, [seqhash, dna_profile, aa_profile])
 		return seqhash
 
-	def insert_dna_var(self, seqhash, ref, alt, start, end):
+	def insert_dna_var(self, seqhash, ref, alt, start, end=None):
 		if end is None:
 			end = start + 1
 		sql = "INSERT OR IGNORE INTO dna (varid, start, end, ref, alt) VALUES(?, ?, ?, ?, ?);"
 		self.cursor.execute(sql, [None, start, end, ref, alt])
-		#sys.exit([sql, None, start, end, ref, alt])
 		sql = "SELECT varid FROM dna WHERE start = ? AND end = ? AND alt = ? AND ref = ?;"
 		varid = self.cursor.execute(sql, [start, end, alt, ref]).fetchone()['varid']
 		sql = "INSERT OR IGNORE INTO sequence2dna (seqhash, varid) VALUES(?, ?);"
 		self.cursor.execute(sql, [seqhash, varid])
 		return varid
 
-	def insert_prot_var(self, seqhash, protein, locus, ref, alt, start, end):
+	def insert_prot_var(self, seqhash, protein, locus, ref, alt, start, end=None):
 		if end is None:
 			end = start + 1
 		sql = "INSERT OR IGNORE INTO prot (varid, protein, locus, start, end, ref, alt) VALUES(?, ?, ?, ?, ?, ?, ?);"
@@ -1177,15 +1212,15 @@ class sonarDBManager():
 	# SELECTING DATA
 
 	def genome_exists(self, acc, descr=None, seqhash=None):
-		sql = "SELECT COUNT(*) FROM genome WHERE accession = ?"
+		sql = ["SELECT COUNT(*) FROM genome WHERE accession = ?"]
 		vals = [acc]
 		if descr:
-			sql += " AND descr = ?"
+			sql.append("AND descr = ?")
 			vals.append(descr)
 		if seqhash:
-			sql += " AND seqhash = ?"
+			sql.append(" AND seqhash = ?")
 			vals.append(seqhash)
-		return self.cursor.execute(sql + ";", vals).fetchone()['COUNT(*)'] > 0
+		return self.cursor.execute(" ".join(sql) + ";", vals).fetchone()['COUNT(*)'] > 0
 
 	def seq_exists(self, seqhash):
 		sql = "SELECT COUNT(*) FROM sequence WHERE seqhash = ?;"
@@ -1225,7 +1260,7 @@ class sonarDBManager():
 		row = self.cursor.execute(sql).fetchone()
 		return int(row['COUNT(*)'])
 
-	def iter_table(self, table, batch_size=1000000):
+	def iter_table(self, table, batch_size=1000):
 		sql = "SELECT * FROM " + table + ";"
 		c = self.cursor.execute(sql)
 		while True:
@@ -1258,6 +1293,14 @@ class sonarDBManager():
 	def get_lab_condition(self, *labs, negate=False):
 		op = " NOT " if negate else " "
 		return "lab" + op + "IN (" + ", ".join(['?'] * len(labs)) + ")"
+
+	def get_source_condition(self, *sources, negate=False):
+		op = " NOT " if negate else " "
+		return "source" + op + "IN (" + ", ".join(['?'] * len(sources)) + ")"
+
+	def get_collection_condition(self, *collections, negate=False):
+		op = " NOT " if negate else " "
+		return "collection" + op + "IN (" + ", ".join(['?'] * len(collections)) + ")"
 
 	def get_zip_condition(self, *zips, negate=False):
 		op = " NOT " if negate else " "
@@ -1294,7 +1337,11 @@ class sonarDBManager():
 			  include_dates=[],
 			  exclude_dates=[],
 			  include_lab=[],
-			  exclude_lab=[]):
+			  exclude_lab=[],
+			  include_source=[],
+			  exclude_source=[],
+			  include_collection=[],
+			  exclude_collection=[]):
 
 		where_clause = []
 		where_vals = []
@@ -1321,6 +1368,22 @@ class sonarDBManager():
 		if exclude_lab:
 			where_clause.append(self.get_lab_condition(*exclude_lab, negate=True))
 			where_vals.extend(exclude_lab)
+
+		# source
+		if include_source:
+			where_clause.append(self.get_source_condition(*include_source))
+			where_vals.extend(include_source)
+		if exclude_source:
+			where_clause.append(self.get_lab_condition(*exclude_source, negate=True))
+			where_vals.extend(exclude_source)
+
+		# collection
+		if include_collection:
+			where_clause.append(self.get_collection_condition(*include_collection))
+			where_vals.extend(include_collection)
+		if exclude_collection:
+			where_clause.append(self.get_collection_condition(*exclude_collection, negate=True))
+			where_vals.extend(exclude_collection)
 
 		# zip
 		if include_zip:
@@ -1505,6 +1568,12 @@ class sonarDB(object):
 	del_regex : compiled re expression
 		stores a compiled re expression that matches to deletion profiles on
 		nucleotide as well as on amino acid level.
+	dnavar_regex : compiled re expression
+		stores a compiled re expression that matches to SNP expressions.
+	codedict : dict
+		stores a dictionary for "dna" and "aa" containing the field name in the
+		database that stores the profile data, the one letter code with and
+		without ambiguities
 	"""
 	def __init__(self, dbfile, translation_table = 1):
 		self.db = os.path.abspath(dbfile)
@@ -1666,7 +1735,7 @@ class sonarDB(object):
 			sequence
 
 		"""
-		return str(seq).upper().replace("U", "T")
+		return str(seq).strip().upper().replace("U", "T")
 
 	def multi_process_fasta_wrapper(self, args):
 		"""
@@ -1791,7 +1860,7 @@ class sonarDB(object):
 		return data
 
 
-	def import_genome_from_fasta_files(self, *fnames, msg=None):
+	def import_genome_from_fasta_files(self, *fnames, dbm=None, msg=None):
 		"""
 		function to import genome sequence(s) from given FASTA file(s) to the
 		SONAR database. Each FASTA file has to contain exactly one record.
@@ -1821,12 +1890,14 @@ class sonarDB(object):
 		else:
 			rng = range(len(fnames))
 
-		with sonarDBManager(self.db) as dbm:
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db))
 			for i in rng:
-				self.import_genome(**self.process_fasta(fnames[i]))
+				self.import_genome(**self.process_fasta(fnames[i]), dbm=dbm)
 
 
-	def import_genome_from_cache(self, cachedir, acc_dict, msg=None):
+	def import_genome_from_cache(self, cachedir, acc_dict, dbm=None, msg=None):
 		"""
 		function to import data from a sonarCACHE directory to the SONAR database.
 
@@ -1847,7 +1918,9 @@ class sonarDB(object):
 		else:
 			rng = range(len(seqhashes))
 
-		with sonarCache(cachedir) as cache:
+		with ExitStack() as stack, sonarCache(cachedir) as cache:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db))
 			for i in rng:
 				seqhash = seqhashes[i]
 				seq = cache.get_cached_seq(seqhash)
@@ -1855,10 +1928,10 @@ class sonarDB(object):
 				for entry in acc_dict[seqhash]:
 					preprocessed_data['acc'] = entry[0]
 					preprocessed_data['descr'] = entry[1]
-					self.import_genome(**preprocessed_data, seq=seq)
+					self.import_genome(**preprocessed_data, seq=seq, dbm=dbm)
 
 
-	def import_genome(self, acc, descr, seqhash, dnadiff=None, aadiff=None, dna_profile=None, prot_profile=None, seq=None):
+	def import_genome(self, acc, descr, seqhash, dnadiff=None, aadiff=None, dna_profile=None, prot_profile=None, seq=None, dbm=None):
 		"""
 		function to import processed data to the SONAR database.
 
@@ -1881,10 +1954,13 @@ class sonarDB(object):
 			define the formatted amino acid level profile (see sonarDB.build_profile)
 		seq : str
 			define the sequence of the processed genome (can be None, but then no paranoid test is done)
-		dbm : str
+		dbm : sonarDBManager object
 			define a sonarDBManager object to use for database transaction
 		"""
-		with sonarDBManager(self.db) as dbm:
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db))
+
 			dbm.insert_genome(acc, descr, seqhash)
 
 			if not dnadiff is None:
@@ -1893,14 +1969,13 @@ class sonarDB(object):
 				for ref, alt, s, e, _, __ in dnadiff:
 					dbm.insert_dna_var(seqhash, ref, alt, s, e)
 
-					for ref, alt, s, e, protein, locus in aadiff:
-						dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
+				for ref, alt, s, e, protein, locus in aadiff:
+					dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
 
-		if seq:
-			self.be_paranoid(acc, seq, True)
+			if seq:
+				self.be_paranoid(acc, seq, auto_delete=True, dbm=dbm)
 
-
-	def iter_frameshifts(self):
+	def iter_frameshifts(self, dbm=None):
 		cds = []
 		for ranges in self.refgffObj.ranges.values():
 			this = []
@@ -1908,7 +1983,9 @@ class sonarDB(object):
 				this.extend(list(r))
 			cds.append((len(this), tuple(this), set(this)))
 
-		with sonarDBManager(self.db, readonly=True) as dbm:
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
 			with tqdm(total=dbm.count_genomes(), desc="screening for frame shifts") as pbar:
 				for row in dbm.iter_table('essence'):
 					fs = []
@@ -2244,7 +2321,7 @@ class sonarDB(object):
 		return extended_profile
 
 
-	def match(self, include_profiles=[], exclude_profiles=[], accessions=[], lineages=[], zips=[], dates=[], labs = [], ambig=False, count=False):
+	def match(self, include_profiles=[], exclude_profiles=[], accessions=[], lineages=[], zips=[], dates=[], labs = [], sources=[], collections=[], ambig=False, count=False, dbm=None):
 		"""
 		function to match genomes in the SONAR database
 
@@ -2326,9 +2403,16 @@ class sonarDB(object):
 		include_labs = [x for x in labs if not str(x).startswith("^")]
 		exclude_labs = [x[1:] for x in labs if str(x).startswith("^")]
 
+		include_source = [x for x in sources if not str(x).startswith("^")]
+		exclude_source = [x[1:] for x in sources if str(x).startswith("^")]
+
+		include_collection = [x for x in collections if not str(x).startswith("^")]
+		exclude_collection = [x[1:] for x in collections if str(x).startswith("^")]
 
 		# query
-		with sonarDBManager(self.db, readonly=True) as dbm:
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
 			rows = dbm.match(
 					  include_profiles,
 					  exclude_profiles,
@@ -2341,6 +2425,10 @@ class sonarDB(object):
 					  include_dates,
 					  exclude_dates,
 					  include_labs,
+					  exclude_labs,
+					  include_source,
+					  exclude_source,
+					  include_collection,
 					  exclude_labs)
 
 		# remove ambiguities from database profiles if wished
@@ -2353,7 +2441,7 @@ class sonarDB(object):
 
 	# VALIDATION
 
-	def restore_genome_using_dnavars(self, acc):
+	def restore_genome_using_dnavars(self, acc, dbm = None):
 		"""
 		function to restore a genome sequence from the SONAR database using dna variation table
 
@@ -2379,7 +2467,10 @@ class sonarDB(object):
 			None is returned if the given accession does not exist in the
 			database.
 		"""
-		with sonarDBManager(self.db, readonly=True) as dbm:
+
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
 			rows = dbm.get_dna_vars(acc)
 			if rows:
 				prefix = ""
@@ -2396,13 +2487,12 @@ class sonarDB(object):
 						prefix = row['alt']
 				return ">" + rows[0]['description'], prefix + "".join(qryseq)
 			else:
-				return None
 				rows = dbm.get_genomes(acc)
 				if rows is None:
 					sys.exit("error: " + acc + " not found.")
 				return ">" + rows['description'], self.refseq
 
-	def restore_genome_using_dnaprofile(self, acc):
+	def restore_genome_using_dnaprofile(self, acc, dbm=None):
 		"""
 		function to restore a genome sequence from the SONAR database using dna level profiles
 
@@ -2428,7 +2518,9 @@ class sonarDB(object):
 			None is returned if the given accession does not exist in the
 			database.
 		"""
-		with sonarDBManager(self.db, readonly=True) as dbm:
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
 			profile = dbm.get_dna_profile(acc)
 			if profile:
 				qryseq = list(self.refseq)
@@ -2458,7 +2550,7 @@ class sonarDB(object):
 					sys.exit("error: " + acc + " not found.")
 				return ">" + row['description'], self.refseq
 
-	def restore_alignment(self, acc):
+	def restore_alignment(self, acc, dbm=None):
 		"""
 		function to restore a genome alignment from the SONAR database
 
@@ -2486,7 +2578,9 @@ class sonarDB(object):
 			None is returned if the given accession does not exist in the
 			database.
 		"""
-		with sonarDBManager(self.db, readonly=True) as dbm:
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
 			row = dbm.get_dna_vars(acc)
 		if rows:
 			refseq = list(self.refseq)
@@ -2507,7 +2601,7 @@ class sonarDB(object):
 		return None
 
 
-	def be_paranoid(self, acc, orig_seq, dbm, auto_delete=False):
+	def be_paranoid(self, acc, orig_seq, auto_delete=False, dbm=None):
 		"""
 		function to compare a given sequence with the respective sequence restored
 		from the SONAR database
@@ -2519,7 +2613,7 @@ class sonarDB(object):
 			define the accesion of the genome that should be validated
 		orig_seq : str
 			define the sequence expected
-		dbm : object
+		dbm : object [ None ]
 			define a sonarDBManager handling the database connection
 		auto_delete : bool
 			define if the respective genome should be automatically deleted
@@ -2534,25 +2628,28 @@ class sonarDB(object):
 		"""
 		orig_seq = self.harmonize(orig_seq)
 
-		s = self.restore_genome_using_dnavars(acc)[1]
-		if orig_seq != s:
-			if auto_delete:
-				self.delete_accession(acc)
-			for i in range(len(orig_seq)):
-				if orig_seq[i] != s[i]:
-					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
-					break
-			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).")
+		with ExitStack() as stack:
+			if dbm is None:
+				dbm = stack.enter_context(sonarDBManager(self.db))
+			s = self.restore_genome_using_dnavars(acc, dbm)[1]
+			if orig_seq != s:
+				if auto_delete:
+					dbm.delete_accession(acc)
+				for i in range(len(orig_seq)):
+					if orig_seq[i] != s[i]:
+						print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
+						break
+				sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 1).")
 
-		s = self.restore_genome_using_dnaprofile(acc)
-		if orig_seq != s:
-			if auto_delete:
-				self.delete_accession(acc, dbm)
-			for i in range(len(orig_seq)):
-				if orig_seq[i] != s[i]:
-					print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
-					break
-			sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 2).")
+			s = self.restore_genome_using_dnaprofile(acc, dbm)
+			if orig_seq != s:
+				if auto_delete:
+					dbm.delete_accession(acc)
+				for i in range(len(orig_seq)):
+					if orig_seq[i] != s[i]:
+						print("first difference at position", str(i) + ":", orig_seq[i] , "<>", s[i])
+						break
+				sys.exit("Good that you are paranoid: " + acc + " original and those restored from the database do not match (err 2).")
 		return True
 
 class sonarCache():
