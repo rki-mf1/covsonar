@@ -168,10 +168,26 @@ The restored sequences are combined with their original FASTA header and  shown 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
-# Restore genome sequences with accessions 'mygenome1' and 'mygenome2' 
-# and write to a fasta file named 'restored.fasta'
-path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 > restored.fasta
+# Restore genome sequences with accessions 'mygenome1' and 'mygenome2' from the 
+# database 'mydb' and write these to a fasta file named 'restored.fasta'
+path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 --db mydb > restored.fasta
 ```
+
+
+### 3.5 Show infos about the used sonar system and database
+
+Detailed infos about the used sonar system (e.g. version, reference, considered ORFs) and, optionally, a given database (e.g. number of imported genomes, unique sequences, data sources and collections) can be accessed.
+
+```sh
+# activating conda environment if built and not active yet (see section 2)
+conda activate sonar
+# Show infos about the used sonar system
+path/to/covsonar/sonar.py info
+
+# Show infos about the used sonar system and database 'mydb'
+path/to/covsonar/sonar.py info --db mydb
+```
+
 
 ## 4 How to contribute
 
