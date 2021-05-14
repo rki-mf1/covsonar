@@ -28,6 +28,9 @@ import csv
 from time import sleep
 from contextlib import ExitStack
 
+# COMPATIBILITY
+SUPPORTED_DB_VERSION = 2
+
 class sonarTimeout():
 	"""
 	this class is a helper class raising a TimeoutError within a defined context
@@ -1160,6 +1163,11 @@ class sonarDBManager():
 
 	def get_db_version(self):
 		return self.cursor.execute('pragma user_version').fetchone()['user_version']
+
+	def check_db_compatibility(self):
+		dbver = self.get_db_version()
+		if dbver != SUPPORTED_DB_VERSION:
+			sys.exit("compatibilty error: the given database is not compatible with this version of sonar (database version: " + str(dbver) + "; supported database version: " + str(SUPPORTED_DB_VERSION) +")")
 
 	# INSERTING DATA
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "0.0.9"
+VERSION = "0.0.10"
 import os
 import sys
 import csv
@@ -309,6 +309,10 @@ def process_update_expressions(expr):
 if __name__ == "__main__":
 	args = parse_args()
 	snr = sonar(args.db)
+
+	if os.path.isfile(args.db):
+		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
+			dbm.check_db_compatibility()
 
 	# add
 	if args.tool == "add":
