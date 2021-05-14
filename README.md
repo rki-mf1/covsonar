@@ -39,12 +39,13 @@ conda activate sonar
 
 In covSonar there are several tools that can be called via subcommands.  
 
-| subcommand | purpose                                                |
-|------------|--------------------------------------------------------|
-| add        | to add genome sequences to the database                |
-| update     | to import and replace meta information                 |
-| match      | to query genome sequences sharing a defined profile    | 
-| restore    | to restore genome sequence(s) from the database        |
+| subcommand | purpose                                                             |
+|------------|---------------------------------------------------------------------|
+| add        | to add genome sequences to the database                             |
+| update     | to import and replace meta information                              |
+| match      | to query genome sequences sharing a defined profile                 | 
+| restore    | to restore genome sequence(s) from the database                     |
+| info       | show detailed informations about the used sonarversion and database |
 
 Each tool provides a help page that can be accessed with the `-h` option.
 
@@ -69,6 +70,8 @@ Each sequence to be added is aligned pairwise to the full genome sequence of the
 
 Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
 
+If you forward the screen output to a file, the progress bar may produce plenty of useless lines. For this case, the progress bar can be disabled with the `--noprogress` option. If desired, any output can be avoided when adding new genomes with the `--quiet` option.
+
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
@@ -83,14 +86,17 @@ path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycach
 
 ### 3.2 Importing meta information
 
-Additional meta-information can be added for each genome sequence, namely lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the headline have to be defined as follows:
+Additional meta-information can be added for each genome sequence, namely lab, data source, data collection, lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the headline have to be defined as follows:
 
-| expression           | description                                        |
-|----------------------|----------------------------------------------------|
-| accession=_colname1_ | genome accessions are listed in column _colname1_  |
-| lineage=_colname2_   | lineage information is listed in column _colname2_ | 
-| zip=_colname3_       | zip codes are listed in column _colname3_          |
-| date=_colname4_      | sampling dates are listed in column _colname4_     |
+| expression            | description                                                |
+|-----------------------|------------------------------------------------------------|
+| accession=_colname1_  | genome accessions are listed in column _colname1_          |
+| lineage=_colname2_    | lineage information is listed in column _colname2_         | 
+| zip=_colname3_        | zip codes are listed in column _colname3_                  |
+| date=_colname4_       | sampling dates are listed in column _colname4_             |
+| lab=_colname5_        | lab information is listed in column _colname5_             | 
+| source=_colname6_     | data source information is listed in column _colname6_     | 
+| collection=_colname7_ | data collection information is listed in column _colname7_ | 
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
@@ -123,6 +129,11 @@ By default, additional variations are allowed in the matched genomes. Using the 
 The Output is shown on screen but can be easily rdirected to a file by expanding the command by `> output.csv`. The output contains comma separated values for each matched genome in the following order:
 
 - accession of the matched genome 
+- lab
+- data source
+- data collection
+- GISAID id 
+- ENA id
 - lineage 
 - zip code 
 - sampling date 
