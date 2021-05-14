@@ -1289,6 +1289,26 @@ class sonarDBManager():
 		sql = "SELECT MAX(imported) as import FROM genome;"
 		return self.cursor.execute(sql).fetchone()['import']
 
+	def get_earliest_date(self):
+		sql = "SELECT MIN(date) as date FROM genome;"
+		return self.cursor.execute(sql).fetchone()['date']
+
+	def get_latest_date(self):
+		sql = "SELECT MAX(date) as date FROM genome;"
+		return self.cursor.execute(sql).fetchone()['date']
+
+	def get_lab_date(self):
+		sql = "SELECT MAX(date) as date FROM genome;"
+		return self.cursor.execute(sql).fetchone()['date']
+
+	def get_lab_date(self):
+		sql = "SELECT MAX(date) as date FROM genome;"
+		return self.cursor.execute(sql).fetchone()['date']
+
+	def count_metadata(self, field):
+		sql = "SELECT COUNT(accession) as counts FROM genome WHERE " + field + " IS NOT NULL AND " + field + " !=  'NA';"
+		return self.cursor.execute(sql).fetchone()['counts']
+
 	def iter_table(self, table, batch_size=1000):
 		sql = "SELECT * FROM " + table + ";"
 		c = self.cursor.execute(sql)

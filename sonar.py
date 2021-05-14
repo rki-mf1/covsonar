@@ -261,22 +261,29 @@ class sonar():
 
 	def show_db_info(self):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			print("database path:         ", dbm.dbfile)
-			print("database version:      ", dbm.get_db_version())
-			print("database size:         ", self.get_db_size())
-			print("genomes:               ", dbm.count_genomes())
-			print("unique sequences:      ", dbm.count_sequences())
-			print("labs:                  ", dbm.count_labs())
-			print("earliest genome import:", dbm.get_earliest_import())
-			print("latest genome import:  ", dbm.get_latest_import())
-			print()
-			print("source\tcollection\tgenomes")
-			for row in dbm.info_data_types():
-				print( row['source'] + "\t" + row['collection'] + "\t" + str(row['genome_count']))
+			print("database path:             ", dbm.dbfile)
+			print("database version:          ", dbm.get_db_version())
+			print("database size:             ", self.get_db_size())
+			g = dbm.count_genomes()
+			print("genomes:                   ", g)
+			print("unique sequences:          ", dbm.count_sequences())
+			print("labs:                      ", dbm.count_labs())
+			print("earliest genome import:    ", dbm.get_earliest_import())
+			print("latest genome import:      ", dbm.get_latest_import())
+			print("earliest sampling date:    ", dbm.get_earliest_date())
+			print("latest sampling date:      ", dbm.get_latest_date())
+			print("metadata:          ")
+			fields = ['lab', 'source', 'collection', 'gisaid', 'ena', 'lineage', 'zip', 'date']
+			maxlen = max([len(x) for x in fields])
+			for field in fields:
+				c = dbm.count_metadata(field)
+				p = c/g*100
+				spacer = " " * (maxlen-len(field))
+				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
 	def rows_to_csv(self, rows, file=None, na="*** no data ***"):
 		if len(rows) == 0:
-			print(na, file=sys.stderr)
+			print(na, file=sys.stderr), dbm.count_missing_metadata("GISAID")
 		else:
 			file = sys.stdout if file is None else open(file, "w")
 			writer = csv.DictWriter(file, rows[0].keys(), lineterminator=os.linesep)
