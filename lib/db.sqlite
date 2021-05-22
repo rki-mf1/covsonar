@@ -1,5 +1,7 @@
 PRAGMA user_version = 2;
 PRAGMA foreign_keys = OFF;
+PRAGMA analysis_limit=400;
+PRAGMA optimize;
 
 CREATE TABLE IF NOT EXISTS sequence (
 	seqhash VARCHAR(40) NOT NULL PRIMARY KEY
@@ -60,7 +62,8 @@ CREATE TABLE IF NOT EXISTS prot (
 CREATE TABLE IF NOT EXISTS profile (
 	seqhash VARCHAR(40) NOT NULL PRIMARY KEY,
 	dna_profile TEXT NOT NULL,
-	aa_profile TEXT NOT NULL
+	aa_profile TEXT NOT NULL,
+	fs_profile TEXT NOT NULL
 ) WITHOUT ROWID;
 
 CREATE VIEW IF NOT EXISTS essence
@@ -78,7 +81,8 @@ SELECT
 	lineage,
 	genome.seqhash,
 	dna_profile,
-	aa_profile
+	aa_profile,
+	fs_profile
 FROM
 	genome
 LEFT JOIN sequence USING (seqhash)

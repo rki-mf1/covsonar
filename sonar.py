@@ -50,6 +50,7 @@ def parse_args():
 	parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
+	parser_match.add_argument('--frameshift', help="show only frameshifts", action="store_true")
 
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
@@ -151,12 +152,22 @@ class sonar():
 					if dbm.seq_exists(seqhash):
 						cache.prep_cached_files(seqhash)
 						cache.write_info(seqhash)
+						cache.add_seq(seqhash, seq)
 					elif seqhash not in to_import:
 						algn = cache.get_algn_fname(seqhash)
 						fasta = cache.get_fasta_fname(seqhash)
 						info = cache.get_info_fname(seqhash)
-						to_process.append([fasta, algn, info, seqhash, timeout])
-					cache.add_seq(seqhash, seq)
+
+						if not os.path.isfile(fasta):
+							unvalid_letters =  sorted(self.db.check_iupac_nt_code(seq))
+							if unvalid_letters:
+								sys.exit("input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")
+							cache.add_seq(seqhash, seq)
+							to_process.append([fasta, algn, info, seqhash, timeout])
+						elif SeqIO.read(fasta, "fasta").seq != seq:
+								sys.exit("cache error: sequence hash " + seqhash + " exists in cache but refers to a different sequence")
+						elif not os.path.isfile(info):
+							to_process.append([fasta, algn, info, seqhash, timeout])
 
 					to_import[seqhash].add((acc, descr))
 
@@ -198,7 +209,7 @@ class sonar():
 				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
 
 	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, show_frame_shifts_only=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig)
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig, count=False, frameshifts_only=show_frame_shifts_only)
 		if count:
 			print(len(rows))
 		else:
@@ -276,8 +287,12 @@ class sonar():
 			fields = ['lab', 'source', 'collection', 'gisaid', 'ena', 'lineage', 'zip', 'date']
 			maxlen = max([len(x) for x in fields])
 			for field in fields:
-				c = dbm.count_metadata(field)
-				p = c/g*100
+				if g == 0:
+					c = 0
+					p = 0
+				else:
+					c = dbm.count_metadata(field)
+					p = c/g*100
 				spacer = " " * (maxlen-len(field))
 				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
@@ -338,7 +353,7 @@ if __name__ == "__main__":
 			for d in args.date:
 				if not regex.match(d):
 					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.source, args.ambig, args.count)
+		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.ambig, args.count, args.frameshift)
 
 	# update
 	if args.tool == "update":
