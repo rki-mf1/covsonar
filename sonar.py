@@ -48,9 +48,12 @@ def parse_args():
 	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--source', metavar="STR", help="match genomes of the given data source only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
-	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
-	parser_match.add_argument('--frameshift', help="show only frameshifts", action="store_true")
+	parser_match_g1 = parser_match.add_mutually_exclusive_group()
+	parser_match_g1.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
+	parser_match_g1.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
+	parser_match_g2 = parser_match.add_mutually_exclusive_group()
+	parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
+	parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
 
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
@@ -68,12 +71,6 @@ def parse_args():
 	parser_update_input.add_argument('--csv', metavar="FILE", help="import metadata from a csv file", type=str, default=None)
 	parser_update_input.add_argument('--tsv', metavar="FILE", help="import metadata from a tsv file", type=str, default=None)
 	parser_update.add_argument('--fields', metavar="STR", help="if --csv or --tsv is used, define relevant columns like \"pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}\"", type=str, nargs="+", default=None)
-
-	# create the parser for the "frameshift" command
-	parser_frameshift = subparsers.add_parser('frameshift', parents=[general_parser], help='show all genomes with frameshifts')
-	parser_frameshift_out = parser_frameshift.add_mutually_exclusive_group()
-	parser_frameshift_out.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
-	parser_frameshift_out.add_argument('-o', '--out', help="write output to file(please note: the given file will be overwritten).", type=str, default=None)
 
 	# create the parser for the "info" command
 	parser_info= subparsers.add_parser('info', help='show info')
@@ -208,10 +205,10 @@ class sonar():
 				print("\tnow:   " + str(new_dbstatus['seqs']))
 				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, show_frame_shifts_only=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig, count=False, frameshifts_only=show_frame_shifts_only)
+	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, frameshifts=0):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig, count=False, frameshifts=frameshifts)
 		if count:
-			print(len(rows))
+			print(rows)
 		else:
 			self.rows_to_csv(rows, na="*** no match ***")
 
@@ -254,14 +251,6 @@ class sonar():
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
-
-	def show_frameshift(self, count=False, file=None):
-		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			rows = [x for x in self.db.iter_frameshifts()]
-		if count:
-			print(len(rows))
-		else:
-			self.rows_to_csv(rows, file=file, na="*** no match ***")
 
 	def show_system_info(self):
 		print("sonarDB version:       ", self.db.get_version())
@@ -353,7 +342,13 @@ if __name__ == "__main__":
 			for d in args.date:
 				if not regex.match(d):
 					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.ambig, args.count, args.frameshift)
+		if args.no_frameshifts:
+			frameshifts = -1
+		elif args.only_frameshifts:
+			frameshifts = 1
+		else:
+			frameshifts = 0
+		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.ambig, args.count, frameshifts)
 
 	# update
 	if args.tool == "update":
@@ -377,11 +372,6 @@ if __name__ == "__main__":
 	# view
 	if args.tool == "view":
 		snr.view(args.acc)
-
-	# frameshift
-	if args.tool == "frameshift":
-		# sanity check
-		snr.show_frameshift(args.count, args.out)
 
 	# frameshift
 	if args.tool == "info":

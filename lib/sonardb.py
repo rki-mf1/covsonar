@@ -2053,12 +2053,12 @@ class sonarDB(object):
 		data['dna_profile'] = self.build_profile(*data['dnadiff'])
 		data['prot_profile'] = self.build_profile(*data['aadiff'])
 		data['fs_profile'] = self.filter_frameshifts(data['dna_profile'])
-		data['seq'] = seq
 
 		if pickle_file:
 			with open(pickle_file, "wb") as handle:
 				pickle.dump(data, handle)
 		else:
+			data['seq'] = seq
 			return data
 
 
@@ -2880,6 +2880,8 @@ class sonarDB(object):
 
 			fs = set()
 			for dna_var in row['dna_profile'].split(" "):
+				if dna_var.strip() == "":
+					continue
 				if self.is_frameshift(dna_var):
 					fs.add(dna_var)
 					if dna_var not in row['fs_profile']:
