@@ -30,7 +30,7 @@ from contextlib import ExitStack
 from more_itertools import consecutive_groups, split_when
 
 # COMPATIBILITY
-SUPPORTED_DB_VERSION = 2
+SUPPORTED_DB_VERSION = 3
 
 class sonarTimeout():
 	"""
@@ -1436,45 +1436,32 @@ class sonarDBManager():
 
 	# MATCHING PROFILES
 
-	def get_dna_profile_condition(self, *profiles, negate=False):
+	def get_profile_condition(self, field, *profiles, negate=False):
 		op = " NOT " if negate else " "
-		clause = ["dna_profile" + op + "LIKE '% " + x + " %'" for x in profiles]
+		clause = [field + op + "LIKE '% " + x + " %'" for x in profiles]
 		return " AND ".join(clause)
 
-	def get_aa_profile_condition(self, *profiles, negate=False):
+	def get_metadata_in_condition(self, field, *vals, negate=False):
 		op = " NOT " if negate else " "
-		clause = ["aa_profile" + op + "LIKE '% " + x + " %'" for x in profiles]
-		return " AND ".join(clause)
+		return field + op + "IN (" + ", ".join(['?'] * len(vals)) + ")"
 
-	def get_accession_condition(self, *accessions, negate=False):
-		op = " NOT " if negate else " "
-		return "accession" + op + "IN (" + ", ".join(['?'] * len(accessions)) + ")"
+	def get_metadata_numeric_condition(self, field, min=False, max=True):
+		condition = []
+		if min:
+			condition.append(field + " >= ?")
+		if max:
+			condition.append(field + " <= ?")
+		return " AND ".join(condition)
 
-	def get_lineage_condition(self, *lineages, negate=False):
-		op = " NOT " if negate else " "
-		return "lineage" + op + "IN (" + ", ".join(['?'] * len(lineages)) + ")"
-
-	def get_lab_condition(self, *labs, negate=False):
-		op = " NOT " if negate else " "
-		return "lab" + op + "IN (" + ", ".join(['?'] * len(labs)) + ")"
-
-	def get_source_condition(self, *sources, negate=False):
-		op = " NOT " if negate else " "
-		return "source" + op + "IN (" + ", ".join(['?'] * len(sources)) + ")"
-
-	def get_collection_condition(self, *collections, negate=False):
-		op = " NOT " if negate else " "
-		return "collection" + op + "IN (" + ", ".join(['?'] * len(collections)) + ")"
-
-	def get_zip_condition(self, *zips, negate=False):
+	def get_metadata_leading_string_condition(self, field, *vals, negate=False):
 		op = " NOT " if negate else " "
 		logic = " AND " if negate else " OR "
-		clause = ["zip" + op + "LIKE '" + x + "%'" for x in zips]
+		clause = [field + op + "LIKE '" + x + "%'" for x in vals]
 		if not negate and len(clause) > 1:
 			return "(" + logic.join(clause) + ")"
 		return logic.join(clause)
 
-	def get_date_condition(self, *dates, negate=False):
+	def get_metadata_date_condition(self, field, *dates, negate=False):
 		op = " NOT " if negate else " "
 		op2 = " != " if negate else " = "
 		logic = " AND " if negate else " OR "
@@ -1482,9 +1469,9 @@ class sonarDBManager():
 		for date in dates:
 			if ":" in date:
 				x, y = date.split(":")
-				clause.append("(date" + op + "BETWEEN '" + x + "' AND '" + y + "')")
+				clause.append("(" + field + op + "BETWEEN '" + x + "' AND '" + y + "')")
 			else:
-				clause.append("date " + op2 + date)
+				clause.append(field + op2 + date)
 		if not negate and len(clause) > 1:
 			return "(" + logic.join(clause) + ")"
 		return logic.join(clause)
@@ -1506,6 +1493,16 @@ class sonarDBManager():
 			  exclude_source=[],
 			  include_collection=[],
 			  exclude_collection=[],
+  			  include_technology=[],
+  			  exclude_technology=[],
+  			  include_platform=[],
+  			  exclude_platform=[],
+  			  include_chemistry=[],
+  			  exclude_chemistry=[],
+  			  include_material=[],
+  			  exclude_material=[],
+  			  min_ct=None,
+  			  max_ct=None,
 			  count = False,
 			  frameshifts = 0):
 
@@ -1515,55 +1512,95 @@ class sonarDBManager():
 
 		## accessions
 		if include_acc:
-			where_clause.append(self.get_accession_condition(*include_acc))
+			where_clause.append(self.get_metadata_in_condition("accession", *include_acc))
 			where_vals.extend(include_acc)
 		if exclude_acc:
-			where_clause.append(self.get_accession_condition(*exclude_acc, negate=True))
+			where_clause.append(self.get_metadata_in_condition("accession", *exclude_acc, negate=True))
 			where_vals.extend(exclude_acc)
 
 		## lineage
 		if include_lin:
-			where_clause.append(self.get_lineage_condition(*include_lin))
+			where_clause.append(self.get_metadata_in_condition("lineage", *include_lin))
 			where_vals.extend(include_lin)
 		if exclude_lin:
-			where_clause.append(self.get_lineage_condition(*exclude_lin, negate=True))
+			where_clause.append(self.get_metadata_in_condition("lineage", *exclude_lin, negate=True))
 			where_vals.extend(exclude_lin)
 
 		## lab
 		if include_lab:
-			where_clause.append(self.get_lab_condition(*include_lab))
+			where_clause.append(self.get_metadata_in_condition("lab", *include_lab))
 			where_vals.extend(include_lab)
 		if exclude_lab:
-			where_clause.append(self.get_lab_condition(*exclude_lab, negate=True))
+			where_clause.append(self.get_metadata_in_condition("lab", *exclude_lab, negate=True))
 			where_vals.extend(exclude_lab)
 
 		## source
 		if include_source:
-			where_clause.append(self.get_source_condition(*include_source))
+			where_clause.append(self.get_metadata_in_condition("source", *include_source))
 			where_vals.extend(include_source)
 		if exclude_source:
-			where_clause.append(self.get_lab_condition(*exclude_source, negate=True))
+			where_clause.append(self.get_metadata_in_condition("source", *exclude_source, negate=True))
 			where_vals.extend(exclude_source)
 
 		## collection
 		if include_collection:
-			where_clause.append(self.get_collection_condition(*include_collection))
+			where_clause.append(self.get_metadata_in_condition("collection", *include_collection))
 			where_vals.extend(include_collection)
 		if exclude_collection:
-			where_clause.append(self.get_collection_condition(*exclude_collection, negate=True))
+			where_clause.append(self.get_metadata_in_condition("collection", *exclude_collection, negate=True))
 			where_vals.extend(exclude_collection)
+
+		## technology
+		if include_technology:
+			where_clause.append(self.get_metadata_in_condition("technology", *include_technology))
+			where_vals.extend(include_technology)
+		if exclude_technology:
+			where_clause.append(self.get_metadata_in_condition("technology", *exclude_technology, negate=True))
+			where_vals.extend(exclude_technology)
+
+		## platform
+		if include_platform:
+			where_clause.append(self.get_metadata_in_condition("platform", *include_platform))
+			where_vals.extend(include_platform)
+		if exclude_platform:
+			where_clause.append(self.get_metadata_in_condition("platform", *exclude_platform, negate=True))
+			where_vals.extend(exclude_platform)
+
+		## chemistry
+		if include_chemistry:
+			where_clause.append(self.get_metadata_in_condition("chemistry", *include_chemistry))
+			where_vals.extend(include_chemistry)
+		if exclude_chemistry:
+			where_clause.append(self.get_metadata_in_condition("chemistry", *exclude_chemistry, negate=True))
+			where_vals.extend(exclude_chemistry)
+
+		## material
+		if include_material:
+			where_clause.append(self.get_metadata_in_condition("material", *include_material))
+			where_vals.extend(include_material)
+		if exclude_material:
+			where_clause.append(self.get_metadata_in_condition("material", *exclude_material, negate=True))
+			where_vals.extend(exclude_material)
+
+		## ct
+		if min_ct or max_ct:
+			where_clause.append(self.get_metadata_numeric_condition("ct", min_ct, max_ct))
+			if min_ct:
+				where_vals.append(min_ct)
+			if max_ct:
+				where_vals.append(max_ct)
 
 		## zip
 		if include_zip:
-			where_clause.append(self.get_zip_condition(*include_zip))
+			where_clause.append(self.get_metadata_leading_string_condition("zip", *include_zip))
 		if exclude_zip:
-			where_clause.append(self.get_zip_condition(*exclude_zip, negate=True))
+			where_clause.append(self.get_metadata_leading_string_condition("zip", *exclude_zip, negate=True))
 
 		## date
 		if include_dates:
-			where_clause.append(self.get_date_condition(*include_dates))
+			where_clause.append(self.get_metadata_date_condition("date", *include_dates))
 		if exclude_dates:
-			where_clause.extend(self.get_date_condition(*exclude_dates, negate=True))
+			where_clause.extend(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
 
 		## profiles
 		if include_profiles:
@@ -1573,9 +1610,9 @@ class sonarDBManager():
 					continue
 				profile_clause.append([])
 				if len(profile['dna']) > 0:
-					profile_clause[-1].append(self.get_dna_profile_condition(*profile['dna']))
+					profile_clause[-1].append(self.get_profile_condition('dna_profile', *profile['dna']))
 				if len(profile['aa']) > 0:
-					profile_clause[-1].append(self.get_aa_profile_condition(*profile['aa']))
+					profile_clause[-1].append(self.get_profile_condition('aa_profile', *profile['aa']))
 				if len(profile_clause[-1]) > 1:
 					profile_clause[-1] = "(" + " AND ".join(profile_clause[-1]) + ")"
 				else:
@@ -1592,9 +1629,9 @@ class sonarDBManager():
 					continue
 				profile_clause.append([])
 				if profile['dna']:
-					profile_clause[-1].append(self.get_dna_profile_condition(*profile['dna'], negate=True))
+					profile_clause[-1].append(self.get_profile_condition('dna_profile', *profile['dna'], negate=True))
 				if profile['aa']:
-					profile_clause[-1].append(self.get_aa_profile_condition(*profile['aa'], negate=True))
+					profile_clause[-1].append(self.get_profile_condition('aa_profile', *profile['aa'], negate=True))
 				if len(profile_clause[-1]) > 1:
 					profile_clause[-1] = "(" + " AND ".join(profile_clause) + ")"
 				else:
@@ -1604,22 +1641,26 @@ class sonarDBManager():
 				else:
 					where_clause.append(profile_clause[0])
 
+		## frameshifts
 		if frameshifts == -1:
-			where_clause.append(fs_profile = "")
+			where_clause.append("fs_profile = ''")
 		elif frameshifts == 1:
-			where_clause.append(fs_profile != "")
+			where_clause.append("fs_profile != ''")
 
+		# count or not
 		fields = "*" if not count else "COUNT(*) as count"
 
+		# create sql query
 		if where_clause:
 			sql =  "SELECT " + fields + " FROM essence WHERE " + " AND ".join(where_clause) + ";"
 		else:
 			sql = "SELECT " + fields + " FROM essence;"
+
 		return self.cursor.execute(sql, where_vals).fetchall()
 
 	# UPDATE DATA
 
-	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, gisaid = None, ena = None, collection = None, source = None, lab = None):
+	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, gisaid = None, ena = None, collection = None, source = None, lab = None, technology = None, platform = None, chemistry = None, material = None, ct = None):
 		expr = []
 		vals = []
 		if description is not None:
@@ -1649,6 +1690,21 @@ class sonarDBManager():
 		if lab is not None:
 			expr.append("lab")
 			vals.append(lab)
+		if technology is not None:
+			expr.append("technology")
+			vals.append(technology)
+		if platform is not None:
+			expr.append("platform")
+			vals.append(platform)
+		if chemistry is not None:
+			expr.append("chemistry")
+			vals.append(technology)
+		if material is not None:
+			expr.append("material")
+			vals.append(material)
+		if ct is not None:
+			expr.append("ct")
+			vals.append(ct)
 		vals.append(acc)
 		setexpr = ", ".join([x + " = ?" for x in expr])
 		sql = "UPDATE genome SET "+ setexpr + " WHERE accession = ?;"
@@ -2377,18 +2433,19 @@ class sonarDB(object):
 
 		if dna_var.startswith("del:"):
 			_, x, l = dna_var.split(":")
-			x = int(x)
-			y = x + len(l)
+			x = int(x) - 1
+			y = x + int(l)
 			for cds in self.refgffObj.cds:
 				if cds.is_frameshift_del(x, y):
 					return True
-		elif (sum(c.isalpha() for c in dna_var) - 1)%3 != 0:
+		else:
 			match = self.dnavar_grep_regex.search(dna_var)
-			x = int(match.group(2))
-			l = len(match.group(3))-1
-			for cds in self.refgffObj.cds:
-				if cds.is_frameshift_in(x, l):
-					return True
+			x = int(match.group(2)) - 1
+			l = len(match.group(3)) - 1
+			if l%3 != 0:
+				for cds in self.refgffObj.cds:
+					if cds.is_frameshift_in(x, l):
+						return True
 		return False
 
 	def filter_frameshifts(self, dna_profile):
@@ -2401,9 +2458,7 @@ class sonarDB(object):
 			dna_profile containing only frameshift mutations
 		"""
 		if self.refgffObj and dna_profile.strip():
-			profile = " ".join([x for x in dna_profile.strip().split(" ") if self.is_frameshift(x)])
-			if profile != "":
-				return " " + profile + " "
+			return " ".join([x for x in dna_profile.strip().split(" ") if self.is_frameshift(x)])
 		return ""
 
 	# MATCHING
@@ -2519,7 +2574,26 @@ class sonarDB(object):
 		return extended_profile
 
 
-	def match(self, include_profiles=[], exclude_profiles=[], accessions=[], lineages=[], zips=[], dates=[], labs = [], sources=[], collections=[], ambig=False, count=False, frameshifts=0, dbm=None):
+	def match(self,
+		include_profiles=[],
+		exclude_profiles=[],
+		accessions=[],
+		lineages=[],
+		zips=[],
+		dates=[],
+		labs = [],
+		sources=[],
+		collections=[],
+		technologies=[],
+		platforms=[],
+		chemistries=[],
+		materials=[],
+		min_ct=None,
+		max_ct=None,
+		ambig=False,
+		count=False,
+		frameshifts=0,
+		dbm=None):
 		"""
 		function to search genomes in the SONAR database dependent on
 		defined sequence and metadata profiles
@@ -2527,31 +2601,63 @@ class sonarDB(object):
 		Parameters
 		----------
 
-		include_profiles : list [ None ]
+		include_profiles : list [ [] ]
 			define a list of valid nucleotide, amino acid or mixed level profiles
 			that may contain ambiguities to find genomes sharing respective
 			profiles. Variations in each profile (sublist) are linked by AND operator
 			while profiles from different sublists are linked by OR.
-		 exclude_profiles : list [ None ]
+		 exclude_profiles : list [ [] ]
 			define a list of valid nucleotide, amino acid or mixed level profiles
 			that may contain ambiguities to find genomes NOT sharing respective
 			profiles. Variations in each profile (sublist) are linked by AND operator
 			while profiles from different sublists are linked by OR.
-		accessions : list [ None ]
+		accessions : list [ [] ]
 			list of accessions. Only genomes linked to accessions in this list
 			will be matched. Accessions are negated when starting with ^. [ None ]
-		lineages : list [ None ]
+		lineages : list [ [] ]
 			list of pangolin lineages. Only genomes assigend to a
 			pangolin lineage in this list will be matched. Lineages are
 			negated when starting with ^.
-		zips : list [ None ]
+		zips : list [ [] ]
 			list of zip codes. Only genomes linked to one of the given zip
 			codes or whose linked zip code starts like one of the given
 			zip codes are matched. zip codes are negated when starting with ^.
-		dates : list [ None ]
+		dates : list [ [] ]
 			define list of dates (YYYY-MM-DD) or date ranges (YYYY-MM-DD:YYYY-MM-DD).
 			Only genomes linked to one of the given dates or date ranges are
 			matched.
+		sources : list [ [] ]
+			list of data sources. Only genomes assigend to a
+			data source in this list will be matched. Data sources are
+			negated when starting with ^.
+		collections : list [ [] ]
+			list of data collections. Only genomes assigend to a
+			data collection in this list will be matched. Data collections are
+			negated when starting with ^.
+		technologies : list [ [] ]
+			list of sequencing technologies. Only genomes assigend to a
+			technology in this list will be matched. Technologies are
+			negated when starting with ^.
+		platforms : list [ [] ]
+			list of sequencing platforms. Only genomes assigend to a
+			platform in this list will be matched. Platforms are
+			negated when starting with ^.
+		chemistries : list [ [] ]
+			list of sequencing chemistries. Only genomes assigend to a
+			chemistry in this list will be matched. Chemistries are
+			negated when starting with ^.
+		materials : list [ [] ]
+			list of sampling materials. Only genomes assigend to a
+			material in this list will be matched. Materials are
+			negated when starting with ^.
+		labs : list [ [] ]
+			list of lab identifiers. Only genomes assigend to a
+			lab in this list will be matched. Labs are
+			negated when starting with ^.
+		min_ct : float [ None ]
+			minimal ct value of genomes to match.
+		max_ct : float [ None ]
+			maximal ct value of genomes to match.
 		ambig : bool [ False ]
 			define if variant alleles including ambiguities should be shown (True)
 			or not (False)
@@ -2617,6 +2723,18 @@ class sonarDB(object):
 		include_collection = [x for x in collections if not str(x).startswith("^")]
 		exclude_collection = [x[1:] for x in collections if str(x).startswith("^")]
 
+		include_technology = [x for x in technologies if not str(x).startswith("^")]
+		exclude_technology = [x[1:] for x in technologies if str(x).startswith("^")]
+
+		include_platform = [x for x in platforms if not str(x).startswith("^")]
+		exclude_platform= [x[1:] for x in platforms if str(x).startswith("^")]
+
+		include_chemistry = [x for x in chemistries if not str(x).startswith("^")]
+		exclude_chemistry = [x[1:] for x in chemistries if str(x).startswith("^")]
+
+		include_material = [x for x in materials if not str(x).startswith("^")]
+		exclude_material = [x[1:] for x in materials if str(x).startswith("^")]
+
 		# query
 		with ExitStack() as stack:
 			if dbm is None:
@@ -2637,7 +2755,17 @@ class sonarDB(object):
 					  include_source,
 					  exclude_source,
 					  include_collection,
-					  exclude_labs,
+					  exclude_collection,
+		  			  include_technology,
+		  			  exclude_technology,
+		  			  include_platform,
+		  			  exclude_platform,
+		  			  include_chemistry,
+		  			  exclude_chemistry,
+		  			  include_material,
+		  			  exclude_material,
+		  			  min_ct,
+		  			  max_ct,
 					  count,
 					  frameshifts)
 

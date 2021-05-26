@@ -48,6 +48,12 @@ def parse_args():
 	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--source', metavar="STR", help="match genomes of the given data source only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--technology', metavar="STR", help="match genomes of the given sequencing technology only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--platform', metavar="STR", help="match genomes of the given sequencing platform only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--chemistry', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--material', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--min_ct', metavar="STR", help="minimal ct value of samples resulting genomes are matched ", type=float, default=None)
+	parser_match.add_argument('--max_ct', metavar="STR", help="maximal ct value of samples resulting genomes are matched ", type=float, default=None)
 	parser_match_g1 = parser_match.add_mutually_exclusive_group()
 	parser_match_g1.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match_g1.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
@@ -205,14 +211,14 @@ class sonar():
 				print("\tnow:   " + str(new_dbstatus['seqs']))
 				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, frameshifts=0):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig, count=False, frameshifts=frameshifts)
+	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, materials, min_ct, max_ct, ambig, count=False, frameshifts=0):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=False, frameshifts=frameshifts)
 		if count:
 			print(rows)
 		else:
 			self.rows_to_csv(rows, na="*** no match ***")
 
-	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, sep=",", pangolin=False):
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, materialCol=None, ctCol=None, sep=",", pangolin=False):
 		updates = defaultdict(dict)
 		if pangolin:
 			with open(fname, "r", encoding='utf-8-sig') as handle:
@@ -241,6 +247,16 @@ class sonar():
 						updates[acc]['source'] = line[sourceCol]
 					if labCol:
 						updates[acc]['lab'] = line[labCol]
+					if technologyCol:
+						updates[acc]['technology'] = line[technologyCol]
+					if chemistryCol:
+						updates[acc]['chemistry'] = line[chemistryCol]
+					if platformCol:
+						updates[acc]['platform'] = line[platformCol]
+					if materialCol:
+						updates[acc]['material'] = line[materialCol]
+					if ctCol:
+						updates[acc]['ct'] = line[ctCol]
 		with sonardb.sonarDBManager(self.dbfile) as dbm:
 			for acc, update in updates.items():
 				dbm.update_genome(acc, **update)
@@ -287,7 +303,7 @@ class sonar():
 
 	def rows_to_csv(self, rows, file=None, na="*** no data ***"):
 		if len(rows) == 0:
-			print(na, file=sys.stderr), dbm.count_missing_metadata("GISAID")
+			print(na, file=sys.stderr)
 		else:
 			file = sys.stdout if file is None else open(file, "w")
 			writer = csv.DictWriter(file, rows[0].keys(), lineterminator=os.linesep)
@@ -303,7 +319,7 @@ class sonar():
 		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "source": "source", "lab": "labCol"}
+	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
@@ -348,7 +364,7 @@ if __name__ == "__main__":
 			frameshifts = 1
 		else:
 			frameshifts = 0
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.ambig, args.count, frameshifts)
+		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.technology, args.platform, args.chemistry, args.material, args.min_ct, args.max_ct, args.ambig, args.count, frameshifts)
 
 	# update
 	if args.tool == "update":
@@ -373,8 +389,10 @@ if __name__ == "__main__":
 	if args.tool == "view":
 		snr.view(args.acc)
 
-	# frameshift
+	# info
 	if args.tool == "info":
+		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
+			dbm.get_genome_metadata_scheme()
 		snr.show_system_info()
 		if args.db:
 			print()
