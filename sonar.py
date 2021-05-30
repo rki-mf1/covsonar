@@ -347,6 +347,9 @@ if __name__ == "__main__":
 	else:
 		debug = False
 
+	if args.tool != "add" and not os.path.isfile(args.db):
+		sys.exit("input error: database does not exist.")
+
 	snr = sonar(args.db, debug=debug)
 
 	if os.path.isfile(args.db):
