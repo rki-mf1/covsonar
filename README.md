@@ -46,6 +46,7 @@ In covSonar there are several tools that can be called via subcommands.
 | match      | to query genome sequences sharing a defined profile                 | 
 | restore    | to restore genome sequence(s) from the database                     |
 | info       | show detailed informations about the used sonarversion and database |
+| optimize   | optimize the given database                                         |
 
 Each tool provides a help page that can be accessed with the `-h` option.
 
@@ -59,7 +60,7 @@ path/to/covsonar/sonar.py add -h
 
 ### 3.1 Adding genomes to the database
 
-Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file that has to be defined. If the defined database file does not exist, a new database is created. 
+Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file. If the defined database file does not exist, a new database is created. 
 The import process can be divided into three stages:
 
 1. caching of the sequences to be imported and calculation of sequence hashes.
@@ -68,15 +69,15 @@ The import process can be divided into three stages:
 
 Each sequence to be added is aligned pairwise to the full genome sequence of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) using EMBOSS Stretcher and a gap-open and gap-extend penalty of 16 and 4, respectively. Gaps are left aligned.
 
-Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
+Depending on the number of sequences to be imported and the available system resources, the import may take some time, but can be accelerated by allocating more CPUs. However, more CPUs assigned may also significantly increase the amount of available RAM. Detailed progress information and time estimates are displayed on the screen during the import.
 
-If you forward the screen output to a file, the progress bar may produce plenty of useless lines. For this case, the progress bar can be disabled with the `--noprogress` option. If desired, any output can be avoided when adding new genomes with the `--quiet` option.
+If you forward the screen output to a file, the progress bar may produce plenty of useless lines. Thus, the progress bar can be disabled with the `--noprogress` option. If necessary, any output can be avoided when adding new genomes with the `--quiet` option.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # adding all sequences from 'genomes.fasta' to database 'mydb'
-# using eight cpus
+# using eight cpus (the database file will be created if it does not exist)
 path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8
 # as before, but using a permanent cache directory to store 
 # intermediate files
@@ -86,17 +87,27 @@ path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycach
 
 ### 3.2 Importing meta information
 
-Additional meta-information can be added for each genome sequence, namely lab, data source, data collection, lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the headline have to be defined as follows:
+Additional meta-information can be added for each genome sequence, namely lab, data source, data collection, lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the CSV headline have to be defined as follows:
 
-| expression            | description                                                |
-|-----------------------|------------------------------------------------------------|
-| accession=_colname1_  | genome accessions are listed in column _colname1_          |
-| lineage=_colname2_    | lineage information is listed in column _colname2_         | 
-| zip=_colname3_        | zip codes are listed in column _colname3_                  |
-| date=_colname4_       | sampling dates are listed in column _colname4_             |
-| lab=_colname5_        | lab information is listed in column _colname5_             | 
-| source=_colname6_     | data source information is listed in column _colname6_     | 
-| collection=_colname7_ | data collection information is listed in column _colname7_ | 
+| expression                   | description                                                                     |
+|------------------------------|---------------------------------------------------------------------------------|
+| accession=_colname1_         | genome accessions are listed in column _colname1_                               |
+| lineage=_colname2_           | lineage information is listed in column _colname2_                              | 
+| zip=_colname3_               | zip codes are listed in column _colname3_                                       |
+| date=_colname4_              | sampling dates are listed in column _colname4_ (needed date format: YYYY-MM-DD) |
+| lab=_colname5_               | lab information is listed in column _colname5_                                  | 
+| source=_colname6_            | data source is listed in column _colname6_                                      | 
+| collection=_colname7_        | data collection is listed in column _colname7_                                  | 
+| technology=_colname8_        | used sequencing technology is listed in column _colname8_                       | 
+| platform=_colname9_          | used sequencing platform is listed in column _colname9_                         | 
+| chemistry=_colname10_        | used sequencing chemistry is listed in column _colname10_                       | 
+| software=_colname11_         | software used for genome reconstruction is listed in column _colname11_         | 
+| software_version=_colname12_ | software version used for genome reconstruction is listed in column _colname12_ | 
+| material=_colname13_         | sampling material is listed in column _colname13_                               | 
+| ct=_colname14_               | ct values are listed in column _colname14_                                      | 
+
+fields = sorted(['lab', 'source', 'collection', 'technology', 'platform', 'chemistry', 'software', 'software_version', 'material', 'ct', 'gisaid', 'ena', 'lineage', 'zip', 'date'])
+
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
