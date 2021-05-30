@@ -147,9 +147,7 @@ To filter genomes based on metadata specific options can be used (see table belo
 | --chemistry         | one or more sequencing chemistries (e.g. Cleanplex)                   |      |
 | --software          | one software tool used for genome reconstruction (e.g. covPipe)       |      |
 | --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) | needs --software defined |
-| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) | needs --software defined |
 | --material          | one or more sample materials (e.g. 'nasal swap')                      |      |
-| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) |      |
 | --min_ct            | minimal ct value (e.g. 20)                                            |      |
 | --max_ct            | maximal ct value (e.g. 20)                                            |      |
  
@@ -208,7 +206,6 @@ Detailed infos about the used sonar system (e.g. version, reference, considered 
 conda activate sonar
 # Show infos about the used sonar system
 path/to/covsonar/sonar.py info
-
 # Show infos about the used sonar system and database 'mydb'
 path/to/covsonar/sonar.py info --db mydb
 ```
