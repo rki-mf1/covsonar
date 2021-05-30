@@ -181,6 +181,17 @@ else
 	  exit 1
 fi
 
+$DIR/sonar.py restore --db "$db" --acc test3 > "$out"
+if diff -q $DIR/test/test2.fasta "$out"; then
+    echo 'match 15 as expected'
+else
+    echo 'match 15 not as expected'
+		diff $DIR/test/test2.fasta "$out"
+		conda deactivate
+	  conda env remove -y --name covsonar_ci
+	  exit 1
+fi
+
 #cleaning
 conda deactivate
 conda env remove -y --name covsonar_ci

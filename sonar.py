@@ -66,12 +66,8 @@ def parse_args():
 
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
-	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, nargs = "+", required=True)
-
-	#create the parser for the "view" command
-	parser_view = subparsers.add_parser('view', parents=[general_parser], help='show dna profile.')
-	parser_view.add_argument('--acc', metavar="STR", help="accession to consider", type=str, required=True)
-	# parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
+	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, default=[], nargs = "+")
+	parser_restore.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be restored (one accession per line)", type=str, default=None)
 
 	# create the parser for the "update" command
 	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
@@ -422,7 +418,16 @@ if __name__ == "__main__":
 
 	# restore
 	if args.tool == "restore":
-		for acc in args.acc:
+		args.acc = set([x.strip() for x in args.acc])
+		if args.file:
+			if not os.path.isfile(args.file):
+				sys.exit("input error: file " + args.file + " does not exist.")
+			with open(args.file, "r") as handle:
+				for line in handle:
+					args.acc.add(line.strip())
+		if len(args.acc) == 0:
+			sys.exit("input error: nothing to restore.")
+		for acc in filter(None, args.acc):
 			print("\n".join(snr.restore(acc)))
 
 	# view
