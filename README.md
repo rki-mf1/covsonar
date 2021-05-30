@@ -87,7 +87,7 @@ path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycach
 
 ### 3.2 Importing meta information
 
-Additional meta-information can be added for each genome sequence, namely lab, data source, data collection, lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the CSV headline have to be defined as follows:
+Additional meta-information can be added for each genome sequence, namely lab, data source, data collection, lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the CSV headline have to be defined by using the `--fields` option followed by the respective column expression(s):
 
 | expression                   | description                                                                     |
 |------------------------------|---------------------------------------------------------------------------------|
@@ -131,35 +131,38 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 
 The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
 
-To filter genomes based on metadata specific options can be used (see table below). Only genomes linked to the respective metadata are then considered. Metadata values are negated when introduced by ^ (e.g. `--acc ^ID1` matches all genomes accessions but ID1). Metadata filtering is case-insensitive.    
+To filter genomes based on metadata specific options can be used (see table below). Only genomes linked to the respective metadata are then considered. Metadata values are negated when introduced by ^ (e.g. `--acc ^ID1` matches all genomes accessions but ID1). Metadata filtering is case-insensitive. To see the amount of available metadata in your database use the info tool (see section 3.5). 
 
-| option              | value(s)                         | note
-|---------------------|----------------------------------| 
-| --acc               | one or more genome accessions    |
-| --lineage           | one or more pangolin lineages    |
-| --zip               | one or more zip codes            | Zip codes are dynamically extended to the right side, e.g. 033 matches to all zip codes starting with 033|
-| --date              | one or more dates or date ranges | Dates are formatted as YYYY-MM-DD while date ranges are defined by YYYY-MM-DD:YY-MM-DD (from:to) |
-| --lab               | one or more labs                 | |
-| --source            | one or more data collections     | |
+| option              | value(s)                                                              | note |
+|---------------------|-----------------------------------------------------------------------|------| 
+| --acc               | one or more genome accessions (e.g. NC_045512.2)                      |      |
+| --lineage           | one or more pangolin lineages (e.g. B.1.1.7)                          |      |
+| --zip               | one or more zip codes (e.g. 10627)                                    | zip codes are dynamically extended to the right side, e.g. 033 matches to all zip codes starting with 033|
+| --date              | one or more dates or date ranges (e.g. 2021-01-01)                    | single dates are formatted as YYYY-MM-DD while date ranges can be defined by YYYY-MM-DD:YY-MM-DD (from:to) |
+| --lab               | one or more labs (e.g. L1)                                            |      |
+| --source            | one or more data sources (e.g. DESH)                                  |      |
+| --collection        | one or more data collections (e.g. RANDOM)                            |      |
+| --technology        | one or more sequencing technologies (e.g. Illumina)                   |      |
+| --platform          | one or more sequencing platforms (e.g. MiSeq)                         |      |
+| --chemistry         | one or more sequencing chemistries (e.g. Cleanplex)                   |      |
+| --software          | one software tool used for genome reconstruction (e.g. covPipe)       |      |
+| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) | needs --software defined |
+| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) | needs --software defined |
+| --material          | one or more sample materials (e.g. 'nasal swap')                      |      |
+| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) |      |
+| --min_ct            | minimal ct value (e.g. 20)                                            |      |
+| --max_ct            | maximal ct value (e.g. 20)                                            |      |
  
 
- To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage ^B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114. Single dates are formatted as _YYYY-MM-DD_ while date ranges are defined as _from:to_ (_YYYY-MM-DD:YYYY-MM-DD_). 
+There are additional options to adjust the matching.
 
-The Output is shown on screen but can be easily rdirected to a file by expanding the command by `> output.csv`. The output contains comma separated values for each matched genome in the following order:
+| option             | description                                                            |
+|--------------------|------------------------------------------------------------------------|
+| --count            | count matching genomes only                                            |
+| --ambig            | include purely ambiguous variations in the profiles (e.g. N stretches) |
+| --only_frameshifts | show only genomes containing frameshift mutations                      |
+| --no_frameshifts   | show only genomes containing no frameshift mutations                   |
 
-- accession of the matched genome 
-- lab
-- data source
-- data collection
-- GISAID id 
-- ENA id
-- lineage 
-- zip code 
-- sampling date 
-- nucleotide level profile
-- amino acid level profile 
-
-To count the matching genomes only, option `--count` can be used. By default, variations with ambiguities in the alternate allele (such as N) are not shown which can be changed using the `--ambig` option.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
@@ -187,15 +190,18 @@ The restored sequences are combined with their original FASTA header and  shown 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
-# Restore genome sequences with accessions 'mygenome1' and 'mygenome2' from the 
+# Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the 
 # database 'mydb' and write these to a fasta file named 'restored.fasta'
 path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 --db mydb > restored.fasta
+# as before but consider any accessions from 'accessions.txt' (the file has to
+# contain one accession per line) 
+path/to/covsonar/sonar.py restore --file accessions.txt --db mydb > restored.fasta
 ```
 
 
 ### 3.5 Show infos about the used sonar system and database
 
-Detailed infos about the used sonar system (e.g. version, reference, considered ORFs) and, optionally, a given database (e.g. number of imported genomes, unique sequences, data sources and collections) can be accessed.
+Detailed infos about the used sonar system (e.g. version, reference, considered ORFs) and, optionally, a given database (e.g. number of imported genomes, unique sequences, available metadata) can be accessed.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
