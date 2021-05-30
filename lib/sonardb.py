@@ -3080,22 +3080,13 @@ class sonarDB(object):
 				sys.exit("Good that you are paranoid: " + acc + " original and those restored from its dna profile do not match (sequences stored in " + path + ").")
 
 			#frameshift checks
-			row = self.match(accessions=[acc], dbm = dbm)[0]
+			row = self.match(accessions=[acc], ambig=True, dbm = dbm)[0]
 			fs = set()
 			for dna_var in row['dna_profile'].split(" "):
 				if dna_var.strip() == "":
 					continue
 				if self.is_frameshift(dna_var):
 					fs.add(dna_var)
-					if dna_var not in row['fs_profile']:
-						if auto_delete:
-								dbm.delete_genome(acc)
-						fd, path = mkstemp(suffix=".csv", prefix="paranoid_", dir="./")
-						with open(path, "w") as handle:
-							writer = csv.DictWriter(handle, row.keys(), lineterminator=os.linesep)
-							writer.writeheader()
-							writer.writerows([row])
-						sys.exit("Good that you are paranoid: " + dna_var + " missing in frameshift profile of " + acc + " (profiles stored in " + path + ").")
 
 			db_fs = set(filter(None, row['fs_profile'].split(" ")))
 			missing_fs = [x for x in fs if x not in db_fs]
