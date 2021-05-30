@@ -1,4 +1,5 @@
-accessions	regions	dates	gisaid	ena
-NC_045512.2	10627	2021-01-22	g1	e1
-test2	01778	2021-01-24	g2	e2
-test1	03372	2020-12-22	g3	e3
+accessions	regions	dates	gisaid	ena	lab	source	collection	technology	platform	chemistry	material	ct	software	software_version
+NC_045512.2	10627	2021-01-22	g1	e1	l1	REFSEQ		ONT	MinION	ARTIC v3	swap		corePov	1.0
+test2	01778	2021-01-24	g2	e2	l2	DESH	SUSPECT	Illumina	MiSeq	FLEX		28	covPipe	3.0.5
+test1	03372	2020-12-22	g3	e3	l2	DESH	RANDOM	Illumina	MiSeq	CleanPlex	swap	29	covPipe	3.0.2
+test3	03372	2020-12-22	g4	e4	l3	SENTINEL	RANDOM	Illumina	NextSeq	FLEX	swap	32	covPipe	3.0.5

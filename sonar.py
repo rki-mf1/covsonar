@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "0.0.10"
+VERSION = "1.0.0"
 import os
 import sys
 import csv
@@ -48,17 +48,26 @@ def parse_args():
 	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--source', metavar="STR", help="match genomes of the given data source only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
-	parser_match.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
+	parser_match.add_argument('--technology', metavar="STR", help="match genomes of the given sequencing technology only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--platform', metavar="STR", help="match genomes of the given sequencing platform only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--chemistry', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--software', metavar="STR", help="software used for genome reconstruction", type=str, default=None)
+	parser_match.add_argument('--version', metavar="STR", help="software version used for genome reconstruction", type=str, default=None)
+	parser_match.add_argument('--material', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--min_ct', metavar="STR", help="minimal ct value of samples resulting genomes are matched to", type=float, default=None)
+	parser_match.add_argument('--max_ct', metavar="STR", help="maximal ct value of samples resulting genomes are matched to", type=float, default=None)
+	parser_match_g1 = parser_match.add_mutually_exclusive_group()
+	parser_match_g1.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
+	parser_match_g1.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
+	parser_match_g2 = parser_match.add_mutually_exclusive_group()
+	parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
+	parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
+	parser_match.add_argument('--debug', help="show database query for debugging", action="store_true")
 
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
-	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, nargs = "+", required=True)
-
-	#create the parser for the "view" command
-	parser_view = subparsers.add_parser('view', parents=[general_parser], help='show dna profile.')
-	parser_view.add_argument('--acc', metavar="STR", help="accession to consider", type=str, required=True)
-	# parser_match.add_argument('--align', help="show aligned to reference sequence (if used, only a single accession can be processed)", action='store_true')
+	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, default=[], nargs = "+")
+	parser_restore.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be restored (one accession per line)", type=str, default=None)
 
 	# create the parser for the "update" command
 	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
@@ -67,12 +76,6 @@ def parse_args():
 	parser_update_input.add_argument('--csv', metavar="FILE", help="import metadata from a csv file", type=str, default=None)
 	parser_update_input.add_argument('--tsv', metavar="FILE", help="import metadata from a tsv file", type=str, default=None)
 	parser_update.add_argument('--fields', metavar="STR", help="if --csv or --tsv is used, define relevant columns like \"pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}\"", type=str, nargs="+", default=None)
-
-	# create the parser for the "frameshift" command
-	parser_frameshift = subparsers.add_parser('frameshift', parents=[general_parser], help='show all genomes with frameshifts')
-	parser_frameshift_out = parser_frameshift.add_mutually_exclusive_group()
-	parser_frameshift_out.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
-	parser_frameshift_out.add_argument('-o', '--out', help="write output to file(please note: the given file will be overwritten).", type=str, default=None)
 
 	# create the parser for the "info" command
 	parser_info= subparsers.add_parser('info', help='show info')
@@ -87,10 +90,11 @@ def parse_args():
 	return parser.parse_args()
 
 class sonar():
-	def __init__(self, db, gff=None):
+	def __init__(self, db, gff=None, debug=False):
 		self.dbfile = db if db else mkstemp()[1]
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
+		self.debug = debug
 
 	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False):
 		'''
@@ -151,12 +155,22 @@ class sonar():
 					if dbm.seq_exists(seqhash):
 						cache.prep_cached_files(seqhash)
 						cache.write_info(seqhash)
+						cache.add_seq(seqhash, seq)
 					elif seqhash not in to_import:
 						algn = cache.get_algn_fname(seqhash)
 						fasta = cache.get_fasta_fname(seqhash)
 						info = cache.get_info_fname(seqhash)
-						to_process.append([fasta, algn, info, seqhash, timeout])
-					cache.add_seq(seqhash, seq)
+
+						if not os.path.isfile(fasta):
+							unvalid_letters =  sorted(self.db.check_iupac_nt_code(seq))
+							if unvalid_letters:
+								sys.exit("input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")
+							cache.add_seq(seqhash, seq)
+							to_process.append([fasta, algn, info, seqhash, timeout])
+						elif SeqIO.read(fasta, "fasta").seq != seq:
+								sys.exit("cache error: sequence hash " + seqhash + " exists in cache but refers to a different sequence")
+						elif not os.path.isfile(info):
+							to_process.append([fasta, algn, info, seqhash, timeout])
 
 					to_import[seqhash].add((acc, descr))
 
@@ -197,14 +211,14 @@ class sonar():
 				print("\tnow:   " + str(new_dbstatus['seqs']))
 				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, ambig, count=False, show_frame_shifts_only=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, ambig=ambig)
+	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
-			print(len(rows))
+			print(rows)
 		else:
 			self.rows_to_csv(rows, na="*** no match ***")
 
-	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, sep=",", pangolin=False):
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False):
 		updates = defaultdict(dict)
 		if pangolin:
 			with open(fname, "r", encoding='utf-8-sig') as handle:
@@ -218,21 +232,38 @@ class sonar():
 				for line in lines:
 					acc = line[accCol]
 					if lineageCol and (acc not in updates or 'lineage' not in updates[acc]):
-						updates[acc]['lineage'] = line[lineageCol]
-					if zipCol:
+						updates[acc]['lineage'] = line[lineageCol].upper()
+					if zipCol and line[zipCol]:
 						updates[acc]['zip'] = line[zipCol]
-					if dateCol:
+					if dateCol and line[dateCol]:
 						updates[acc]['date'] = line[dateCol]
-					if gisaidCol:
+					if gisaidCol and line[gisaidCol]:
 						updates[acc]['gisaid'] = line[gisaidCol]
-					if enaCol:
+					if enaCol and line[enaCol]:
 						updates[acc]['ena'] = line[enaCol]
-					if collectionCol:
-						updates[acc]['collection'] = line[collectionCol]
-					if sourceCol:
-						updates[acc]['source'] = line[sourceCol]
-					if labCol:
-						updates[acc]['lab'] = line[labCol]
+					if collectionCol and line[collectionCol]:
+						updates[acc]['collection'] = line[collectionCol].upper()
+					if sourceCol and line[sourceCol]:
+						updates[acc]['source'] = line[sourceCol].upper()
+					if labCol and line[labCol]:
+						updates[acc]['lab'] = line[labCol].upper()
+					if technologyCol and line[technologyCol]:
+						updates[acc]['technology'] = line[technologyCol].upper()
+					if chemistryCol and line[chemistryCol]:
+						updates[acc]['chemistry'] = line[chemistryCol].upper()
+					if platformCol and line[platformCol]:
+						updates[acc]['platform'] = line[platformCol].upper()
+					if softwareCol and line[softwareCol]:
+						updates[acc]['software'] = line[softwareCol].upper()
+					if versionCol and line[versionCol]:
+						updates[acc]['version'] = line[versionCol].upper()
+					if materialCol:
+						updates[acc]['material'] = line[materialCol].upper()
+					if ctCol and line[ctCol]:
+						try:
+							updates[acc]['ct'] = float(line[ctCol])
+						except:
+							sys.exit("metadata error: " + line[ctCol] + " is not a valid ct value (accession: " + acc + ")")
 		with sonardb.sonarDBManager(self.dbfile) as dbm:
 			for acc, update in updates.items():
 				dbm.update_genome(acc, **update)
@@ -244,14 +275,6 @@ class sonar():
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
 
-	def show_frameshift(self, count=False, file=None):
-		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			rows = [x for x in self.db.iter_frameshifts()]
-		if count:
-			print(len(rows))
-		else:
-			self.rows_to_csv(rows, file=file, na="*** no match ***")
-
 	def show_system_info(self):
 		print("sonarDB version:       ", self.db.get_version())
 		print("reference genome:      ", self.db.refdescr)
@@ -261,18 +284,29 @@ class sonar():
 
 	def show_db_info(self):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
-			print("database path:         ", dbm.dbfile)
-			print("database version:      ", dbm.get_db_version())
-			print("database size:         ", self.get_db_size())
-			print("genomes:               ", dbm.count_genomes())
-			print("unique sequences:      ", dbm.count_sequences())
-			print("labs:                  ", dbm.count_labs())
-			print("earliest genome import:", dbm.get_earliest_import())
-			print("latest genome import:  ", dbm.get_latest_import())
-			print()
-			print("source\tcollection\tgenomes")
-			for row in dbm.info_data_types():
-				print( row['source'] + "\t" + row['collection'] + "\t" + str(row['genome_count']))
+			print("database path:             ", dbm.dbfile)
+			print("database version:          ", dbm.get_db_version())
+			print("database size:             ", self.get_db_size())
+			g = dbm.count_genomes()
+			print("genomes:                   ", g)
+			print("unique sequences:          ", dbm.count_sequences())
+			print("labs:                      ", dbm.count_labs())
+			print("earliest genome import:    ", dbm.get_earliest_import())
+			print("latest genome import:      ", dbm.get_latest_import())
+			print("earliest sampling date:    ", dbm.get_earliest_date())
+			print("latest sampling date:      ", dbm.get_latest_date())
+			print("metadata:          ")
+			fields = sorted(['lab', 'source', 'collection', 'technology', 'platform', 'chemistry', 'software', 'software_version', 'material', 'ct', 'gisaid', 'ena', 'lineage', 'zip', 'date'])
+			maxlen = max([len(x) for x in fields])
+			for field in fields:
+				if g == 0:
+					c = 0
+					p = 0
+				else:
+					c = dbm.count_metadata(field)
+					p = c/g*100
+				spacer = " " * (maxlen-len(field))
+				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
 	def rows_to_csv(self, rows, file=None, na="*** no data ***"):
 		if len(rows) == 0:
@@ -292,7 +326,7 @@ class sonar():
 		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "source": "source", "lab": "labCol"}
+	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol", "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
@@ -308,9 +342,17 @@ def process_update_expressions(expr):
 
 if __name__ == "__main__":
 	args = parse_args()
-	snr = sonar(args.db)
+	if hasattr(args, 'debug') and args.debug:
+		debug = True
+	else:
+		debug = False
 
-	if os.path.isfile(args.db):
+	if not args.db is None and args.tool != "add" and not os.path.isfile(args.db):
+		sys.exit("input error: database does not exist.")
+
+	snr = sonar(args.db, debug=debug)
+
+	if not args.db is None:
 		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
 			dbm.check_db_compatibility()
 
@@ -331,7 +373,37 @@ if __name__ == "__main__":
 			for d in args.date:
 				if not regex.match(d):
 					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.source, args.ambig, args.count)
+		if args.no_frameshifts:
+			frameshifts = -1
+		elif args.only_frameshifts:
+			frameshifts = 1
+		else:
+			frameshifts = 0
+
+		if args.lineage:
+			args.lineage = [x.upper() for x in args.lineage]
+		if args.lab:
+			args.lab = [x.upper() for x in args.lab]
+		if args.source:
+			args.source = [x.upper() for x in args.source]
+		if args.collection:
+			args.collection = [x.upper() for x in args.collection]
+		if args.technology:
+			args.technology = [x.upper() for x in args.technology]
+		if args.platform:
+			args.platform = [x.upper() for x in args.platform]
+		if args.lineage:
+			args.lineage = [x.upper() for x in args.lineage]
+		if args.chemistry:
+			args.chemistry = [x.upper() for x in args.chemistry]
+		if args.software:
+			args.software = args.software.upper()
+		if args.version:
+			args.version = args.version.upper()
+		if args.material:
+			args.material = [x.upper() for x in args.material]
+
+		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts)
 
 	# update
 	if args.tool == "update":
@@ -349,19 +421,23 @@ if __name__ == "__main__":
 
 	# restore
 	if args.tool == "restore":
-		for acc in args.acc:
+		args.acc = set([x.strip() for x in args.acc])
+		if args.file:
+			if not os.path.isfile(args.file):
+				sys.exit("input error: file " + args.file + " does not exist.")
+			with open(args.file, "r") as handle:
+				for line in handle:
+					args.acc.add(line.strip())
+		if len(args.acc) == 0:
+			sys.exit("input error: nothing to restore.")
+		for acc in filter(None, args.acc):
 			print("\n".join(snr.restore(acc)))
 
 	# view
 	if args.tool == "view":
 		snr.view(args.acc)
 
-	# frameshift
-	if args.tool == "frameshift":
-		# sanity check
-		snr.show_frameshift(args.count, args.out)
-
-	# frameshift
+	# info
 	if args.tool == "info":
 		snr.show_system_info()
 		if args.db:

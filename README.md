@@ -46,6 +46,7 @@ In covSonar there are several tools that can be called via subcommands.
 | match      | to query genome sequences sharing a defined profile                 | 
 | restore    | to restore genome sequence(s) from the database                     |
 | info       | show detailed informations about the used sonarversion and database |
+| optimize   | optimize the given database                                         |
 
 Each tool provides a help page that can be accessed with the `-h` option.
 
@@ -59,7 +60,7 @@ path/to/covsonar/sonar.py add -h
 
 ### 3.1 Adding genomes to the database
 
-Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file that has to be defined. If the defined database file does not exist, a new database is created. 
+Genome sequences of SARS-COV-2 can be added to the database in the form of FASTA files. Intermediate data is stored in a cache directory, which is temporary by default and deleted after import. The SQLite database is stored in a single file. If the defined database file does not exist, a new database is created. 
 The import process can be divided into three stages:
 
 1. caching of the sequences to be imported and calculation of sequence hashes.
@@ -68,15 +69,15 @@ The import process can be divided into three stages:
 
 Each sequence to be added is aligned pairwise to the full genome sequence of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) using EMBOSS Stretcher and a gap-open and gap-extend penalty of 16 and 4, respectively. Gaps are left aligned.
 
-Depending on the number of sequences to be imported and the available system resources, the import may take some time. The import can be accelerated by allocating more CPUs. However, do not underestimate that this may also significantly increase the amount of available RAM. In any case, detailed progress information and time estimates are displayed on the screen during the import.
+Depending on the number of sequences to be imported and the available system resources, the import may take some time, but can be accelerated by allocating more CPUs. However, more CPUs assigned may also significantly increase the amount of available RAM. Detailed progress information and time estimates are displayed on the screen during the import.
 
-If you forward the screen output to a file, the progress bar may produce plenty of useless lines. For this case, the progress bar can be disabled with the `--noprogress` option. If desired, any output can be avoided when adding new genomes with the `--quiet` option.
+If you forward the screen output to a file, the progress bar may produce plenty of useless lines. Thus, the progress bar can be disabled with the `--noprogress` option. If necessary, any output can be avoided when adding new genomes with the `--quiet` option.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
 # adding all sequences from 'genomes.fasta' to database 'mydb'
-# using eight cpus
+# using eight cpus (the database file will be created if it does not exist)
 path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8
 # as before, but using a permanent cache directory to store 
 # intermediate files
@@ -86,17 +87,25 @@ path/to/covsonar/sonar.py add -f genomes.fasta --db mydb --cpus 8 --cache mycach
 
 ### 3.2 Importing meta information
 
-Additional meta-information can be added for each genome sequence, namely lab, data source, data collection, lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the headline have to be defined as follows:
+Additional meta-information can be added for each genome sequence, namely lab, data source, data collection, lineage information, zip code, collection date, GISAID and ENA identifier. Output files from Pangolin can be used directly to add the appropriate ancestry information to the available genomes. Additional information can be extracted and added from CSV or TSV files. For this, the corresponding column names from the CSV headline have to be defined by using the `--fields` option followed by the respective column expression(s):
 
-| expression            | description                                                |
-|-----------------------|------------------------------------------------------------|
-| accession=_colname1_  | genome accessions are listed in column _colname1_          |
-| lineage=_colname2_    | lineage information is listed in column _colname2_         | 
-| zip=_colname3_        | zip codes are listed in column _colname3_                  |
-| date=_colname4_       | sampling dates are listed in column _colname4_             |
-| lab=_colname5_        | lab information is listed in column _colname5_             | 
-| source=_colname6_     | data source information is listed in column _colname6_     | 
-| collection=_colname7_ | data collection information is listed in column _colname7_ | 
+| expression                   | description                                                                     |
+|------------------------------|---------------------------------------------------------------------------------|
+| accession=_colname1_         | genome accessions are listed in column _colname1_                               |
+| lineage=_colname2_           | lineage information is listed in column _colname2_                              | 
+| zip=_colname3_               | zip codes are listed in column _colname3_                                       |
+| date=_colname4_              | sampling dates are listed in column _colname4_ (needed date format: YYYY-MM-DD) |
+| lab=_colname5_               | lab information is listed in column _colname5_                                  | 
+| source=_colname6_            | data source is listed in column _colname6_                                      | 
+| collection=_colname7_        | data collection is listed in column _colname7_                                  | 
+| technology=_colname8_        | used sequencing technology is listed in column _colname8_                       | 
+| platform=_colname9_          | used sequencing platform is listed in column _colname9_                         | 
+| chemistry=_colname10_        | used sequencing chemistry is listed in column _colname10_                       | 
+| software=_colname11_         | software used for genome reconstruction is listed in column _colname11_         | 
+| software_version=_colname12_ | software version used for genome reconstruction is listed in column _colname12_ | 
+| material=_colname13_         | sampling material is listed in column _colname13_                               | 
+| ct=_colname14_               | ct values are listed in column _colname14_                                      | 
+
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
@@ -120,27 +129,40 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 | deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) | 
 | insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |  
 
-The position specifications refer to the reference in each case and are 1-based. Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid, or mixed profile, which means that matching genomes must have all defined variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while  `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
+The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
 
-To consider only genomes of a certain lineage, zip code or samplig date, option `--lineage`, `--zip` or `--date` can be used followed by one or more values. To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage ^B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114. Single dates are formatted as _YYYY-MM-DD_ while date ranges are defined as _from:to_ (_YYYY-MM-DD:YYYY-MM-DD_). 
+To filter genomes based on metadata specific options can be used (see table below). Only genomes linked to the respective metadata are then considered. Metadata values are negated when introduced by ^ (e.g. `--acc ^ID1` matches all genomes accessions but ID1). Metadata filtering is case-insensitive. To see the amount of available metadata in your database use the info tool (see section 3.5). 
 
-By default, additional variations are allowed in the matched genomes. Using the `--exclusive` option, genomes with additional variations are excluded. Please note, that ambiguities in the query genomes such as N are also considered as variations.
+| option              | value(s)                                                              | note |
+|---------------------|-----------------------------------------------------------------------|------| 
+| --acc               | one or more genome accessions (e.g. NC_045512.2)                      |      |
+| --lineage           | one or more pangolin lineages (e.g. B.1.1.7)                          |      |
+| --zip               | one or more zip codes (e.g. 10627)                                    | zip codes are dynamically extended to the right side, e.g. 033 matches to all zip codes starting with 033|
+| --date              | one or more dates or date ranges (e.g. 2021-01-01)                    | single dates are formatted as YYYY-MM-DD while date ranges can be defined by YYYY-MM-DD:YY-MM-DD (from:to) |
+| --lab               | one or more labs (e.g. L1)                                            |      |
+| --source            | one or more data sources (e.g. DESH)                                  |      |
+| --collection        | one or more data collections (e.g. RANDOM)                            |      |
+| --technology        | one or more sequencing technologies (e.g. Illumina)                   |      |
+| --platform          | one or more sequencing platforms (e.g. MiSeq)                         |      |
+| --chemistry         | one or more sequencing chemistries (e.g. Cleanplex)                   |      |
+| --software          | one software tool used for genome reconstruction (e.g. covPipe)       |      |
+| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) | needs --software defined |
+| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) | needs --software defined |
+| --material          | one or more sample materials (e.g. 'nasal swap')                      |      |
+| --version           | one software tool version used for genome reconstruction (e.g. 3.0.5) |      |
+| --min_ct            | minimal ct value (e.g. 20)                                            |      |
+| --max_ct            | maximal ct value (e.g. 20)                                            |      |
+ 
 
-The Output is shown on screen but can be easily rdirected to a file by expanding the command by `> output.csv`. The output contains comma separated values for each matched genome in the following order:
+There are additional options to adjust the matching.
 
-- accession of the matched genome 
-- lab
-- data source
-- data collection
-- GISAID id 
-- ENA id
-- lineage 
-- zip code 
-- sampling date 
-- nucleotide level profile
-- amino acid level profile 
+| option             | description                                                            |
+|--------------------|------------------------------------------------------------------------|
+| --count            | count matching genomes only                                            |
+| --ambig            | include purely ambiguous variations in the profiles (e.g. N stretches) |
+| --only_frameshifts | show only genomes containing frameshift mutations                      |
+| --no_frameshifts   | show only genomes containing no frameshift mutations                   |
 
-To count the matching genomes only, option `--count` can be used. By default, variations with ambiguities in the alternate allele (such as N) are not shown which can be changed using the `--ambig` option.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
@@ -168,15 +190,18 @@ The restored sequences are combined with their original FASTA header and  shown 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
 conda activate sonar
-# Restore genome sequences with accessions 'mygenome1' and 'mygenome2' from the 
+# Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the 
 # database 'mydb' and write these to a fasta file named 'restored.fasta'
 path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 --db mydb > restored.fasta
+# as before, but consider all accessions from 'accessions.txt' (the file has to
+# contain one accession per line) 
+path/to/covsonar/sonar.py restore --file accessions.txt --db mydb > restored.fasta
 ```
 
 
 ### 3.5 Show infos about the used sonar system and database
 
-Detailed infos about the used sonar system (e.g. version, reference, considered ORFs) and, optionally, a given database (e.g. number of imported genomes, unique sequences, data sources and collections) can be accessed.
+Detailed infos about the used sonar system (e.g. version, reference, considered ORFs) and, optionally, a given database (e.g. number of imported genomes, unique sequences, available metadata) can be accessed.
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
