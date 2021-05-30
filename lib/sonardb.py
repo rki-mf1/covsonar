@@ -2501,7 +2501,7 @@ class sonarDB(object):
 			dna_profile containing only frameshift mutations
 		"""
 		if self.refgffObj and dna_profile.strip():
-			return " ".join([x for x in dna_profile.strip().split(" ") if self.is_frameshift(x)])
+			return " ".join([x for x in filter(None, dna_profile.split(" ")) if self.is_frameshift(x)])
 		return ""
 
 	# MATCHING
