@@ -51,15 +51,18 @@ def parse_args():
 	parser_match.add_argument('--technology', metavar="STR", help="match genomes of the given sequencing technology only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--platform', metavar="STR", help="match genomes of the given sequencing platform only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--chemistry', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
+	parser_match.add_argument('--software', metavar="STR", help="software used for genome reconstruction", type=str, default=None)
+	parser_match.add_argument('--version', metavar="STR", help="software version used for genome reconstruction", type=str, default=None)
 	parser_match.add_argument('--material', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--min_ct', metavar="STR", help="minimal ct value of samples resulting genomes are matched ", type=float, default=None)
-	parser_match.add_argument('--max_ct', metavar="STR", help="maximal ct value of samples resulting genomes are matched ", type=float, default=None)
+	parser_match.add_argument('--min_ct', metavar="STR", help="minimal ct value of samples resulting genomes are matched to", type=float, default=None)
+	parser_match.add_argument('--max_ct', metavar="STR", help="maximal ct value of samples resulting genomes are matched to", type=float, default=None)
 	parser_match_g1 = parser_match.add_mutually_exclusive_group()
 	parser_match_g1.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match_g1.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
 	parser_match_g2 = parser_match.add_mutually_exclusive_group()
 	parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
 	parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
+	parser_match.add_argument('--debug', help="show database query for debugging", action="store_true")
 
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
@@ -91,10 +94,11 @@ def parse_args():
 	return parser.parse_args()
 
 class sonar():
-	def __init__(self, db, gff=None):
+	def __init__(self, db, gff=None, debug=False):
 		self.dbfile = db if db else mkstemp()[1]
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
+		self.debug = debug
 
 	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False):
 		'''
@@ -211,14 +215,14 @@ class sonar():
 				print("\tnow:   " + str(new_dbstatus['seqs']))
 				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
 
-	def match(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, materials, min_ct, max_ct, ambig, count=False, frameshifts=0):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=False, frameshifts=frameshifts)
+	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
 			print(rows)
 		else:
 			self.rows_to_csv(rows, na="*** no match ***")
 
-	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, materialCol=None, ctCol=None, sep=",", pangolin=False):
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False):
 		updates = defaultdict(dict)
 		if pangolin:
 			with open(fname, "r", encoding='utf-8-sig') as handle:
@@ -232,31 +236,38 @@ class sonar():
 				for line in lines:
 					acc = line[accCol]
 					if lineageCol and (acc not in updates or 'lineage' not in updates[acc]):
-						updates[acc]['lineage'] = line[lineageCol]
-					if zipCol:
+						updates[acc]['lineage'] = line[lineageCol].upper()
+					if zipCol and line[zipCol]:
 						updates[acc]['zip'] = line[zipCol]
-					if dateCol:
+					if dateCol and line[dateCol]:
 						updates[acc]['date'] = line[dateCol]
-					if gisaidCol:
+					if gisaidCol and line[gisaidCol]:
 						updates[acc]['gisaid'] = line[gisaidCol]
-					if enaCol:
+					if enaCol and line[enaCol]:
 						updates[acc]['ena'] = line[enaCol]
-					if collectionCol:
-						updates[acc]['collection'] = line[collectionCol]
-					if sourceCol:
-						updates[acc]['source'] = line[sourceCol]
-					if labCol:
-						updates[acc]['lab'] = line[labCol]
-					if technologyCol:
-						updates[acc]['technology'] = line[technologyCol]
-					if chemistryCol:
-						updates[acc]['chemistry'] = line[chemistryCol]
-					if platformCol:
-						updates[acc]['platform'] = line[platformCol]
+					if collectionCol and line[collectionCol]:
+						updates[acc]['collection'] = line[collectionCol].upper()
+					if sourceCol and line[sourceCol]:
+						updates[acc]['source'] = line[sourceCol].upper()
+					if labCol and line[labCol]:
+						updates[acc]['lab'] = line[labCol].upper()
+					if technologyCol and line[technologyCol]:
+						updates[acc]['technology'] = line[technologyCol].upper()
+					if chemistryCol and line[chemistryCol]:
+						updates[acc]['chemistry'] = line[chemistryCol].upper()
+					if platformCol and line[platformCol]:
+						updates[acc]['platform'] = line[platformCol].upper()
+					if softwareCol and line[softwareCol]:
+						updates[acc]['software'] = line[softwareCol].upper()
+					if versionCol and line[versionCol]:
+						updates[acc]['version'] = line[versionCol].upper()
 					if materialCol:
-						updates[acc]['material'] = line[materialCol]
-					if ctCol:
-						updates[acc]['ct'] = line[ctCol]
+						updates[acc]['material'] = line[materialCol].upper()
+					if ctCol and line[ctCol]:
+						try:
+							updates[acc]['ct'] = float(line[ctCol])
+						except:
+							sys.exit("metadata error: " + line[ctCol] + " is not a valid ct value (accession: " + acc + ")")
 		with sonardb.sonarDBManager(self.dbfile) as dbm:
 			for acc, update in updates.items():
 				dbm.update_genome(acc, **update)
@@ -319,7 +330,7 @@ class sonar():
 		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
+	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol", "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
@@ -335,7 +346,12 @@ def process_update_expressions(expr):
 
 if __name__ == "__main__":
 	args = parse_args()
-	snr = sonar(args.db)
+	if hasattr(args, 'debug') and args.debug:
+		debug = True
+	else:
+		debug = False
+
+	snr = sonar(args.db, debug=debug)
 
 	if os.path.isfile(args.db):
 		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
@@ -364,7 +380,31 @@ if __name__ == "__main__":
 			frameshifts = 1
 		else:
 			frameshifts = 0
-		snr.match(args.include, args.exclude, args.acc, args.lineage, args.zip, args.date, args.lab, args.source, args.collection, args.technology, args.platform, args.chemistry, args.material, args.min_ct, args.max_ct, args.ambig, args.count, frameshifts)
+
+		if args.lineage:
+			args.lineage = [x.upper() for x in args.lineage]
+		if args.lab:
+			args.lab = [x.upper() for x in args.lab]
+		if args.source:
+			args.source = [x.upper() for x in args.source]
+		if args.collection:
+			args.collection = [x.upper() for x in args.collection]
+		if args.technology:
+			args.technology = [x.upper() for x in args.technology]
+		if args.platform:
+			args.platform = [x.upper() for x in args.platform]
+		if args.lineage:
+			args.lineage = [x.upper() for x in args.lineage]
+		if args.chemistry:
+			args.chemistry = [x.upper() for x in args.chemistry]
+		if args.software:
+			args.software = args.software.upper()
+		if args.version:
+			args.version = args.version.upper()
+		if args.material:
+			args.material = [x.upper() for x in args.material]
+
+		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts)
 
 	# update
 	if args.tool == "update":

@@ -16,17 +16,36 @@ CREATE TABLE IF NOT EXISTS genome (
 	date TEXT,
 	gisaid VARCHAR(100),
 	ena VARCHAR(100),
-	source VARCHAR(100) DEFAULT 'NA',
-	collection VARCHAR(100) DEFAULT 'NA',
-	lab VARCHAR(100) DEFAULT 'NA',
-	technology VARCHAR(100) DEFAULT 'NA',
-	platform VARCHAR(100) DEFAULT 'NA',
-	chemistry VARCHAR(100) DEFAULT 'NA',
-	material VARCHAR(100) DEFAULT 'NA',
+	source VARCHAR(100) DEFAULT '',
+	collection VARCHAR(100) DEFAULT '',
+	lab VARCHAR(100) DEFAULT '',
+	technology VARCHAR(100) DEFAULT '',
+	platform VARCHAR(100) DEFAULT '',
+	chemistry VARCHAR(100) DEFAULT '',
+	software VARCHAR(45) DEFAULT '',
+	software_version VARCHAR(45) DEFAULT '',
+	material VARCHAR(100) DEFAULT '',
 	ct REAL DEFAULT NULL,
 	imported TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash)
 ) WITHOUT ROWID;
+
+CREATE INDEX idx_meta_lineage ON genome(lineage);
+CREATE INDEX idx_meta_zip ON genome(zip);
+CREATE INDEX idx_meta_date ON genome(date);
+CREATE INDEX idx_meta_gisaid ON genome(gisaid);
+CREATE INDEX idx_meta_ena ON genome(ena);
+CREATE INDEX idx_meta_source ON genome(source);
+CREATE INDEX idx_meta_collection ON genome(collection);
+CREATE INDEX idx_meta_lab ON genome(lab);
+CREATE INDEX idx_meta_technology ON genome(technology);
+CREATE INDEX idx_meta_platform ON genome(platform);
+CREATE INDEX idx_meta_chemistry ON genome(chemistry);
+CREATE INDEX idx_meta_software ON genome(software);
+CREATE INDEX idx_meta_version ON genome(software_version);
+CREATE INDEX idx_meta_material ON genome(material);
+CREATE INDEX idx_meta_ct ON genome(ct);
+CREATE INDEX idx_meta_imported ON genome(imported);
 
 CREATE TABLE IF NOT EXISTS sequence2dna (
 	seqhash VARCHAR(40) NOT NULL,
@@ -84,6 +103,8 @@ SELECT
 	chemistry,
 	material,
 	ct,
+	software,
+	software_version,
 	gisaid,
 	ena,
 	zip,
@@ -111,6 +132,8 @@ SELECT
 	chemistry,
 	material,
 	ct,
+	software,
+	software_version,
 	gisaid,
 	ena,
 	zip,
@@ -140,6 +163,8 @@ SELECT
 	chemistry,
 	material,
 	ct,
+	software,
+	software_version,
 	gisaid,
 	ena,
 	zip,

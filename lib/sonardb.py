@@ -209,7 +209,7 @@ class sonarCDS(object):
 		stores the in silico translated amino acid sequence
 	coding_positions: list
 		stores all genomic positions part of the coding sequences of this gene
-		as ordered list
+		as ordered list (positions might be redundant in case of ribosomal slippage)
 	coding_positions_set: set
 		stores all genomic positions part of the coding sequences of this gene
 		as set
@@ -427,6 +427,12 @@ class sonarCDS(object):
 		>>> cds.is_frameshift_del(27,30)
 		False
 
+		>>> cds=sonarCDS("loc1", "prot1", [(10, 15), (15, 16), (15,20)], ['ATGTG', 'G', 'GATC'], "+")
+		>>> cds.is_frameshift_del(15, 16)
+		False
+		>>> cds.is_frameshift_del(13, 16)
+		True
+
 		Parameters
 		----------
 		x : int
@@ -440,26 +446,26 @@ class sonarCDS(object):
 			True if deletion of the given genomic range causes a frameshift mutation
 			within the CDS, False otherwise.
 		"""
-		if self.is_cds(x, y) and len(set(range(x,y)).intersection(self.coding_positions))%3 != 0:
+		if self.is_cds(x, y) and len([True for z in self.coding_positions if z < x or z >= y])%3 != 0:
 			return True
 		return False
 
 	def is_frameshift_in(self, x, l):
 		"""
-		function to check if a deletion at given genomic position x with a given
+		function to check if a insertion at given genomic position (x) with a given
 		insertion length (l) leads to an frameshift within this CDS.
 
 		Examples
 		--------
 
-		>>> cds=sonarCDS("loc1", "prot1", [(10, 15), (25, 32)], ['ATGTG', 'CTAATGA'], "+")
-		>>> cds.is_frameshift_in(9, 4)
+		>>> cds=sonarCDS("loc1", "prot1", [(10, 16), (15, 21)], ['ATGTGC', 'GATNTC'], "+")
+		>>> cds.is_frameshift_in(12, 3)
 		False
-		>>> cds.is_frameshift_in(14, 4)
+		>>> cds.is_frameshift_in(12, 7)
 		True
 		>>> cds.is_frameshift_in(15, 4)
-		False
-		>>> cds.is_frameshift_in(25, 3)
+		True
+		>>> cds.is_frameshift_in(15, 3)
 		False
 
 		Parameters
@@ -467,7 +473,7 @@ class sonarCDS(object):
 		x : int
 			genomic (start) coordinate (0-based, inclusive)
 		l : int
-			length of insertion (without anchor base)
+			length of insertion (excluding anchor base)
 
 		Returns
 		-------
@@ -789,7 +795,7 @@ class sonarALIGN(object):
 		self.gff = sonarGFFObj if sonarGFFObj else None
 		self._insert_regex = re.compile("[^-]-+")
 		self._del_regex = re.compile("-+")
-		self._codon_regex = re.compile(".-*.-*.-*")
+		self._codon_regex = re.compile("[^-]-*[^-]-*[^-]-*")
 		self._leading_gap_regex = re.compile("^-+")
 		self._tailing_gap_regex = re.compile("-+$")
 		self._dnadiff = None
@@ -1076,20 +1082,20 @@ class sonarALIGN(object):
 		('T', 'I', 1000, None, 'ORF1b', 'GU280_gp01')
 		('A', 'D', 1707, None, 'ORF1b', 'GU280_gp01')
 		('I', 'T', 2229, None, 'ORF1b', 'GU280_gp01')
-		('S', '', 3674, None, 'ORF1b', 'GU280_gp01')
-		('G', '', 3675, None, 'ORF1b', 'GU280_gp01')
-		('F', '', 3676, None, 'ORF1b', 'GU280_gp01')
+		('S', '', 3674, 3675, 'ORF1b', 'GU280_gp01')
+		('G', '', 3675, 3676, 'ORF1b', 'GU280_gp01')
+		('F', '', 3676, 3677, 'ORF1b', 'GU280_gp01')
 		('T', 'I', 1000, None, 'ORF1a', 'GU280_gp01')
 		('A', 'D', 1707, None, 'ORF1a', 'GU280_gp01')
 		('I', 'T', 2229, None, 'ORF1a', 'GU280_gp01')
-		('S', '', 3674, None, 'ORF1a', 'GU280_gp01')
-		('G', '', 3675, None, 'ORF1a', 'GU280_gp01')
-		('F', '', 3676, None, 'ORF1a', 'GU280_gp01')
-		('I', '', 67, None, 'S', 'GU280_gp02')
-		('H', '', 68, None, 'S', 'GU280_gp02')
-		('V', '', 69, None, 'S', 'GU280_gp02')
-		('V', '', 142, None, 'S', 'GU280_gp02')
-		('Y', '', 143, None, 'S', 'GU280_gp02')
+		('S', '', 3674, 3675, 'ORF1a', 'GU280_gp01')
+		('G', '', 3675, 3676, 'ORF1a', 'GU280_gp01')
+		('F', '', 3676, 3677, 'ORF1a', 'GU280_gp01')
+		('I', '', 67, 68, 'S', 'GU280_gp02')
+		('H', '', 68, 69, 'S', 'GU280_gp02')
+		('V', '', 69, 70, 'S', 'GU280_gp02')
+		('V', '', 142, 143, 'S', 'GU280_gp02')
+		('Y', '', 143, 144, 'S', 'GU280_gp02')
 		('N', 'Y', 500, None, 'S', 'GU280_gp02')
 		('A', 'D', 569, None, 'S', 'GU280_gp02')
 		('P', 'H', 680, None, 'S', 'GU280_gp02')
@@ -1138,12 +1144,12 @@ class sonarALIGN(object):
 					e = match.end()
 					start = int((s-target[:match.start()].count("-"))/3)
 					tcodon = match.group().replace("-", "")
-					qcodon = query[s:e]
+					qcodon = query[s:e].replace("-", "")
 					taa = self.translate(tcodon, cds.translation_table)
-					if "-" in qcodon:
-						yield taa, "", start, None, cds.symbol, cds.locus
+					qaa = self.translate(qcodon, cds.translation_table)
+					if qaa == "":
+						yield taa, "", start, start+1, cds.symbol, cds.locus
 					else:
-						qaa = self.translate(qcodon, cds.translation_table)
 						if qaa != taa:
 							e = None if len(qaa) == 1 else start + len(qaa)
 							yield (taa, qaa, start, e, cds.symbol, cds.locus)
@@ -1213,6 +1219,8 @@ class sonarDBManager():
 		define busy timeout. Use -1 for no timeout.
 	readonly : bool [ False ]
 		define if the connection should be read-only
+	debug : bool [ False ]
+		debug mode (print selected sql queries)
 
 	Attributes
 	----------
@@ -1230,13 +1238,14 @@ class sonarDBManager():
 
 	"""
 
-	def __init__(self, dbfile, timeout=-1, readonly=False):
+	def __init__(self, dbfile, timeout=-1, readonly=False, debug=False):
 		self.dbfile = os.path.abspath(dbfile)
 		self.connection = None
 		self.cursor = None
 		self.__timeout = timeout
 		self.__mode = "ro" if readonly else "rwc"
 		self.__uri = "file:" + urlquote(self.dbfile)
+		self.debug = debug
 
 	def __enter__(self):
 		if not os.path.isfile(self.dbfile) or os.stat(self.dbfile).st_size == 0:
@@ -1445,6 +1454,10 @@ class sonarDBManager():
 		op = " NOT " if negate else " "
 		return field + op + "IN (" + ", ".join(['?'] * len(vals)) + ")"
 
+	def get_metadata_equal_condition(self, field, val, negate=False):
+		op = " != " if negate else " = "
+		return field + op + "?"
+
 	def get_metadata_numeric_condition(self, field, min=False, max=True):
 		condition = []
 		if min:
@@ -1501,6 +1514,10 @@ class sonarDBManager():
   			  exclude_chemistry=[],
   			  include_material=[],
   			  exclude_material=[],
+			  include_software=None,
+			  exclude_software=None,
+			  include_software_version=None,
+			  exclude_software_version=None,
   			  min_ct=None,
   			  max_ct=None,
 			  count = False,
@@ -1573,6 +1590,22 @@ class sonarDBManager():
 		if exclude_chemistry:
 			where_clause.append(self.get_metadata_in_condition("chemistry", *exclude_chemistry, negate=True))
 			where_vals.extend(exclude_chemistry)
+
+		## software
+		if include_software:
+			where_clause.append(self.get_metadata_equal_condition("software", include_software))
+			where_vals.append(include_software)
+		if exclude_software:
+			where_clause.append(self.get_metadata_equal_condition("software", exclude_software, negate=True))
+			where_vals.append(exclude_software)
+
+		## software version
+		if include_software_version:
+			where_clause.append(self.get_metadata_equal_condition("software_version", include_software_version))
+			where_vals.append(include_software_version)
+		if exclude_software_version:
+			where_clause.append(self.get_metadata_equal_condition("software_version", exclude_software_version, negate=True))
+			where_vals.append(exclude_software_version)
 
 		## material
 		if include_material:
@@ -1656,11 +1689,15 @@ class sonarDBManager():
 		else:
 			sql = "SELECT " + fields + " FROM essence;"
 
+		if self.debug:
+			print("query: " + sql)
+			print("vals: ", where_vals)
+
 		return self.cursor.execute(sql, where_vals).fetchall()
 
 	# UPDATE DATA
 
-	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, gisaid = None, ena = None, collection = None, source = None, lab = None, technology = None, platform = None, chemistry = None, material = None, ct = None):
+	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, gisaid = None, ena = None, collection = None, source = None, lab = None, technology = None, platform = None, chemistry = None, software = None, version = None, material = None, ct = None):
 		expr = []
 		vals = []
 		if description is not None:
@@ -1698,7 +1735,13 @@ class sonarDBManager():
 			vals.append(platform)
 		if chemistry is not None:
 			expr.append("chemistry")
-			vals.append(technology)
+			vals.append(chemistry)
+		if software is not None:
+			expr.append("software")
+			vals.append(software)
+		if version is not None:
+			expr.append("software_version")
+			vals.append(version)
 		if material is not None:
 			expr.append("material")
 			vals.append(material)
@@ -2410,7 +2453,7 @@ class sonarDB(object):
 		str
 			valid variant profile
 		"""
-		if end is None:
+		if alt != "":
 			coord = str(start+1)
 		else:
 			ref = "del:"
@@ -2581,18 +2624,21 @@ class sonarDB(object):
 		lineages=[],
 		zips=[],
 		dates=[],
-		labs = [],
+		labs=[],
 		sources=[],
 		collections=[],
 		technologies=[],
 		platforms=[],
 		chemistries=[],
 		materials=[],
+		software=None,
+		software_version=None,
 		min_ct=None,
 		max_ct=None,
 		ambig=False,
 		count=False,
 		frameshifts=0,
+		debug=False,
 		dbm=None):
 		"""
 		function to search genomes in the SONAR database dependent on
@@ -2627,31 +2673,38 @@ class sonarDB(object):
 			Only genomes linked to one of the given dates or date ranges are
 			matched.
 		sources : list [ [] ]
-			list of data sources. Only genomes assigend to a
+			list of data sources. Only genomes linked to a
 			data source in this list will be matched. Data sources are
 			negated when starting with ^.
 		collections : list [ [] ]
-			list of data collections. Only genomes assigend to a
+			list of data collections. Only genomes linked to a
 			data collection in this list will be matched. Data collections are
 			negated when starting with ^.
 		technologies : list [ [] ]
-			list of sequencing technologies. Only genomes assigend to a
+			list of sequencing technologies. Only genomes linked to a
 			technology in this list will be matched. Technologies are
 			negated when starting with ^.
 		platforms : list [ [] ]
-			list of sequencing platforms. Only genomes assigend to a
+			list of sequencing platforms. Only genomes linked to a
 			platform in this list will be matched. Platforms are
 			negated when starting with ^.
 		chemistries : list [ [] ]
-			list of sequencing chemistries. Only genomes assigend to a
+			list of sequencing chemistries. Only genomes linked to a
 			chemistry in this list will be matched. Chemistries are
 			negated when starting with ^.
+		software : str [ None ]
+			software used for sequence reconstruction. Only genomes linked to the
+			given software will be matched. Software is negated when starting with ^.
+		software_version : str [ None ]
+			software version used for sequence reconstruction. Only genomes linked
+			to the given software version will be matched. Software version is
+			negated when starting with ^. Needs software defined.
 		materials : list [ [] ]
-			list of sampling materials. Only genomes assigend to a
+			list of sampling materials. Only genomes linked to a
 			material in this list will be matched. Materials are
 			negated when starting with ^.
 		labs : list [ [] ]
-			list of lab identifiers. Only genomes assigend to a
+			list of lab identifiers. Only genomes linked to a
 			lab in this list will be matched. Labs are
 			negated when starting with ^.
 		min_ct : float [ None ]
@@ -2668,6 +2721,8 @@ class sonarDB(object):
 			define if matched genomes have to conatin frameshift mutations (1)
 			or have not to conatin frameshift mutations (-1) or frameshift mutations
 			do not matter (0).
+		debug : bool [ False ]
+			activate debug mode for  sonarDBManager
 		dbm : sonarDBManager object [ None ]
 			define a sonarDBManager object to use for database transaction
 
@@ -2692,6 +2747,9 @@ class sonarDB(object):
 		nonvalid = [ x for x in check if not self.isdnavar(x) and not self.isaavar(x) ]
 		if nonvalid:
 			sys.exit("input error: Non-valid variant expression(s) entered: " + ", ".join(nonvalid))
+
+		if software_version and software is None:
+			sys.exit("input error: matching a given software version needs a software defined.")
 
 		# adding conditions of profiles to include to where clause
 		if include_profiles:
@@ -2735,10 +2793,33 @@ class sonarDB(object):
 		include_material = [x for x in materials if not str(x).startswith("^")]
 		exclude_material = [x[1:] for x in materials if str(x).startswith("^")]
 
+		if software:
+			if not software.startswith("^"):
+				include_software = software
+				exclude_software = None
+			else:
+				include_software = None
+				exclude_software = software[1:]
+		else:
+			include_software = None
+			exclude_software = None
+
+		if software_version:
+			if not software_version.startswith("^"):
+				include_software_version = software_version
+				exclude_software_version = None
+			else:
+				include_software_version = None
+				exclude_software_version = software_version[1:]
+		else:
+			include_software_version = None
+			exclude_software_version = None
+
 		# query
 		with ExitStack() as stack:
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
+			dbm.debug = debug
 			rows = dbm.match(
 					  include_profiles,
 					  exclude_profiles,
@@ -2764,6 +2845,10 @@ class sonarDB(object):
 		  			  exclude_chemistry,
 		  			  include_material,
 		  			  exclude_material,
+					  include_software,
+					  exclude_software,
+					  include_software_version,
+					  exclude_software_version,
 		  			  min_ct,
 		  			  max_ct,
 					  count,
@@ -2776,7 +2861,7 @@ class sonarDB(object):
 				rows[i]['dna_profile'] = self.filter_ambig(rows[i]['dna_profile'], self.iupac_explicit_nt_code, keep)
 				rows[i]['aa_profile'] = self.filter_ambig(rows[i]['aa_profile'], self.iupac_explicit_aa_code, keep)
 		elif count:
-			return rows['count']
+			return rows[0]['count']
 
 		return rows
 
