@@ -193,7 +193,7 @@ conda activate sonar
 # Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the 
 # database 'mydb' and write these to a fasta file named 'restored.fasta'
 path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 --db mydb > restored.fasta
-# as before but consider any accessions from 'accessions.txt' (the file has to
+# as before, but consider all accessions from 'accessions.txt' (the file has to
 # contain one accession per line) 
 path/to/covsonar/sonar.py restore --file accessions.txt --db mydb > restored.fasta
 ```
