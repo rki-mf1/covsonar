@@ -296,7 +296,7 @@ class sonar():
 			print("earliest sampling date:    ", dbm.get_earliest_date())
 			print("latest sampling date:      ", dbm.get_latest_date())
 			print("metadata:          ")
-			fields = ['lab', 'source', 'collection', 'gisaid', 'ena', 'lineage', 'zip', 'date']
+			fields = sorted(['lab', 'source', 'collection', 'technology', 'platform', 'chemistry', 'software', 'software_version', 'material', 'ct', 'gisaid', 'ena', 'lineage', 'zip', 'date'])
 			maxlen = max([len(x) for x in fields])
 			for field in fields:
 				if g == 0:
@@ -347,12 +347,12 @@ if __name__ == "__main__":
 	else:
 		debug = False
 
-	if args.tool != "add" and not os.path.isfile(args.db):
+	if not args.db is None and args.tool != "add" and not os.path.isfile(args.db):
 		sys.exit("input error: database does not exist.")
 
 	snr = sonar(args.db, debug=debug)
 
-	if os.path.isfile(args.db):
+	if not args.db is None:
 		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
 			dbm.check_db_compatibility()
 
@@ -439,8 +439,6 @@ if __name__ == "__main__":
 
 	# info
 	if args.tool == "info":
-		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
-			dbm.get_genome_metadata_scheme()
 		snr.show_system_info()
 		if args.db:
 			print()

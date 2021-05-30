@@ -1405,32 +1405,32 @@ class sonarDBManager():
 		return int(row['COUNT(seqhash)'])
 
 	def count_labs(self):
-		sql = "SELECT COUNT(DISTINCT lab) FROM genome WHERE date != 'NA';"
+		sql = "SELECT COUNT(DISTINCT lab) as count FROM genome WHERE lab != '';"
 		row = self.cursor.execute(sql).fetchone()
-		return int(row['COUNT(DISTINCT lab)'])
+		return int(row['count'])
 
 	def info_data_types(self):
 		sql = "SELECT source, collection, COUNT(accession) as genome_count FROM genome GROUP BY source, collection ORDER BY source, collection;"
 		return self.cursor.execute(sql).fetchall()
 
 	def get_earliest_import(self):
-		sql = "SELECT MIN(imported) as import FROM genome WHERE date != 'NA';"
+		sql = "SELECT MIN(imported) as import FROM genome;"
 		return self.cursor.execute(sql).fetchone()['import']
 
 	def get_latest_import(self):
-		sql = "SELECT MAX(imported) as import FROM genome WHERE date != 'NA';"
+		sql = "SELECT MAX(imported) as import FROM genome;"
 		return self.cursor.execute(sql).fetchone()['import']
 
 	def get_earliest_date(self):
-		sql = "SELECT MIN(date) as date FROM genome WHERE date != 'NA';"
+		sql = "SELECT MIN(date) as date FROM genome WHERE date IS NOT NULL;"
 		return self.cursor.execute(sql).fetchone()['date']
 
 	def get_latest_date(self):
-		sql = "SELECT MAX(date) as date FROM genome WHERE date != 'NA';"
+		sql = "SELECT MAX(date) as date FROM genome WHERE date IS NOT NULL;"
 		return self.cursor.execute(sql).fetchone()['date']
 
 	def count_metadata(self, field):
-		sql = "SELECT COUNT(accession) as counts FROM genome WHERE " + field + " IS NOT NULL AND " + field + " !=  'NA';"
+		sql = "SELECT COUNT(accession) as counts FROM genome WHERE " + field + " IS NOT NULL AND " + field + " !=  '';"
 		return self.cursor.execute(sql).fetchone()['counts']
 
 	def iter_table(self, table, batch_size=1000):
