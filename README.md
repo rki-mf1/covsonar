@@ -129,13 +129,19 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 | deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) | 
 | insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |  
 
-The position specifications refer to the reference in each case and are 1-based. Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid, or mixed profile, which means that matching genomes must have all defined variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while  `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
+The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `-i` multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `-i` options. As an example, `-i S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `-i S:N501Y -i S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option `-e` profiles can be defined that have not to be present in the matched genomes. 
 
-To filter genomes based on metadata the following options can be used:
+To filter genomes based on metadata specific options can be used (see table below). Only genomes linked to the respective metadata are then considered. Metadata values are negated when introduced by ^ (e.g. `--acc ^ID1` matches all genomes accessions but ID1). Metadata filtering is case-insensitive.    
 
-
-| option              | option | multiple values allowed |
-|---------------------|--------|-------------------------| 
+| option              | value(s)                         | note
+|---------------------|----------------------------------| 
+| --acc               | one or more genome accessions    |
+| --lineage           | one or more pangolin lineages    |
+| --zip               | one or more zip codes            | Zip codes are dynamically extended to the right side, e.g. 033 matches to all zip codes starting with 033|
+| --date              | one or more dates or date ranges | Dates are formatted as YYYY-MM-DD while date ranges are defined by YYYY-MM-DD:YY-MM-DD (from:to) |
+| --lab               | one or more labs                 | |
+| --source            | one or more data collections     | |
+ 
 
  To negate a value has to be introduced by ^. As an example, `--lineage B.1.1.7` matches only genomes of the so-called UK variant, while `--lineage ^B.1.1.7` matches all genomes **NOT** assigned to this lineage. Please consider that zip codes are hierarchically matched, meaning that `--zip 114` includes all zip codes starting with 114. Single dates are formatted as _YYYY-MM-DD_ while date ranges are defined as _from:to_ (_YYYY-MM-DD:YYYY-MM-DD_). 
 
