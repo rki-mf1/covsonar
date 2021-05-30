@@ -3081,16 +3081,6 @@ class sonarDB(object):
 
 			#frameshift checks
 			row = self.match(accessions=[acc], dbm = dbm)[0]
-			if row['dna_profile'].strip() == "" and (row['aa_profile'].strip() != "" or row['fs_profile'].strip() != ""):
-				if auto_delete:
- 					dbm.delete_genome(acc)
-				fd, path = mkstemp(suffix=".csv", prefix="paranoid_", dir="./")
-				with open(path, "w") as handle:
-					writer = csv.DictWriter(handle, row.keys(), lineterminator=os.linesep)
-					writer.writeheader()
-					writer.writerows([row])
-				sys.exit("Good that you are paranoid: profiles generated for " + acc + " do not match (profiles stored in " + path + ").")
-
 			fs = set()
 			for dna_var in row['dna_profile'].split(" "):
 				if dna_var.strip() == "":
@@ -3107,8 +3097,10 @@ class sonarDB(object):
 							writer.writerows([row])
 						sys.exit("Good that you are paranoid: " + dna_var + " missing in frameshift profile of " + acc + " (profiles stored in " + path + ").")
 
-			diff = [ x for x in set(row['fs_profile'].split(" ")).difference(fs) if x.strip() != "" ]
-			if diff:
+			db_fs = set(filter(None, row['fs_profile'].split(" ")))
+			missing_fs = [x for x in fs if x not in db_fs]
+			wrong_fs =  [x for x in db_fs if x not in fs]
+			if wrong_fs:
 				if auto_delete:
 						dbm.delete_genome(acc)
 				fd, path = mkstemp(suffix=".csv", prefix="paranoid_", dir="./")
@@ -3116,7 +3108,18 @@ class sonarDB(object):
 					writer = csv.DictWriter(handle, row.keys(), lineterminator=os.linesep)
 					writer.writeheader()
 					writer.writerows([row])
-				sys.exit("Good that you are paranoid: " + ", ".join(diff) + " not expected in frameshift profile of " + acc + " (profiles stored in " + path + ").")
+				sys.exit("Good that you are paranoid: " + ", ".join(wrong_fs) + " not expected in frameshift profile of " + acc + " (profiles stored in " + path + ").")
+
+			if missing_fs:
+				if auto_delete:
+						dbm.delete_genome(acc)
+				fd, path = mkstemp(suffix=".csv", prefix="paranoid_", dir="./")
+				with open(path, "w") as handle:
+					writer = csv.DictWriter(handle, row.keys(), lineterminator=os.linesep)
+					writer.writeheader()
+					writer.writerows([row])
+				sys.exit("Good that you are paranoid: " + ", ".join(missing_fs) + " missing in frameshift profile of " + acc + " (profiles stored in " + path + ").")
+
 
 		return True
 
