@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 import os
 import sys
 import csv
