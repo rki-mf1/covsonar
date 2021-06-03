@@ -38,6 +38,9 @@ def parse_args():
 	parser_add.add_argument('--compressed', help="compression of input file format ('none', 'gz', 'xz', default: 'auto')", choices=['none', 'gz', 'xz', 'auto'], default='auto')
 	parser_add.add_argument('--force', help="force updating of accessions if description or sequence has changed", action="store_true")
 	parser_add.add_argument('--noprogress', '-p', help="do not show any progress bar", action="store_true")
+	parser_add.add_argument('--source', help="define a common data source for all genomes", type=str, default=None)
+	parser_add.add_argument('--collection', help="define a common data collection for all genomes", type=str, default=None)
+	parser_add.add_argument('--lab', help="define a common lab for all genomes", type=str, default=None)
 	parser_add.add_argument('--quiet', '-q', help="do not show any output", action="store_true")
 
 	# create the parser for the "match" command
@@ -116,7 +119,7 @@ class sonar():
 			sys.exit("input error: " + fname + " cannot be opened.")
 
 
-	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False, compressed=False):
+	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False, compressed=False, source=None, collection=None, lab=None):
 		'''
 		Adds genome sequence(s) from given FASTA file(s) to the database.
 		If cachedir is not defined, a temporary directory will be used as cache.
@@ -125,6 +128,15 @@ class sonar():
 		# set display options
 		disable_progressbar = False if not quiet and not noprogress else True
 		print_steps = True if not quiet and noprogress else False
+
+		# set global update vals
+		updates = {}
+		if source:
+			updates['source'] = source
+		if lab:
+			updates['lab'] = lab
+		if collection:
+			updates['collection'] = collection
 
 		# create db if necessary
 		step = 0
@@ -150,6 +162,7 @@ class sonar():
 
 			to_process = []
 			to_import = defaultdict(set)
+			to_update = set()
 
 			for i in tqdm(range(len(fnames)), desc = msg, disable = disable_progressbar):
 				with self.open_file(fnames[i], compressed=compressed) as handle:
@@ -159,6 +172,9 @@ class sonar():
 						seq = self.db.harmonize(record.seq)
 						seqhash = self.db.hash(seq)
 						genome_data = dbm.get_genomes(acc)
+
+						if updates:
+							to_update.add(acc)
 
 						if genome_data:
 							if genome_data['seqhash'] != seqhash:
@@ -214,6 +230,14 @@ class sonar():
 			if print_steps:
 				print(msg)
 			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg, dbm=dbm, disable_progressbar=disable_progressbar)
+
+			if updates:
+				step += 1
+				msg = "[step " + str(step) + "] updating ...  "
+				if print_steps:
+					print(msg)
+				for i in tqdm(range(len(to_update)), desc = msg, disable = disable_progressbar):
+					dbm.update_genome(to_update.pop(), **updates)
 
 			# db status
 			if not quiet:
@@ -384,7 +408,7 @@ if __name__ == "__main__":
 		if not args.file and not args.cache:
 			sys.exit("nothing to add.")
 
-		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout, quiet=args.quiet, noprogress=args.noprogress, compressed=args.compressed)
+		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout, quiet=args.quiet, noprogress=args.noprogress, compressed=args.compressed, source=args.source, collection=args.collection, lab=args.lab)
 
 	# match
 	if args.tool == "match":

@@ -192,6 +192,18 @@ else
 	  exit 1
 fi
 
+$DIR/sonar.py add --db "$db" -f "$DIR/test/test2.fasta.xz" --source TEST --noprogress
+
+n=$($DIR/sonar.py match --count --source TEST --db "$db")
+if [ "$n" -eq 1 ]; then
+    echo 'match 16 as expected'
+else
+    echo "match 16 not as expected (expected 1 got $n)"
+		conda deactivate
+	  conda env remove -y --name covsonar_ci
+	  exit 1
+fi
+
 #cleaning
 conda deactivate
 conda env remove -y --name covsonar_ci
