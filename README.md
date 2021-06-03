@@ -164,6 +164,8 @@ There are additional options to adjust the matching.
 | --only_frameshifts | show only genomes containing frameshift mutations                      |
 | --no_frameshifts   | show only genomes containing no frameshift mutations                   |
 
+By default, genome matching produces a comma-separated output (csv). Using the option `--tsv` the output will be tab-delimited (tsv).
+
 
 ```sh
 # activating conda environment if built and not active yet (see section 2)
