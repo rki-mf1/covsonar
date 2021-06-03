@@ -217,3 +217,19 @@ covSonar has been very carefully programmed and tested, but is still in an early
 
 Your feedback is very welcome!
 
+## 5 FAQ
+
+**Q:** Running ´sonar.py optimize´ on my database returns the error "sqlite3.OperationalError: database or disk is full" even I have enough space on the disk where the database is located.
+
+
+**A:** This happens, when the sqlite temprory directory that might be located on another disk has not enough space to store the intermediate files. You can easily change the temporary directory e.g. to the current working directory using the following Shell command (the changes will only apply to the current Shell session):
+
+```bash 
+# changing the sqlite temporary directory to the current working directory 
+# replace . by the path to the location you want to use
+export SQLITE_TMPDIR="."
+```
+
+After executing this command, optimizing your database should work.
+
+
