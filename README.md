@@ -66,10 +66,13 @@ The import process can be divided into three stages:
 1. caching of the sequences to be imported and calculation of sequence hashes.
 2. calculating the pairwise alignment and deriving genomic profiles based on it.
 3. import of the generated data into the database.
+4. updating meta information of the added genomes.
 
 Each sequence to be added is aligned pairwise to the full genome sequence of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) using EMBOSS Stretcher and a gap-open and gap-extend penalty of 16 and 4, respectively. Gaps are left aligned.
 
 Depending on the number of sequences to be imported and the available system resources, the import may take some time, but can be accelerated by allocating more CPUs. However, more CPUs assigned may also significantly increase the amount of available RAM. Detailed progress information and time estimates are displayed on the screen during the import.
+
+Optionally, selected metadata (data source, data collection or lab) can be imported or updated for all genomes by using the respective option (`--source`, `--collection`, `--lab`).
 
 If you forward the screen output to a file, the progress bar may produce plenty of useless lines. Thus, the progress bar can be disabled with the `--noprogress` option. If necessary, any output can be avoided when adding new genomes with the `--quiet` option.
 
