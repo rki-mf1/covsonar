@@ -222,6 +222,18 @@ Your feedback is very welcome!
 
 ## 5 FAQ
 
+**Q:** How can I screen for genomes with any SNP or amino acid substitution at a specific position at the genome or gene product?
+
+
+**A:** covSonar accepts and interpretes the IUPAC nucleotide and amino acid code. Accordingly, you can screen for any nucleotide or amino acid at a certain position using N and X, respectively. Since covSonar stores only sites different from the reference, the reference nucleotide will be not considered when searching for N or X. As an example, use the following command to screen for all genome encoding for any amino acid substitution at position 484 within the Spike protein (reference allele is E at this position).  
+
+```bash 
+# screen for all genomes encoding for any amino acid substitution at position 484 within the Spike protein
+# using the database 'mydb"
+path/to/sonar.py -i S:E484X --db mydb
+```
+
+
 **Q:** Running ´sonar.py optimize´ on my database returns the error "sqlite3.OperationalError: database or disk is full" even I have enough space on the disk where the database is located.
 
 
