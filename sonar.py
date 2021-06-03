@@ -68,6 +68,7 @@ def parse_args():
 	parser_match_g2 = parser_match.add_mutually_exclusive_group()
 	parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
 	parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
+	parser_match_g2.add_argument('--tsv', help="use tsv instead of csv output", action="store_true")
 	parser_match.add_argument('--debug', help="show database query for debugging", action="store_true")
 
 	#create the parser for the "restore" command
@@ -256,12 +257,12 @@ class sonar():
 				print("\tnow:   " + str(new_dbstatus['seqs']))
 				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
 
-	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0):
+	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
 		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
 			print(rows)
 		else:
-			self.rows_to_csv(rows, na="*** no match ***")
+			self.rows_to_csv(rows, na="*** no match ***", tsv=tsv)
 
 	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
 		updates = defaultdict(dict)
@@ -353,12 +354,13 @@ class sonar():
 				spacer = " " * (maxlen-len(field))
 				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
-	def rows_to_csv(self, rows, file=None, na="*** no data ***"):
+	def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
 		if len(rows) == 0:
 			print(na, file=sys.stderr)
 		else:
 			file = sys.stdout if file is None else open(file, "w")
-			writer = csv.DictWriter(file, rows[0].keys(), lineterminator=os.linesep)
+			sep = "\t" if tsv else ","
+			writer = csv.DictWriter(file, rows[0].keys(), delimiter=sep, lineterminator=os.linesep)
 			writer.writeheader()
 			writer.writerows(rows)
 
@@ -448,7 +450,7 @@ if __name__ == "__main__":
 		if args.material:
 			args.material = [x.upper() for x in args.material]
 
-		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts)
+		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
 
 	# update
 	if args.tool == "update":
