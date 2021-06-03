@@ -7,6 +7,8 @@ import os
 import sys
 import csv
 import argparse
+import gzip
+import lzma
 from lib import sonardb
 from Bio import SeqIO
 from tempfile import mkstemp
@@ -33,6 +35,7 @@ def parse_args():
 	parser_add_input.add_argument('-d', '--dir', metavar="DIR", help="add all fasta files (ending with \".fasta\" or \".fna\") from a given directory or directories", type=str, nargs="+", default=None)
 	parser_add.add_argument('-c', '--cache', metavar="DIR", help="use (and restore data from) a given cache (if not set, a temporary cache is used and deleted after import)", type=str, default=None)
 	parser_add.add_argument('-t', '--timeout', metavar="INT", help="timout for aligning sequences in seconds (default: 600)", type=int, default=600)
+	parser_add.add_argument('--compressed', help="compression of input file format ('none', 'gz', 'xz', default: 'auto')", choices=['none', 'gz', 'xz', 'auto'], default='auto')
 	parser_add.add_argument('--force', help="force updating of accessions if description or sequence has changed", action="store_true")
 	parser_add.add_argument('--noprogress', '-p', help="do not show any progress bar", action="store_true")
 	parser_add.add_argument('--quiet', '-q', help="do not show any output", action="store_true")
@@ -76,6 +79,7 @@ def parse_args():
 	parser_update_input.add_argument('--csv', metavar="FILE", help="import metadata from a csv file", type=str, default=None)
 	parser_update_input.add_argument('--tsv', metavar="FILE", help="import metadata from a tsv file", type=str, default=None)
 	parser_update.add_argument('--fields', metavar="STR", help="if --csv or --tsv is used, define relevant columns like \"pango={colname_in_cs} zip={colname_in_cs} date={colname_in_csv}\"", type=str, nargs="+", default=None)
+	parser_update.add_argument('--compressed', help="compression of input file format ('none', 'gz', 'xz', default: 'auto')", choices=['none', 'gz', 'xz', 'auto'], default='auto')
 
 	# create the parser for the "info" command
 	parser_info= subparsers.add_parser('info', help='show info')
@@ -96,7 +100,23 @@ class sonar():
 		self.gff = gff
 		self.debug = debug
 
-	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False):
+	def open_file(self, fname, mode="r", compressed=False, encoding=None):
+		if not os.path.isfile(fname):
+			sys.exit("input error: " + fname + " does not exist.")
+		if compressed == "auto":
+			compressed = os.path.splitext(fname)[1][1:]
+		try:
+			if compressed == "gz":
+				return gzip.open(fname, mode + "t", encoding=encoding)
+			if compressed == "xz":
+				return lzma.open(fname, mode + "t", encoding=encoding)
+			else:
+				return open(fname, mode, encoding=encoding)
+		except:
+			sys.exit("input error: " + fname + " cannot be opened.")
+
+
+	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False, compressed=False):
 		'''
 		Adds genome sequence(s) from given FASTA file(s) to the database.
 		If cachedir is not defined, a temporary directory will be used as cache.
@@ -132,47 +152,48 @@ class sonar():
 			to_import = defaultdict(set)
 
 			for i in tqdm(range(len(fnames)), desc = msg, disable = disable_progressbar):
-				for record in SeqIO.parse(fnames[i], "fasta"):
-					acc = record.id
-					descr = record.description
-					seq = self.db.harmonize(record.seq)
-					seqhash = self.db.hash(seq)
-					genome_data = dbm.get_genomes(acc)
+				with self.open_file(fnames[i], compressed=compressed) as handle:
+					for record in SeqIO.parse(handle, "fasta"):
+						acc = record.id
+						descr = record.description
+						seq = self.db.harmonize(record.seq)
+						seqhash = self.db.hash(seq)
+						genome_data = dbm.get_genomes(acc)
 
-					if genome_data:
-						if genome_data['seqhash'] != seqhash:
-							if not force:
-								sys.exit("database error: " + acc + " exists in the database with a different sequence (use --force to allow updating)")
-							dbm.delete_genome(acc)
-						elif genome_data['description'] != descr:
-							if not force:
-								sys.exit("database error: " + acc + " exists in the database with a different description (use --force to allow updating)")
-							dbm.update_genome(acc, description = descr)
-							continue
-						else:
-							continue
+						if genome_data:
+							if genome_data['seqhash'] != seqhash:
+								if not force:
+									sys.exit("database error: " + acc + " exists in the database with a different sequence (use --force to allow updating)")
+								dbm.delete_genome(acc)
+							elif genome_data['description'] != descr:
+								if not force:
+									sys.exit("database error: " + acc + " exists in the database with a different description (use --force to allow updating)")
+								dbm.update_genome(acc, description = descr)
+								continue
+							else:
+								continue
 
-					if dbm.seq_exists(seqhash):
-						cache.prep_cached_files(seqhash)
-						cache.write_info(seqhash)
-						cache.add_seq(seqhash, seq)
-					elif seqhash not in to_import:
-						algn = cache.get_algn_fname(seqhash)
-						fasta = cache.get_fasta_fname(seqhash)
-						info = cache.get_info_fname(seqhash)
-
-						if not os.path.isfile(fasta):
-							unvalid_letters =  sorted(self.db.check_iupac_nt_code(seq))
-							if unvalid_letters:
-								sys.exit("input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")
+						if dbm.seq_exists(seqhash):
+							cache.prep_cached_files(seqhash)
+							cache.write_info(seqhash)
 							cache.add_seq(seqhash, seq)
-							to_process.append([fasta, algn, info, seqhash, timeout])
-						elif SeqIO.read(fasta, "fasta").seq != seq:
-								sys.exit("cache error: sequence hash " + seqhash + " exists in cache but refers to a different sequence")
-						elif not os.path.isfile(info):
-							to_process.append([fasta, algn, info, seqhash, timeout])
+						elif seqhash not in to_import:
+							algn = cache.get_algn_fname(seqhash)
+							fasta = cache.get_fasta_fname(seqhash)
+							info = cache.get_info_fname(seqhash)
 
-					to_import[seqhash].add((acc, descr))
+							if not os.path.isfile(fasta):
+								unvalid_letters =  sorted(self.db.check_iupac_nt_code(seq))
+								if unvalid_letters:
+									sys.exit("input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")
+								cache.add_seq(seqhash, seq)
+								to_process.append([fasta, algn, info, seqhash, timeout])
+							elif SeqIO.read(fasta, "fasta").seq != seq:
+									sys.exit("cache error: sequence hash " + seqhash + " exists in cache but refers to a different sequence")
+							elif not os.path.isfile(info):
+								to_process.append([fasta, algn, info, seqhash, timeout])
+
+						to_import[seqhash].add((acc, descr))
 
 			step += 1
 			msg = "[step " + str(step) + "] processing ..."
@@ -218,16 +239,16 @@ class sonar():
 		else:
 			self.rows_to_csv(rows, na="*** no match ***")
 
-	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False):
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
 		updates = defaultdict(dict)
 		if pangolin:
-			with open(fname, "r", encoding='utf-8-sig') as handle:
+			with self.open_file(fname, compressed=compressed, encoding='utf-8-sig') as handle:
 				lines = csv.DictReader(handle, delimiter = ',', quoting=csv.QUOTE_MINIMAL)
 				for line in lines:
 					acc = line['Sequence name'].split(" ")[0]
 					updates[acc]['lineage'] = line['Lineage']
 		elif accCol:
-			with open(fname, "r") as handle:
+			with self.open_file(fname, compressed=compressed) as handle:
 				lines = csv.DictReader(handle, delimiter = sep)
 				for line in lines:
 					acc = line[accCol]
@@ -363,7 +384,7 @@ if __name__ == "__main__":
 		if not args.file and not args.cache:
 			sys.exit("nothing to add.")
 
-		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout, quiet=args.quiet, noprogress=args.noprogress)
+		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout, quiet=args.quiet, noprogress=args.noprogress, compressed=args.compressed)
 
 	# match
 	if args.tool == "match":
@@ -410,12 +431,12 @@ if __name__ == "__main__":
 		fields={}
 		if args.csv:
 			cols = process_update_expressions(args.fields)
-			snr.update_metadata(args.csv, **cols, sep=",", pangolin=False)
+			snr.update_metadata(args.csv, **cols, sep=",", pangolin=False, compressed=args.compressed)
 		elif args.tsv:
 			cols = process_update_expressions(args.fields)
-			snr.update_metadata(args.tsv, **cols, sep="\t", pangolin=False)
+			snr.update_metadata(args.tsv, **cols, sep="\t", pangolin=False, compressed=args.compressed)
 		elif args.pangolin:
-			snr.update_metadata(args.pangolin, pangolin=True)
+			snr.update_metadata(args.pangolin, pangolin=True, compressed=args.compressed)
 		else:
 			print("nothing to update.")
 
@@ -425,7 +446,7 @@ if __name__ == "__main__":
 		if args.file:
 			if not os.path.isfile(args.file):
 				sys.exit("input error: file " + args.file + " does not exist.")
-			with open(args.file, "r") as handle:
+			with snr.open_file(fname, compressed=args.file,) as handle:
 				for line in handle:
 					args.acc.add(line.strip())
 		if len(args.acc) == 0:
