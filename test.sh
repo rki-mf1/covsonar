@@ -32,7 +32,7 @@ rm "$out"
 echo foo >&3
 $DIR/sonar.py add --db "$db" -f "$DIR/test/test.fasta"
 $DIR/sonar.py update --db "$db" --pangolin "$DIR/test/test_pangolin.csv"
-$DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv" --fields accession=accessions zip=regions date=dates gisaid=gisaid ena=ena lab=lab source=source collection=collection technology=technology platform=platform chemistry=chemistry material=material ct=ct software=software version=software_version
+$DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv.gz" --fields accession=accessions zip=regions date=dates gisaid=gisaid ena=ena lab=lab source=source collection=collection technology=technology platform=platform chemistry=chemistry material=material ct=ct software=software version=software_version
 $DIR/sonar.py optimize --db "$db"
 
 $DIR/sonar.py match --db "$db" | (sed -u 1q; sort) > "$out"
@@ -117,8 +117,8 @@ else
 fi
 
 echo "updating database ..."
-$DIR/sonar.py add --db "$db" -f "$DIR/test/test2.fasta" --quiet
-$DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv" --fields accession=accessions zip=regions date=dates gisaid=gisaid ena=ena lab=lab source=source collection=collection technology=technology platform=platform chemistry=chemistry material=material ct=ct software=software version=software_version
+$DIR/sonar.py add --db "$db" -f "$DIR/test/test2.fasta.xz" --quiet
+$DIR/sonar.py update --db "$db" --tsv "$DIR/test/test.tsv.gz" --fields accession=accessions zip=regions date=dates gisaid=gisaid ena=ena lab=lab source=source collection=collection technology=technology platform=platform chemistry=chemistry material=material ct=ct software=software version=software_version
 
 n=$($DIR/sonar.py match --count --lab l3 --source sentinel --db "$db")
 if [ "$n" -eq 1 ]; then
@@ -187,6 +187,18 @@ if diff -q $DIR/test/test2.fasta "$out"; then
 else
     echo 'match 15 not as expected'
 		diff $DIR/test/test2.fasta "$out"
+		conda deactivate
+	  conda env remove -y --name covsonar_ci
+	  exit 1
+fi
+
+$DIR/sonar.py add --db "$db" -f "$DIR/test/test2.fasta.xz" --source TEST --noprogress
+
+n=$($DIR/sonar.py match --count --source TEST --db "$db")
+if [ "$n" -eq 1 ]; then
+    echo 'match 16 as expected'
+else
+    echo "match 16 not as expected (expected 1 got $n)"
 		conda deactivate
 	  conda env remove -y --name covsonar_ci
 	  exit 1
