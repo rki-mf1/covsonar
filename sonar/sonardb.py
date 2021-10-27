@@ -50,7 +50,7 @@ class sonarTimeout():
 
 	seconds : int
 		define time in seconds until TimeoutError is raised
-		values below 1 will not raise any TimeoutError
+		values below 1 deactivate the TimeoutError
 	error_message: str
 		define error message to be shown [ 'Timeout' ]
 
@@ -101,7 +101,7 @@ class sonarFiler():
 	Parameters
 	----------
 	fname : str [ None ]
-		define designated file name to open. If None, a temporary file is
+		define designated file name to open (mode=w). If None, a temporary file is
 		created and deleted after use.
 
 	Attributes
@@ -198,9 +198,17 @@ class sonarCDS(object):
 	end : int
 		stores the genomic end coordinate (0-based, exclusive). The end
 		coordinate is always greater than the start coordinate.
+	strand : str
+		stores the coding strand as '+' or '-' of the respective CDS
+	seqs : list
+	 	stores ordered list of exon sequences of the respective CDS
+	coords : tuple
+		stores a tuple of CDS start and end coordinate
 	coordlist : list
 		stores a list of (start, end) tuples of of all exons (coordinates are
 		0-based, starts inclusive, ends exclusive, start always lower than end)
+	range : range
+		stores a range from CDS start to end
 	ranges : list
 		stores a list of exon ranges
 	nuc : str
@@ -216,9 +224,15 @@ class sonarCDS(object):
 	translation_table : int [ 1 ]
 		stores the genetic code table used for in silico translation (see
 		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi)
+	length : int
+		stores the aa length of the CDS product
 	"""
 
 	def __init__(self, locus, symbol, coords, seqs, strand, translation_table=1):
+		if not symbol:
+			sys.exit("cds error: protein symbol missing for locus " + locus)
+		if ":" in symbol:
+			sys.exit("cds error: protein symbol " + symbol + " contains ':'.")
 		self.symbol = symbol
 		self.locus = locus
 		self.start = coords[0][0] # inclusive
@@ -232,6 +246,7 @@ class sonarCDS(object):
 		self.__nuc = None
 		self.__coding_positions = None
 		self.__coding_positions_set = None
+		self.__length = None
 
 	@property
 	def nuc(self):
@@ -268,6 +283,12 @@ class sonarCDS(object):
 		return self.__coding_positions
 
 	@property
+	def length(self):
+		if self.__length is None:
+			self.__length = len(self.__coding_positions) / 3
+		return self.__length
+
+	@property
 	def coding_positions_set(self):
 		if self.__coding_positions_set is None:
 			self.__coding_positions_set = set(self.coding_positions)
@@ -299,15 +320,15 @@ class sonarCDS(object):
 		"""
 		return self.coding_positions[3*x]
 
-	def iter_coords(self):
+	def iter_coords(self, codon_wise=False):
 		"""
-		function to iterate over genomic coordinate of the coding part of an
+		function to iterate over genomic coordinate of all exons of an
 		annotated coding sequence (CDS).
 
 		Examples
 		--------
 
-		>>> cds=sonarCDS("loc1", "prot1", [(10, 15), (14, 16)], ['ATGTG', 'CTAATGA'], "+")
+		>>> cds=sonarCDS("loc1", "prot1", [(10, 15), (14, 18)], ['ATGTG', 'CTAATGA'], "+")
 		>>> for i in cds.iter_coords():
 		... 	print(i)
 		10
@@ -317,22 +338,27 @@ class sonarCDS(object):
 		14
 		14
 		15
+		16
+		17
+		>>> for i in cds.iter_coords(True):
+		... 	print(i)
+		10
+		13
+		15
 
 		Parameters
 		----------
-		x : int
-			genomic (start) coordinate (0-based, inclusive)
-		y : int
-			genomic end coordniate (0-based, exclusive, has to be greater than x)
-			[ None ]
+		codon_wise : bool
+			if true, iterator considers only the lower-bound coordinates of each codon
 
 		Returns
 		-------
-		bool
-			True if coordinate(s) within coding part of CDS, False otherwise.
+		iterator
+			iterator of genomic coordinates
 
 		"""
-		for i in self.coding_positions:
+		j = self.coding_positions if not codon_wise else zip(self.coding_positions[0::3], self.coding_positions[1::3], self.coding_positions[2::3])
+		for i in j:
 			yield i
 
 	def is_exon(self, x, y=None):
@@ -346,7 +372,7 @@ class sonarCDS(object):
 		>>> cds=sonarCDS("loc1", "prot1", [(10, 15), (25, 32)], ['ATGTG', 'CTAATGA'], "+")
 		>>> cds.is_exon(10)
 		True
-		>>> cds.is_exon(16)
+		>>> cds.is_exon(15)
 		False
 
 		Parameters
@@ -365,6 +391,7 @@ class sonarCDS(object):
 		Dev Note
 		--------
 		Working with intersection of ranges is for long sequences less performant
+		why we don't use it here.
 
 		"""
 		if y is None:
@@ -383,10 +410,10 @@ class sonarCDS(object):
 		--------
 
 		>>> gff=sonarCDS("loc1", "prot1", [(10, 15), (25, 32)], ['ATGTG', 'CTAATGA'], "+")
-		>>> gff.is_cds(10)
+		>>> gff.is_cds(28)
 		True
-		>>> gff.is_cds(16)
-		True
+		>>> gff.is_cds(15)
+		False
 
 		Parameters
 		----------
@@ -515,9 +542,9 @@ class sonarGFF(object):
 	fna : str
 		define a path to a valid FASTA file storing the nucleotide
 		sequence of the annotated genome
-	translation_table : int
+	translation_table : int [ 1 ]
 		define the genetic code table used for in silico translation of CDS (see
-		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
+		https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi)
 
 	Attributes
 	----------
@@ -601,11 +628,12 @@ class sonarGFF(object):
 			True if coordinate(s) within CDS, False otherwise.
 
 		"""
-		x = {x, } if y is None else range(x, y)
-		if self.exon_positions.intersection(x):
-			return True
-		else:
-			return False
+		if y is None:
+			y = x + 1
+		for cds in self.cds:
+			if cds.is_exon(x, y):
+				return True
+		return False
 
 	def in_any_cds(self, x, y=None):
 		"""
@@ -636,8 +664,39 @@ class sonarGFF(object):
 			True if coordinate(s) within CDS, False otherwise.
 
 		"""
-		x = {x, } if y is None else range(x, y)
-		if self.cds_positions.intersection(x):
+		if y is None:
+			y = x + 1
+		for cds in self.cds:
+			if cds.is_cds(x, y):
+				return True
+		return False
+
+	def any_frameshift_by_deletion(self, start, end):
+		"""
+		function to check if a deletion causes a frameshift in any annotated
+		CDS.
+
+		Returns
+		-------
+		bool
+			True if dna variant causes a frameshift, otherwise False.
+		"""
+		for cds in self.cds:
+			if cds.is_frameshift_del(start, end):
+				return True
+		return False
+
+	def any_frameshift_by_insertion(self, pos, l):
+		"""
+		function to check if a insertion causes a frameshift in any annotated
+		CDS.
+
+		Returns
+		-------
+		bool
+			True if dna variant causes a frameshift, otherwise False.
+		"""
+		if (l-1)%3 != 0 and self.in_any_exon(pos):
 			return True
 		else:
 			return False
@@ -672,6 +731,7 @@ class sonarGFF(object):
 		symbol_regex = re.compile("gene=([^;]+)(?:;|$)")
 		locus_regex = re.compile("locus_tag=([^;]+)(?:;|$)")
 		id_regex = re.compile("ID=([^;]+)(?:;|$)")
+		symbols = set()
 
 		record = SeqIO.read(fna, "fasta")
 		gseq = str(record.seq).upper()
@@ -698,9 +758,9 @@ class sonarGFF(object):
 							}
 					elif id in cds:
 						if symbol != cds[id]['symbol']:
-							sys.exit("gff3 error: multiple symbols for locus " + locus)
+							sys.exit("gff error: multiple symbols for locus " + locus)
 						if strand != cds[id]['strand']:
-							sys.exit("gff3 error: different strands for locus " + locus)
+							sys.exit("gff error: different strands for locus " + locus)
 						cds[id]['coords'].append((s, e))
 
 		cdsobjs = []
@@ -792,27 +852,15 @@ class sonarALIGN(object):
 
 	def __init__(self, query_file, target_file, out_file = None, sonarGFFObj = None):
 		self.aligned_query, self.aligned_target = self.align_dna(query_file, target_file, out_file)
-		self.gff = sonarGFFObj if sonarGFFObj else None
+		self.gff = sonarGFFObj
 		self._insert_regex = re.compile("[^-]-+")
-		self._del_regex = re.compile("-+")
+		self._gap_regex = re.compile("-+")
 		self._codon_regex = re.compile("[^-]-*[^-]-*[^-]-*")
 		self._leading_gap_regex = re.compile("^-+")
 		self._tailing_gap_regex = re.compile("-+$")
 		self._dnadiff = None
 		self._aadiff = None
 		self.__target_coords_matrix = None
-
-	@property
-	def dnadiff(self):
-		if self._dnadiff is None:
-			self._dnadiff = [ x for x in self.iter_dna_vars() ]
-		return self._dnadiff
-
-	@property
-	def aadiff(self):
-		if self._aadiff is None:
-			self._aadiff = [ x for x in self.iter_aa_vars() ]
-		return self._aadiff
 
 	@property
 	def _target_coords_matrix(self):
@@ -970,7 +1018,7 @@ class sonarALIGN(object):
 		"""
 		return sum(self._target_coords_matrix[:x])
 
-	def iter_dna_vars(self):
+	def iter_vars(self):
 		"""
 		function to iterate variations on nucleotide level.
 
@@ -1039,120 +1087,69 @@ class sonarALIGN(object):
 		target = self.aligned_target
 		query = self.aligned_query
 
-		# query overhead in front
-		match = self._leading_gap_regex.match(target)
-		if match:
-			yield "", query[:match.end()], -1, None, None, None
+		# deletions
+		for match in self._gap_regex.finditer(query):
+
+			## nucleotide level
+			s = self.real_pos(match.start())
+			e = self.real_pos(match.end())
+			ref = target[match.start():match.end()]
+			fs = 1 if self.gff and self.gff.any_frameshift_by_deletion(s, e) else 0
+			yield "", ref, "", self.real_pos(s), self.real_pos(e), fs
+
+			## protein level
+			if self.gff:
+				for cds in self.gff.cds:
+					if cds.is_cds(s, e):
+						dels = []
+						for j, codon_coords in enumerate(cds.iter_coords(True), 0):
+							if [x for x in codon_coords if x >= s and x <= e]:
+								dels.append(j)
+
+						for group in consecutive_groups(dels):
+							group  = list(group)
+							yield cds.symbol, cds.aa[group[0]:group[-1]+1], "", group[0], group[-1], 0
 
 		# insertions
-		isites = set()
-		for match in self._insert_regex.finditer(target):
-			isites.add(match.start())
+		for match in self._gap_regex.finditer(target):
+
+			## nucleotide level
 			s = self.real_pos(match.start())
-			yield match.group()[0], query[match.start():match.end()], s, None, None, None
+			e = s + 1
+			ref = "" if s < 0 else target[match.start()]
+			alt = query[match.start():match.end()]
+			fs = 1 if self.gff and self.gff.any_frameshift_by_insertion(s, len(alt)) else 0
+			yield "", ref, alt, s, e, fs
 
-		# deletions and snps
-		for i, pair in enumerate(zip(target, query)):
-			if pair[0] != "-" and pair[0] != pair[1] and i not in isites:
-				s = self.real_pos(i)
-				l = len(pair[1])
-				e = None if l == 1 else s + l
-				yield pair[0], pair[1].replace("-", ""), s, e, None, None
+			## protein level
+			if self.gff:
+				for cds in self.gff.cds:
+					if cds.is_cds(s, e):
+						for j, codon_coords in enumerate(cds.iter_coords(True), 0):
+							if s in codon_coords:
+								ref = cds.aa[j]
+								alt = self.translate(alt, cds.translation_table)
+								if ref != alt:
+									yield cds.symbol, cds.aa[j], alt, j, j+1, 0
 
-	def iter_aa_vars(self):
-		"""
-		function to iterate variations on amino acid level.
+		# snps
+		for i in [x for x in range(len(target)) if target[x] != "-" and query[x] != "-" and target[x] != query[x]]:
 
-		Example
-		-------
+			## nucleotide level
+			s = self.real_pos(i)
+			yield "", target[s], query[s], s, s+1, False
 
-		In this example the QRY_FASTA_FILE, REF_FASTA_FILE, and REF_GFF_FILE
-		variables store	the path of FASTA files containing the query and
-		reference genome sequences as well as the reference genome annotation,
-		in that order. The reference is NC_045512.2 while the query is a B.1.1.7
-		prototype sequence.
-
-		Please consider, that a sonarGFF is needed to consider annotation and
-		deduce amino acid level profiles.
-
-		>>> gff = sonarGFF(REF_GFF_FILE, REF_FASTA_FILE)
-		>>> algn = sonarALIGN(QRY_FASTA_FILE, REF_FASTA_FILE, sonarGFFObj=gff)
-		>>> for x in algn.iter_aa_vars():
-		... 	print(x)
-		('T', 'I', 1000, None, 'ORF1b', 'GU280_gp01')
-		('A', 'D', 1707, None, 'ORF1b', 'GU280_gp01')
-		('I', 'T', 2229, None, 'ORF1b', 'GU280_gp01')
-		('S', '', 3674, 3675, 'ORF1b', 'GU280_gp01')
-		('G', '', 3675, 3676, 'ORF1b', 'GU280_gp01')
-		('F', '', 3676, 3677, 'ORF1b', 'GU280_gp01')
-		('T', 'I', 1000, None, 'ORF1a', 'GU280_gp01')
-		('A', 'D', 1707, None, 'ORF1a', 'GU280_gp01')
-		('I', 'T', 2229, None, 'ORF1a', 'GU280_gp01')
-		('S', '', 3674, 3675, 'ORF1a', 'GU280_gp01')
-		('G', '', 3675, 3676, 'ORF1a', 'GU280_gp01')
-		('F', '', 3676, 3677, 'ORF1a', 'GU280_gp01')
-		('I', '', 67, 68, 'S', 'GU280_gp02')
-		('H', '', 68, 69, 'S', 'GU280_gp02')
-		('V', '', 69, 70, 'S', 'GU280_gp02')
-		('V', '', 142, 143, 'S', 'GU280_gp02')
-		('Y', '', 143, 144, 'S', 'GU280_gp02')
-		('N', 'Y', 500, None, 'S', 'GU280_gp02')
-		('A', 'D', 569, None, 'S', 'GU280_gp02')
-		('P', 'H', 680, None, 'S', 'GU280_gp02')
-		('T', 'I', 715, None, 'S', 'GU280_gp02')
-		('S', 'A', 981, None, 'S', 'GU280_gp02')
-		('D', 'H', 1117, None, 'S', 'GU280_gp02')
-		('Q', '*', 26, None, 'ORF8', 'GU280_gp09')
-		('R', 'I', 51, None, 'ORF8', 'GU280_gp09')
-		('Y', 'C', 72, None, 'ORF8', 'GU280_gp09')
-		('D', 'L', 2, None, 'N', 'GU280_gp10')
-		('S', 'F', 234, None, 'N', 'GU280_gp10')
-
-		Returns
-		-------
-		iterator of tuples
-			each tuple represents a amino acid level variation and consists of:
-				 - target nucleotide
-				 - query nucleotide(s)
-				 - target or reference start position (0-based
-				 - target or reference end position (0-based)
-				 - protein symbol
-				 - gene locus
-			Accordingly to the VCF format, insertions are expressed considering the upstream
-			base as anchor. As a special case, an insertion at the start of the sequence
-			has no anchor and a genomic coordinate of -1. Deletions are are expressed for
-			each position they occur and not fused.
-		"""
-		if self.gff:
-			for cds in self.gff.cds:
-				query = []
-				target = []
-				for s, e in cds.coordlist:
-					s = self.align_pos(s)
-					e = self.align_pos(e)
-					query.append(self.aligned_query[s:e])
-					target.append(self.aligned_target[s:e])
-				query = "".join(query)
-				target = "".join(target)
-
-				if cds.strand == "-":
-					query.append(str(Seq.reverse_complement(query)))
-					target.append(str(Seq.reverse_complement(target)))
-
-				for match in self._codon_regex.finditer(target):
-					s = match.start()
-					e = match.end()
-					start = int((s-target[:match.start()].count("-"))/3)
-					tcodon = match.group().replace("-", "")
-					qcodon = query[s:e].replace("-", "")
-					taa = self.translate(tcodon, cds.translation_table)
-					qaa = self.translate(qcodon, cds.translation_table)
-					if qaa == "":
-						yield taa, "", start, start+1, cds.symbol, cds.locus
-					else:
-						if qaa != taa:
-							e = None if len(qaa) == 1 else start + len(qaa)
-							yield (taa, qaa, start, e, cds.symbol, cds.locus)
+			## protein level
+			if self.gff:
+				for cds in self.gff.cds:
+					if cds.is_cds(s):
+						for j, codon_coords in enumerate(cds.iter_coords(True), 0):
+							if s in codon_coords:
+								ref = cds.aa[j]
+								alt = query[codon_coords[0]] + query[codon_coords[1]] + query[codon_coords[2]]
+								alt = self.translate(alt, cds.translation_table)
+								if ref != alt:
+									yield cds.symbol, cds.aa[j], alt, j, j+1, 0
 
 	@staticmethod
 	def translate(seq, translation_table=1):
@@ -1191,581 +1188,6 @@ class sonarALIGN(object):
 			l = -2
 		return str(Seq.translate(seq[:l], table=translation_table))
 
-class sonarDBManager():
-	"""
-	This object provides a sonarDB SQLite manager handler managing connections and
-	providing context-safe transaction control.
-
-	Notes
-	-----
-		This object should be called using a context manager to ensure rollbacks
-		on abnormal termination.
-
-	Example
-	-------
-
-	In this example the DOCTESTDB variable store the path to a database file
-
-	>>> with sonarDBManager(DOCTESTDB) as dbm:
-	... 	pass
-
-	Parameters
-	----------
-
-	dbfile : str
-		define a path to a non-existent or valid SONAR database file. If the
-		file does not exist, a SONAR database is created.
-	timeout : int [ -1 ]
-		define busy timeout. Use -1 for no timeout.
-	readonly : bool [ False ]
-		define if the connection should be read-only
-	debug : bool [ False ]
-		debug mode (print selected sql queries)
-
-	Attributes
-	----------
-	dbfile : str
-		stores the path to the used SONAR database file.
-	connection : object
-		stores the SQLite3 connection
-	cursor : method
-		stores the SQLite3 cursor
-
-	Dev Note
-	--------
-	A database row is returned as dictionary with column name as keys. Multiple
-	rows are returned as list of those dictionaries.
-
-	"""
-
-	def __init__(self, dbfile, timeout=-1, readonly=False, debug=False):
-		self.dbfile = os.path.abspath(dbfile)
-		self.connection = None
-		self.cursor = None
-		self.__timeout = timeout
-		self.__mode = "ro" if readonly else "rwc"
-		self.__uri = "file:" + urlquote(self.dbfile)
-		self.debug = debug
-
-	def __enter__(self):
-		if not os.path.isfile(self.dbfile) or os.stat(self.dbfile).st_size == 0:
-			self.create_tables()
-		self.connection, self.cursor = self.connect()
-		self.start_transaction()
-		return self
-
-	def __exit__(self, exc_type, exc_value, exc_traceback):
-		if [exc_type, exc_value, exc_traceback].count(None) != 3:
-			print("warning:", file=sys.stderr)
-			print(traceback.format_exc(), file=sys.stderr)
-			if self.__mode == "rwc":
-				print("rollback", file=sys.stderr)
-				self.rollback()
-		elif self.__mode == "rwc":
-			self.commit()
-		self.close()
-
-	def __del__(self):
-		if self.connection:
-			self.close()
-
-	def connect(self):
-		con = sqlite3.connect(self.__uri + "?mode=" + self.__mode, self.__timeout, isolation_level = None, uri = True)
-		con.row_factory = self.dict_factory
-		cur = con.cursor()
-		return con, cur
-
-	def start_transaction(self):
-		self.cursor.execute("BEGIN DEFERRED")
-
-	def commit(self):
-		self.connection.commit()
-
-	def rollback(self):
-		self.connection.rollback()
-
-	def close(self):
-		self.connection.close()
-
-	def create_tables(self):
-		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "db.sqlite"), 'r') as handle:
-			sql = handle.read()
-		with sqlite3.connect(self.__uri + "?mode=rwc", uri = True) as con:
-			con.executescript(sql)
-
-	def get_db_version(self):
-		return self.cursor.execute('pragma user_version').fetchone()['user_version']
-
-	def check_db_compatibility(self):
-		dbver = self.get_db_version()
-		if dbver != SUPPORTED_DB_VERSION:
-			sys.exit("compatibility error: the given database is not compatible with this version of sonar (database version: " + str(dbver) + "; supported database version: " + str(SUPPORTED_DB_VERSION) +")")
-
-	# INSERTING DATA
-
-	def insert_genome(self, acc, descr, seqhash):
-		sql = "INSERT INTO genome (accession, description, seqhash) VALUES(?, ?, ?);"
-		self.cursor.execute(sql, [acc, descr, seqhash])
-		return acc
-
-	def insert_sequence(self, seqhash):
-		sql = "INSERT OR IGNORE INTO sequence (seqhash) VALUES(?);"
-		self.cursor.execute(sql, [seqhash])
-		return seqhash
-
-	def insert_profile(self, seqhash, dna_profile, aa_profile, fs_profile):
-		dna_profile = " " + dna_profile.strip() + " "
-		aa_profile = " " + aa_profile.strip() + " "
-		sql = "INSERT OR IGNORE INTO profile (seqhash, dna_profile, aa_profile, fs_profile) VALUES(?, ?, ?, ?);"
-		self.cursor.execute(sql, [seqhash, dna_profile, aa_profile, fs_profile])
-		return seqhash
-
-	def insert_dna_var(self, seqhash, ref, alt, start, end=None):
-		if end is None:
-			end = start + 1
-		sql = "INSERT OR IGNORE INTO dna (varid, start, end, ref, alt) VALUES(?, ?, ?, ?, ?);"
-		self.cursor.execute(sql, [None, start, end, ref, alt])
-		sql = "SELECT varid FROM dna WHERE start = ? AND end = ? AND alt = ? AND ref = ?;"
-		varid = self.cursor.execute(sql, [start, end, alt, ref]).fetchone()['varid']
-		sql = "INSERT OR IGNORE INTO sequence2dna (seqhash, varid) VALUES(?, ?);"
-		self.cursor.execute(sql, [seqhash, varid])
-		return varid
-
-	def insert_prot_var(self, seqhash, protein, locus, ref, alt, start, end=None):
-		if end is None:
-			end = start + 1
-		sql = "INSERT OR IGNORE INTO prot (varid, protein, locus, start, end, ref, alt) VALUES(?, ?, ?, ?, ?, ?, ?);"
-		self.cursor.execute(sql, [None, protein, locus, start, end, ref, alt])
-		sql = "SELECT varid FROM prot WHERE protein = ? AND locus = ? AND start = ? AND end = ? AND alt = ? AND ref = ?;"
-		varid = self.cursor.execute(sql, [protein, locus, start, end, alt, ref]).fetchone()['varid']
-		sql = "INSERT OR IGNORE INTO sequence2prot (seqhash, varid) VALUES(?, ?);"
-		self.cursor.execute(sql, [seqhash, varid])
-		return varid
-
-	# DELETING DATA
-
-	def delete_genome(self, acc):
-		sql = "DELETE FROM genome WHERE accession = ?;"
-		self.cursor.execute(sql, [acc])
-
-	# SELECTING DATA
-
-	def genome_exists(self, acc, descr=None, seqhash=None):
-		sql = ["SELECT COUNT(*) FROM genome WHERE accession = ?"]
-		vals = [acc]
-		if descr:
-			sql.append("AND descr = ?")
-			vals.append(descr)
-		if seqhash:
-			sql.append(" AND seqhash = ?")
-			vals.append(seqhash)
-		return self.cursor.execute(" ".join(sql) + ";", vals).fetchone()['COUNT(*)'] > 0
-
-	def seq_exists(self, seqhash):
-		sql = "SELECT COUNT(*) FROM sequence WHERE seqhash = ?;"
-		return self.cursor.execute(sql, [seqhash]).fetchone()['COUNT(*)'] > 0
-
-	def get_genomes(self, acc):
-		sql = "SELECT * FROM genome WHERE accession = ?;"
-		return self.cursor.execute(sql, [acc]).fetchone()
-
-	def get_dna_varid(self, ref, alt, pos):
-		sql = "SELECT varid FROM dna WHERE pos = ? AND alt = ? AND ref = ?;"
-		row = self.cursor.execute(sql, [pos, alt, ref]).fetchone()
-		if row:
-			return row['varid']
-		return None
-
-	def get_prot_varid(self, protein, locus, ref, alt, pos):
-		sql = "SELECT varid FROM prot WHERE protein = ? AND locus = ? AND pos = ? AND alt = ? AND ref = ?;"
-		row = self.cursor.execute(sql, [protein, locus, ref, alt, pos]).fetchone()
-		if row:
-			return row['varid']
-		return None
-
-	def get_dna_vars(self, acc):
-		sql = "SELECT description, start, end, alt, ref FROM dna_view WHERE accession = ?;"
-		return self.cursor.execute(sql, [acc]).fetchall()
-
-	def get_dna_profile(self, acc):
-		sql = "SELECT dna_profile FROM essence WHERE accession = ?;"
-		row = self.cursor.execute(sql, [acc]).fetchone()
-		if not row:
-			return None
-		return row['dna_profile']
-
-	def count_genomes(self):
-		sql = "SELECT COUNT(accession) FROM genome;"
-		row = self.cursor.execute(sql).fetchone()
-		return int(row['COUNT(accession)'])
-
-	def count_sequences(self):
-		sql = "SELECT COUNT(seqhash) FROM sequence;"
-		row = self.cursor.execute(sql).fetchone()
-		return int(row['COUNT(seqhash)'])
-
-	def count_labs(self):
-		sql = "SELECT COUNT(DISTINCT lab) as count FROM genome WHERE lab != '';"
-		row = self.cursor.execute(sql).fetchone()
-		return int(row['count'])
-
-	def info_data_types(self):
-		sql = "SELECT source, collection, COUNT(accession) as genome_count FROM genome GROUP BY source, collection ORDER BY source, collection;"
-		return self.cursor.execute(sql).fetchall()
-
-	def get_earliest_import(self):
-		sql = "SELECT MIN(imported) as import FROM genome;"
-		return self.cursor.execute(sql).fetchone()['import']
-
-	def get_latest_import(self):
-		sql = "SELECT MAX(imported) as import FROM genome;"
-		return self.cursor.execute(sql).fetchone()['import']
-
-	def get_earliest_date(self):
-		sql = "SELECT MIN(date) as date FROM genome WHERE date IS NOT NULL;"
-		return self.cursor.execute(sql).fetchone()['date']
-
-	def get_latest_date(self):
-		sql = "SELECT MAX(date) as date FROM genome WHERE date IS NOT NULL;"
-		return self.cursor.execute(sql).fetchone()['date']
-
-	def count_metadata(self, field):
-		sql = "SELECT COUNT(accession) as counts FROM genome WHERE " + field + " IS NOT NULL AND " + field + " !=  '';"
-		return self.cursor.execute(sql).fetchone()['counts']
-
-	def iter_table(self, table, batch_size=1000):
-		sql = "SELECT * FROM " + table + ";"
-		c = self.cursor.execute(sql)
-		while True:
-			rows = c.fetchmany(batch_size)
-			if not rows:
-				break
-			for row in rows:
-				yield row
-
-	# MATCHING PROFILES
-
-	def get_profile_condition(self, field, *profiles, negate=False):
-		op = " NOT " if negate else " "
-		clause = [field + op + "LIKE '% " + x + " %'" for x in profiles]
-		return " AND ".join(clause)
-
-	def get_metadata_in_condition(self, field, *vals, negate=False):
-		op = " NOT " if negate else " "
-		return field + op + "IN (" + ", ".join(['?'] * len(vals)) + ")"
-
-	def get_metadata_equal_condition(self, field, val, negate=False):
-		op = " != " if negate else " = "
-		return field + op + "?"
-
-	def get_metadata_numeric_condition(self, field, min=False, max=True):
-		condition = []
-		if min:
-			condition.append(field + " >= ?")
-		if max:
-			condition.append(field + " <= ?")
-		return " AND ".join(condition)
-
-	def get_metadata_leading_string_condition(self, field, *vals, negate=False):
-		op = " NOT " if negate else " "
-		logic = " AND " if negate else " OR "
-		clause = [field + op + "LIKE '" + x + "%'" for x in vals]
-		if not negate and len(clause) > 1:
-			return "(" + logic.join(clause) + ")"
-		return logic.join(clause)
-
-	def get_metadata_date_condition(self, field, *dates, negate=False):
-		op = " NOT " if negate else " "
-		op2 = " != " if negate else " = "
-		logic = " AND " if negate else " OR "
-		clause = []
-		for date in dates:
-			if ":" in date:
-				x, y = date.split(":")
-				clause.append("(" + field + op + "BETWEEN '" + x + "' AND '" + y + "')")
-			else:
-				clause.append(field + op2 + date)
-		if not negate and len(clause) > 1:
-			return "(" + logic.join(clause) + ")"
-		return logic.join(clause)
-
-	def match(self,
-			  include_profiles=[],
-			  exclude_profiles=[],
-			  include_acc=[],
-			  exclude_acc=[],
-			  include_lin=[],
-			  exclude_lin=[],
-			  include_zip=[],
-			  exclude_zip=[],
-			  include_dates=[],
-			  exclude_dates=[],
-			  include_lab=[],
-			  exclude_lab=[],
-			  include_source=[],
-			  exclude_source=[],
-			  include_collection=[],
-			  exclude_collection=[],
-  			  include_technology=[],
-  			  exclude_technology=[],
-  			  include_platform=[],
-  			  exclude_platform=[],
-  			  include_chemistry=[],
-  			  exclude_chemistry=[],
-  			  include_material=[],
-  			  exclude_material=[],
-			  include_software=None,
-			  exclude_software=None,
-			  include_software_version=None,
-			  exclude_software_version=None,
-  			  min_ct=None,
-  			  max_ct=None,
-			  count = False,
-			  frameshifts = 0):
-
-		# creating where condition
-		where_clause = []
-		where_vals = []
-
-		## accessions
-		if include_acc:
-			where_clause.append(self.get_metadata_in_condition("accession", *include_acc))
-			where_vals.extend(include_acc)
-		if exclude_acc:
-			where_clause.append(self.get_metadata_in_condition("accession", *exclude_acc, negate=True))
-			where_vals.extend(exclude_acc)
-
-		## lineage
-		if include_lin:
-			where_clause.append(self.get_metadata_in_condition("lineage", *include_lin))
-			where_vals.extend(include_lin)
-		if exclude_lin:
-			where_clause.append(self.get_metadata_in_condition("lineage", *exclude_lin, negate=True))
-			where_vals.extend(exclude_lin)
-
-		## lab
-		if include_lab:
-			where_clause.append(self.get_metadata_in_condition("lab", *include_lab))
-			where_vals.extend(include_lab)
-		if exclude_lab:
-			where_clause.append(self.get_metadata_in_condition("lab", *exclude_lab, negate=True))
-			where_vals.extend(exclude_lab)
-
-		## source
-		if include_source:
-			where_clause.append(self.get_metadata_in_condition("source", *include_source))
-			where_vals.extend(include_source)
-		if exclude_source:
-			where_clause.append(self.get_metadata_in_condition("source", *exclude_source, negate=True))
-			where_vals.extend(exclude_source)
-
-		## collection
-		if include_collection:
-			where_clause.append(self.get_metadata_in_condition("collection", *include_collection))
-			where_vals.extend(include_collection)
-		if exclude_collection:
-			where_clause.append(self.get_metadata_in_condition("collection", *exclude_collection, negate=True))
-			where_vals.extend(exclude_collection)
-
-		## technology
-		if include_technology:
-			where_clause.append(self.get_metadata_in_condition("technology", *include_technology))
-			where_vals.extend(include_technology)
-		if exclude_technology:
-			where_clause.append(self.get_metadata_in_condition("technology", *exclude_technology, negate=True))
-			where_vals.extend(exclude_technology)
-
-		## platform
-		if include_platform:
-			where_clause.append(self.get_metadata_in_condition("platform", *include_platform))
-			where_vals.extend(include_platform)
-		if exclude_platform:
-			where_clause.append(self.get_metadata_in_condition("platform", *exclude_platform, negate=True))
-			where_vals.extend(exclude_platform)
-
-		## chemistry
-		if include_chemistry:
-			where_clause.append(self.get_metadata_in_condition("chemistry", *include_chemistry))
-			where_vals.extend(include_chemistry)
-		if exclude_chemistry:
-			where_clause.append(self.get_metadata_in_condition("chemistry", *exclude_chemistry, negate=True))
-			where_vals.extend(exclude_chemistry)
-
-		## software
-		if include_software:
-			where_clause.append(self.get_metadata_equal_condition("software", include_software))
-			where_vals.append(include_software)
-		if exclude_software:
-			where_clause.append(self.get_metadata_equal_condition("software", exclude_software, negate=True))
-			where_vals.append(exclude_software)
-
-		## software version
-		if include_software_version:
-			where_clause.append(self.get_metadata_equal_condition("software_version", include_software_version))
-			where_vals.append(include_software_version)
-		if exclude_software_version:
-			where_clause.append(self.get_metadata_equal_condition("software_version", exclude_software_version, negate=True))
-			where_vals.append(exclude_software_version)
-
-		## material
-		if include_material:
-			where_clause.append(self.get_metadata_in_condition("material", *include_material))
-			where_vals.extend(include_material)
-		if exclude_material:
-			where_clause.append(self.get_metadata_in_condition("material", *exclude_material, negate=True))
-			where_vals.extend(exclude_material)
-
-		## ct
-		if min_ct or max_ct:
-			where_clause.append(self.get_metadata_numeric_condition("ct", min_ct, max_ct))
-			if min_ct:
-				where_vals.append(min_ct)
-			if max_ct:
-				where_vals.append(max_ct)
-
-		## zip
-		if include_zip:
-			where_clause.append(self.get_metadata_leading_string_condition("zip", *include_zip))
-		if exclude_zip:
-			where_clause.append(self.get_metadata_leading_string_condition("zip", *exclude_zip, negate=True))
-
-		## date
-		if include_dates:
-			where_clause.append(self.get_metadata_date_condition("date", *include_dates))
-		if exclude_dates:
-			where_clause.extend(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
-
-		## profiles
-		if include_profiles:
-			profile_clause = []
-			for profile in include_profiles:
-				if not profile['dna'] and not profile['aa']:
-					continue
-				profile_clause.append([])
-				if len(profile['dna']) > 0:
-					profile_clause[-1].append(self.get_profile_condition('dna_profile', *profile['dna']))
-				if len(profile['aa']) > 0:
-					profile_clause[-1].append(self.get_profile_condition('aa_profile', *profile['aa']))
-				if len(profile_clause[-1]) > 1:
-					profile_clause[-1] = "(" + " AND ".join(profile_clause[-1]) + ")"
-				else:
-					profile_clause[-1] = profile_clause[-1][0]
-				if len(profile_clause) > 1:
-					where_clause.append("(" + " OR ".join(profile_clause) + ")")
-				else:
-					where_clause.append(profile_clause[0])
-
-		if exclude_profiles:
-			profile_clause = []
-			for profile in exclude_profiles:
-				if not profile['dna'] and not profile['aa']:
-					continue
-				profile_clause.append([])
-				if profile['dna']:
-					profile_clause[-1].append(self.get_profile_condition('dna_profile', *profile['dna'], negate=True))
-				if profile['aa']:
-					profile_clause[-1].append(self.get_profile_condition('aa_profile', *profile['aa'], negate=True))
-				if len(profile_clause[-1]) > 1:
-					profile_clause[-1] = "(" + " AND ".join(profile_clause) + ")"
-				else:
-					profile_clause[-1] = profile_clause[-1][0]
-				if len(profile_clause) > 1:
-					where_clause.append("(" + " OR ".join(profile_clause) + ")")
-				else:
-					where_clause.append(profile_clause[0])
-
-		## frameshifts
-		if frameshifts == -1:
-			where_clause.append("fs_profile = ''")
-		elif frameshifts == 1:
-			where_clause.append("fs_profile != ''")
-
-		# count or not
-		fields = "*" if not count else "COUNT(*) as count"
-
-		# create sql query
-		if where_clause:
-			sql =  "SELECT " + fields + " FROM essence WHERE " + " AND ".join(where_clause) + ";"
-		else:
-			sql = "SELECT " + fields + " FROM essence;"
-
-		if self.debug:
-			print("query: " + sql)
-			print("vals: ", where_vals)
-
-		return self.cursor.execute(sql, where_vals).fetchall()
-
-	# UPDATE DATA
-
-	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, gisaid = None, ena = None, collection = None, source = None, lab = None, technology = None, platform = None, chemistry = None, software = None, version = None, material = None, ct = None):
-		expr = []
-		vals = []
-		if description is not None:
-			expr.append("description")
-			vals.append(description)
-		if lineage is not None:
-			expr.append("lineage")
-			vals.append(lineage)
-		if zip is not None:
-			expr.append("zip")
-			vals.append(zip)
-		if gisaid is not None:
-			expr.append("gisaid")
-			vals.append(gisaid)
-		if date is not None:
-			expr.append("date")
-			vals.append(date)
-		if ena is not None:
-			expr.append("ena")
-			vals.append(ena)
-		if collection is not None:
-			expr.append("collection")
-			vals.append(collection)
-		if source is not None:
-			expr.append("source")
-			vals.append(source)
-		if lab is not None:
-			expr.append("lab")
-			vals.append(lab)
-		if technology is not None:
-			expr.append("technology")
-			vals.append(technology)
-		if platform is not None:
-			expr.append("platform")
-			vals.append(platform)
-		if chemistry is not None:
-			expr.append("chemistry")
-			vals.append(chemistry)
-		if software is not None:
-			expr.append("software")
-			vals.append(software)
-		if version is not None:
-			expr.append("software_version")
-			vals.append(version)
-		if material is not None:
-			expr.append("material")
-			vals.append(material)
-		if ct is not None:
-			expr.append("ct")
-			vals.append(ct)
-		vals.append(acc)
-		setexpr = ", ".join([x + " = ?" for x in expr])
-		sql = "UPDATE genome SET "+ setexpr + " WHERE accession = ?;"
-		self.cursor.execute(sql, vals)
-
-	# MISC
-
-	@staticmethod
-	def optimize(dbfile):
-		with sqlite3.connect(dbfile) as con:
-			con.executescript("VACUUM")
-
-	@staticmethod
-	def dict_factory(cursor, row):
-		d = OrderedDict()
-		for idx, col in enumerate(cursor.description):
-			d[col[0]] = row[idx]
-		return d
 
 class sonarDB(object):
 	"""
@@ -2019,7 +1441,7 @@ class sonarDB(object):
 
 	def check_iupac_nt_code(self, seq):
 		"""
-		returns set of non-IUPAC characters present in a given sequence
+		returns a set of non-IUPAC characters present in a given sequence
 
 		Parameters
 		----------
@@ -2147,11 +1569,7 @@ class sonarDB(object):
 		}
 
 		alignment = sonarALIGN(fname, self.reffna, algnfile, self.refgffObj)
-		data['dnadiff'] = alignment.dnadiff
-		data['aadiff'] = alignment.aadiff
-		data['dna_profile'] = self.build_profile(*data['dnadiff'])
-		data['prot_profile'] = self.build_profile(*data['aadiff'])
-		data['fs_profile'] = self.filter_frameshifts(data['dna_profile'])
+		data['vars'] = [x for x in alignment.iter_vars()]
 
 		if pickle_file:
 			with open(pickle_file, "wb") as handle:
@@ -2193,7 +1611,7 @@ class sonarDB(object):
 		with ExitStack() as stack:
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db))
-			for i in tqdm(range(len(fnames)), desc = msg, disable=disable_progressbar):
+			for i in tqdm(range(len(fnames)), desc = msg, disable_progressbar=disable_progress):
 				self.import_genome(**self.process_fasta(fnames[i]), dbm=dbm)
 
 
@@ -2225,12 +1643,10 @@ class sonarDB(object):
 				seq = cache.get_cached_seq(seqhash)
 				preprocessed_data = cache.load_info(seqhash)
 				for entry in acc_dict[seqhash]:
-					preprocessed_data['acc'] = entry[0]
-					preprocessed_data['descr'] = entry[1]
-					self.import_genome(**preprocessed_data, seq=seq, dbm=dbm)
+					self.import_genome(entry[0], entry[1], seqhash, preprocessed_data['vars'], seq, dbm)
 
 
-	def import_genome(self, acc, descr, seqhash, dnadiff=None, aadiff=None, dna_profile=None, prot_profile=None, fs_profile=None, seq=None, dbm=None):
+	def import_genome(self, acc, descr, seqhash, vars, seq=None, dbm=None):
 		"""
 		function to import processed data to the SONAR database.
 
@@ -2261,18 +1677,13 @@ class sonarDB(object):
 				dbm = stack.enter_context(sonarDBManager(self.db))
 
 			dbm.insert_genome(acc, descr, seqhash)
+			dbm.insert_sequence(seqhash)
 
-			if not dnadiff is None:
-				dbm.insert_sequence(seqhash)
-				dbm.insert_profile(seqhash, dna_profile, prot_profile, fs_profile)
-				for ref, alt, s, e, _, __ in dnadiff:
-					dbm.insert_dna_var(seqhash, ref, alt, s, e)
+			for var in vars:
+				dbm.insert_var(seqhash, *var)
 
-				for ref, alt, s, e, protein, locus in aadiff:
-					dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
-
-			if seq:
-				self.be_paranoid(acc, seq, auto_delete=True, dbm=dbm)
+			#if seq:
+			#	self.be_paranoid(acc, seq, auto_delete=True, dbm=dbm)
 
 	# NOMENCLATURE
 
@@ -2419,7 +1830,7 @@ class sonarDB(object):
 		if var not in profile:
 			profile.append(var)
 
-		return " ".join(profile)
+		return profile
 
 	@staticmethod
 	def format_var(ref, alt, start, end, protein=None, locus=None):
@@ -2914,7 +2325,7 @@ class sonarDB(object):
 						prefix = row['alt']
 				return ">" + rows[0]['description'], prefix + "".join(qryseq)
 			else:
-				rows = dbm.get_genomes(acc)
+				rows = dbm.get_genome(acc)
 				if rows is None:
 					sys.exit("error: " + acc + " not found.")
 				return ">" + rows['description'], self.refseq
@@ -2972,7 +2383,7 @@ class sonarDB(object):
 							qryseq[pos] = alt
 				return prefix + "".join(qryseq)
 			else:
-				row = dbm.get_genomes(acc)
+				row = dbm.get_genome(acc)
 				if row is None:
 					sys.exit("error: " + acc + " not found.")
 				return ">" + row['description'], self.refseq

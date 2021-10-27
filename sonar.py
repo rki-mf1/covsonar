@@ -9,7 +9,9 @@ import csv
 import argparse
 import gzip
 import lzma
-from lib import sonardb
+import sonar
+from sonar.action import sonarActions
+from sonar.dbm import sonarDBManager
 from Bio import SeqIO
 from tempfile import mkstemp
 from collections import defaultdict
@@ -27,6 +29,10 @@ def parse_args():
 	general_parser = argparse.ArgumentParser(add_help=False)
 	general_parser.add_argument('--db', metavar="DB_DIR", help="sonar database directory", type=str, required=True)
 	general_parser.add_argument('--cpus', metavar="int", help="number of cpus to use (default: 1)", type=int, default=1)
+	general_parser.add_argument('--debug', help="activate debugging mode showing all sqllite queries on screen", action="store_true")
+
+	# create the parser for the "setup" command
+	parser_add = subparsers.add_parser('setup', parents=[general_parser], help='setup a new database.')
 
 	# create the parser for the "add" command
 	parser_add = subparsers.add_parser('add', parents=[general_parser], help='add genome sequences to the database.')
@@ -69,7 +75,6 @@ def parse_args():
 	parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
 	parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
 	parser_match_g2.add_argument('--tsv', help="use tsv instead of csv output", action="store_true")
-	parser_match.add_argument('--debug', help="show database query for debugging", action="store_true")
 
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
@@ -172,7 +177,7 @@ class sonar():
 						descr = record.description
 						seq = self.db.harmonize(record.seq)
 						seqhash = self.db.hash(seq)
-						genome_data = dbm.get_genomes(acc)
+						genome_data = dbm.get_genome(acc)
 
 						if updates:
 							to_update.add(acc)
@@ -389,19 +394,15 @@ def process_update_expressions(expr):
 
 if __name__ == "__main__":
 	args = parse_args()
-	if hasattr(args, 'debug') and args.debug:
-		debug = True
-	else:
-		debug = False
 
-	if not args.db is None and args.tool != "add" and not os.path.isfile(args.db):
-		sys.exit("input error: database does not exist.")
+	# setup
+	if args.tool == "setup":
+		sonarActions.setup_db(args.db, debug=args.debug)
+		exit()
 
-	snr = sonar(args.db, debug=debug)
-
-	if not args.db is None:
-		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
-			dbm.check_db_compatibility()
+	snr = sonarActions(args.db, debug=args.debug)
+	with sonarDBManager(args.db, readonly=True) as dbm:
+		dbm.check_db_compatibility()
 
 	# add
 	if args.tool == "add":
@@ -410,7 +411,7 @@ if __name__ == "__main__":
 		if not args.file and not args.cache:
 			sys.exit("nothing to add.")
 
-		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout, quiet=args.quiet, noprogress=args.noprogress, compressed=args.compressed, source=args.source, collection=args.collection, lab=args.lab)
+		snr.add_samples_from_fasta(*args.file, reference_accession=None)
 
 	# match
 	if args.tool == "match":
