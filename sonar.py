@@ -171,6 +171,9 @@ class sonar():
 						acc = record.id
 						descr = record.description
 						seq = self.db.harmonize(record.seq)
+
+						if len(seq) == 0:
+							continue
 						seqhash = self.db.hash(seq)
 						genome_data = dbm.get_genomes(acc)
 
