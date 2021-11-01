@@ -40,10 +40,14 @@ class sonarAligner(object):
 			hit = next(hits)
 		except:
 			return None
+		print(hit.r_st, hit.r_en, hit.q_st, hit.q_en, hit.cs)
 		return [hit.r_st, hit.r_en, hit.q_st, hit.q_en, hit.cs]
+
 
 	def itermap(self, ref_seq, qry_seq, cpus=1):
 		mapping = self.map(ref_seq, qry_seq, cpus)
+		mapping = self.hisat2( qry_seq, cpus)
+
 		if not mapping:
 			return None
 
@@ -74,6 +78,33 @@ class sonarAligner(object):
 
 		return ref_start, ref_end, qry_start, qry_end,cs
 
+	def hisat2(self, qry_seq, cpus=1):
+		tmp_dir = "/home/kongkitimanonk/SCRATCH_NOBAK/CovSonar1/workdir_covsonar/"
+		ref_index_dir = "/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/ref_index"
+
+		# create an intermediate file for use as an input to hisat2
+		n = 1
+		qry_file = os.path.join(tmp_dir, "tmp_qry_file.fa")
+		with open(qry_file, 'w') as out:
+				out.write('>' + str(n) + '\n' + qry_seq.strip())  
+		sam_qry_file = os.path.join(tmp_dir, "tmp_hist2.output.sam")
+		cmd = ['/scratch/kongkitimanonk/CovSonar1/hisat2-2.2.1/hisat2',  "-f", ref_index_dir, '--quiet', "--no-softclip", "--threads", str(cpus)
+			   , "-U", qry_file, "-S", sam_qry_file]
+		
+		p = subprocess.Popen(cmd, encoding='utf8')
+		output, outerr = p.communicate()
+
+		# Convert from SAM format to PAF format by using  paftools.js from minimap2
+		cmd = ['paftools.js', 'sam2paf', sam_qry_file ]
+		p = subprocess.Popen(cmd, encoding='utf8', stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+		output, outerr = p.communicate()
+		list = output.split('\n')[0].split('\t')
+		os.remove(qry_file)
+		os.remove(sam_qry_file)
+		# [5:] remove cs:Z:
+		# index 7 8 2 3 17 = hit.r_st, hit.r_en, hit.q_st, hit.q_en, hit.cs
+		print(int(list[7]), int(list[8]), int(list[2]), int(list[3]), list[17][5:].lower())
+		return  int(list[7]), int(list[8]), int(list[2]), int(list[3]), list[17][5:].lower()
 
 	def minimap2(self, ref_file, qry_file):
 		with open(ref_file) as handle:
