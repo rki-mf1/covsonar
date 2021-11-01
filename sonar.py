@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 import os
 import sys
 import csv
@@ -176,6 +176,9 @@ class sonar():
 						acc = record.id
 						descr = record.description
 						seq = self.db.harmonize(record.seq)
+
+						if len(seq) == 0:
+							continue
 						seqhash = self.db.hash(seq)
 						genome_data = dbm.get_genome(acc)
 
