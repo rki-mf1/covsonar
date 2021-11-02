@@ -2264,7 +2264,7 @@ class sonarDB(object):
 		  			  max_ct,
 					  count,
 					  frameshifts)
-
+			print(rows)
 		# remove ambiguities from database profiles if wished
 		if not ambig and not count:
 			keep = [item for sublist in include_profiles for item in sublist] if include_profiles else None
