@@ -442,8 +442,6 @@ if __name__ == "__main__":
 			args.technology = [x.upper() for x in args.technology]
 		if args.platform:
 			args.platform = [x.upper() for x in args.platform]
-		if args.lineage:
-			args.lineage = [x.upper() for x in args.lineage]
 		if args.chemistry:
 			args.chemistry = [x.upper() for x in args.chemistry]
 		if args.software:

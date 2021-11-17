@@ -1634,7 +1634,6 @@ class sonarDBManager():
 			where_clause.append(self.get_metadata_date_condition("date", *include_dates))
 		if exclude_dates:
 			where_clause.extend(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
-
 		## profiles
 		if include_profiles:
 			profile_clause = []
@@ -1642,18 +1641,21 @@ class sonarDBManager():
 				if not profile['dna'] and not profile['aa']:
 					continue
 				profile_clause.append([])
+
 				if len(profile['dna']) > 0:
 					profile_clause[-1].append(self.get_profile_condition('dna_profile', *profile['dna']))
 				if len(profile['aa']) > 0:
 					profile_clause[-1].append(self.get_profile_condition('aa_profile', *profile['aa']))
+
 				if len(profile_clause[-1]) > 1:
 					profile_clause[-1] = "(" + " AND ".join(profile_clause[-1]) + ")"
 				else:
 					profile_clause[-1] = profile_clause[-1][0]
-				if len(profile_clause) > 1:
-					where_clause.append("(" + " OR ".join(profile_clause) + ")")
-				else:
-					where_clause.append(profile_clause[0])
+
+			if len(profile_clause) > 1:
+				where_clause.append("(" + " OR ".join(profile_clause) + ")")
+			else:
+				where_clause.append(profile_clause[0])
 
 		if exclude_profiles:
 			profile_clause = []
@@ -1669,10 +1671,10 @@ class sonarDBManager():
 					profile_clause[-1] = "(" + " AND ".join(profile_clause) + ")"
 				else:
 					profile_clause[-1] = profile_clause[-1][0]
-				if len(profile_clause) > 1:
-					where_clause.append("(" + " OR ".join(profile_clause) + ")")
-				else:
-					where_clause.append(profile_clause[0])
+			if len(profile_clause) > 1:
+				where_clause.append("(" + " OR ".join(profile_clause) + ")")
+			else:
+				where_clause.append(profile_clause[0])
 
 		## frameshifts
 		if frameshifts == -1:
@@ -2754,7 +2756,6 @@ class sonarDB(object):
 		# adding conditions of profiles to include to where clause
 		if include_profiles:
 			include_profiles = [ self.make_profile_explicit(x) for x in include_profiles ]
-
 		# adding conditions of profiles to exclude to where clause
 		if exclude_profiles:
 			exclude_profiles = [ self.make_profile_explicit(x) for x in exclude_profiles ]
