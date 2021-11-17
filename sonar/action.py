@@ -394,7 +394,9 @@ class sonarActions(object):
 							if aid is None:
 								aid = dbm.insert_alignment(seguid, source_id)
 								aligner = sonarAligner()
-								for variant in aligner.iter_diffs(molecule_seq, sequence, cpus=3):
+								result = aligner.iter_diffs(molecule_seq, sequence, cpus=3)
+								#print(list(result))
+								for variant in result:
 									dbm.insert_variant(aid, variant[0], variant[2], variant[1], variant[1] + max(len(variant[0]), len(variant[2])))
 
 							## paranoia check (checking nucleotide level variants)
@@ -412,6 +414,7 @@ class sonarActions(object):
 			restored_sequence = list(reference_sequence)
 			restored_sequence_prefix = ""
 			for v in dbm.iter_profile(sample_name, source_id):
+				#print(v)
 				#gap handling
 				if v['variant.alt'] == "":
 					for j, i in enumerate(range(v['variant.start'], v['variant.end'])):
