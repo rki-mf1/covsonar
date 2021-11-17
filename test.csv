@@ -1,3 +1,0 @@
-['B.1.617.2']
-query: SELECT COUNT(*) as count FROM essence WHERE lineage IN (?) AND aa_profile LIKE '% S:E484K %';
-vals:  ['B.1.617.2']
