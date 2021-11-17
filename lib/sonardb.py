@@ -2774,36 +2774,6 @@ class sonarDB(object):
 		include_lin = [x for x in lineages if not x.startswith("^")]
 		exclude_lin = [x[1:] for x in lineages if x.startswith("^")]
 
-		### support wildcard ####
-		if dbm is None:
-			dbm = sonarDBManager(self.db, readonly=True)
-		dbm.debug = debug
-		dbm.connection, dbm.cursor =dbm.connect()
-		_tmp_include_lin = []
-		for in_lin in include_lin:
-			if "%" in in_lin:
-				_list = dbm.get_list_of_lineages(in_lin)
-						
-				if len(_list) > 0:
-					_tmp_include_lin.extend(_list)
-					## if we don't find this wildcard so we discard it
-			else:
-				_tmp_include_lin.append(in_lin)
-		include_lin = _tmp_include_lin
-
-		_tmp_exclude_lin = []
-		for ex_lin in exclude_lin:
-			if "%" in ex_lin:
-				_list = dbm.get_list_of_lineages(ex_lin)
-						
-				if len(_list) > 0:
-					_tmp_exclude_lin.extend(_list)
-					## if we don't find this wildcard so we discard it
-			else:
-				_tmp_exclude_lin.append(ex_lin)
-		exclude_lin = _tmp_exclude_lin
-		########################### 
-
 		include_zip = [x for x in zips if not str(x).startswith("^")]
 		exclude_zip = [x[1:] for x in zips if str(x).startswith("^")]
 
@@ -2858,6 +2828,31 @@ class sonarDB(object):
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
 			dbm.debug = debug
+			### support wildcard ####
+			_tmp_include_lin = []
+			for in_lin in include_lin:
+				if "%" in in_lin:
+					_list = dbm.get_list_of_lineages(in_lin)
+							
+					if len(_list) > 0:
+						_tmp_include_lin.extend(_list)
+						## if we don't find this wildcard so we discard it
+				else:
+					_tmp_include_lin.append(in_lin)
+			include_lin = _tmp_include_lin
+
+			_tmp_exclude_lin = []
+			for ex_lin in exclude_lin:
+				if "%" in ex_lin:
+					_list = dbm.get_list_of_lineages(ex_lin)
+							
+					if len(_list) > 0:
+						_tmp_exclude_lin.extend(_list)
+						## if we don't find this wildcard so we discard it
+				else:
+					_tmp_exclude_lin.append(ex_lin)
+			exclude_lin = _tmp_exclude_lin
+			########################
 			rows = dbm.match(
 					  include_profiles,
 					  exclude_profiles,
