@@ -1452,6 +1452,8 @@ class sonarDBManager():
 
 	def get_metadata_in_condition(self, field, *vals, negate=False):
 		op = " NOT " if negate else " "
+		# clause = [field + op + "LIKE '" + x + "'" for x in vals]
+		#return " AND ".join(clause)
 		return field + op + "IN (" + ", ".join(['?'] * len(vals)) + ")"
 
 	def get_metadata_equal_condition(self, field, val, negate=False):
@@ -1634,7 +1636,6 @@ class sonarDBManager():
 			where_clause.append(self.get_metadata_date_condition("date", *include_dates))
 		if exclude_dates:
 			where_clause.extend(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
-
 		## profiles
 		if include_profiles:
 			profile_clause = []
@@ -1642,19 +1643,21 @@ class sonarDBManager():
 				if not profile['dna'] and not profile['aa']:
 					continue
 				profile_clause.append([])
+
 				if len(profile['dna']) > 0:
 					profile_clause[-1].append(self.get_profile_condition('dna_profile', *profile['dna']))
 				if len(profile['aa']) > 0:
 					profile_clause[-1].append(self.get_profile_condition('aa_profile', *profile['aa']))
+
 				if len(profile_clause[-1]) > 1:
 					profile_clause[-1] = "(" + " AND ".join(profile_clause[-1]) + ")"
 				else:
 					profile_clause[-1] = profile_clause[-1][0]
-				if len(profile_clause) > 1:
-					where_clause.append("(" + " OR ".join(profile_clause) + ")")
-				else:
-					where_clause.append(profile_clause[0])
 
+			if len(profile_clause) > 1:
+				where_clause.append("(" + " OR ".join(profile_clause) + ")")
+			else:
+				where_clause.append(profile_clause[0])
 		if exclude_profiles:
 			profile_clause = []
 			for profile in exclude_profiles:
@@ -1669,17 +1672,16 @@ class sonarDBManager():
 					profile_clause[-1] = "(" + " AND ".join(profile_clause) + ")"
 				else:
 					profile_clause[-1] = profile_clause[-1][0]
-				if len(profile_clause) > 1:
-					where_clause.append("(" + " OR ".join(profile_clause) + ")")
-				else:
-					where_clause.append(profile_clause[0])
+			if len(profile_clause) > 1:
+				where_clause.append("(" + " OR ".join(profile_clause) + ")")
+			else:
+				where_clause.append(profile_clause[0])
 
 		## frameshifts
 		if frameshifts == -1:
 			where_clause.append("fs_profile = ''")
 		elif frameshifts == 1:
 			where_clause.append("fs_profile != ''")
-
 		# count or not
 		fields = "*" if not count else "COUNT(*) as count"
 
@@ -1753,8 +1755,14 @@ class sonarDBManager():
 		sql = "UPDATE genome SET "+ setexpr + " WHERE accession = ?;"
 		self.cursor.execute(sql, vals)
 
-	# MISC
+	def get_list_of_lineages(self, lineage):
 
+		sql = "SELECT DISTINCT lineage FROM genome WHERE lineage LIKE '"+lineage+"';" 
+		rows = self.cursor.execute(sql).fetchall()
+		result = [i['lineage'] for i in rows]
+		return  result
+
+	# MISC
 	@staticmethod
 	def optimize(dbfile):
 		with sqlite3.connect(dbfile) as con:
@@ -1766,6 +1774,7 @@ class sonarDBManager():
 		for idx, col in enumerate(cursor.description):
 			d[col[0]] = row[idx]
 		return d
+
 
 class sonarDB(object):
 	"""
@@ -2754,7 +2763,6 @@ class sonarDB(object):
 		# adding conditions of profiles to include to where clause
 		if include_profiles:
 			include_profiles = [ self.make_profile_explicit(x) for x in include_profiles ]
-
 		# adding conditions of profiles to exclude to where clause
 		if exclude_profiles:
 			exclude_profiles = [ self.make_profile_explicit(x) for x in exclude_profiles ]
@@ -2820,6 +2828,31 @@ class sonarDB(object):
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
 			dbm.debug = debug
+			### support wildcard ####
+			_tmp_include_lin = []
+			for in_lin in include_lin:
+				if "%" in in_lin:
+					_list = dbm.get_list_of_lineages(in_lin)
+							
+					if len(_list) > 0:
+						_tmp_include_lin.extend(_list)
+						## if we don't find this wildcard so we discard it
+				else:
+					_tmp_include_lin.append(in_lin)
+			include_lin = _tmp_include_lin
+
+			_tmp_exclude_lin = []
+			for ex_lin in exclude_lin:
+				if "%" in ex_lin:
+					_list = dbm.get_list_of_lineages(ex_lin)
+							
+					if len(_list) > 0:
+						_tmp_exclude_lin.extend(_list)
+						## if we don't find this wildcard so we discard it
+				else:
+					_tmp_exclude_lin.append(ex_lin)
+			exclude_lin = _tmp_exclude_lin
+			########################
 			rows = dbm.match(
 					  include_profiles,
 					  exclude_profiles,
