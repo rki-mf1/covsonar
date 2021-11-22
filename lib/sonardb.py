@@ -1443,6 +1443,17 @@ class sonarDBManager():
 			for row in rows:
 				yield row
 
+	## extra features
+	def get_list_of_lineages(self, lineage):
+
+		sql = "SELECT DISTINCT lineage FROM genome WHERE lineage LIKE '"+lineage+"';" 
+		rows = self.cursor.execute(sql).fetchall()
+		result = [i['lineage'] for i in rows]
+		return  result
+
+	def get_dna_vars_for_vcf(self, ):
+		return None
+
 	# MATCHING PROFILES
 
 	def get_profile_condition(self, field, *profiles, negate=False):
@@ -1754,13 +1765,6 @@ class sonarDBManager():
 		setexpr = ", ".join([x + " = ?" for x in expr])
 		sql = "UPDATE genome SET "+ setexpr + " WHERE accession = ?;"
 		self.cursor.execute(sql, vals)
-
-	def get_list_of_lineages(self, lineage):
-
-		sql = "SELECT DISTINCT lineage FROM genome WHERE lineage LIKE '"+lineage+"';" 
-		rows = self.cursor.execute(sql).fetchall()
-		result = [i['lineage'] for i in rows]
-		return  result
 
 	# MISC
 	@staticmethod
@@ -3041,7 +3045,7 @@ class sonarDB(object):
 		with ExitStack() as stack:
 			if dbm is None:
 				dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
-			row = dbm.get_dna_vars(acc)
+			rows = dbm.get_dna_vars(acc)
 		if rows:
 			refseq = list(self.refseq)
 			qryseq = refseq[:]

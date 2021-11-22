@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 import os
 import sys
 import csv
 import argparse
 import gzip
 import lzma
-from lib import sonardb
+from lib import sonardb, sonartogo
 from Bio import SeqIO
 from tempfile import mkstemp
 from collections import defaultdict
@@ -75,6 +75,12 @@ def parse_args():
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
 	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, default=[], nargs = "+")
 	parser_restore.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be restored (one accession per line)", type=str, default=None)
+
+	#create the parser for the "Var2Vcf" command
+	parser_var2vcf = subparsers.add_parser('var2vcf', parents=[general_parser], help='export variants from the database to vcf format.')
+	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
+	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
+	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
 
 	# create the parser for the "update" command
 	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
@@ -320,6 +326,11 @@ class sonar():
 	def restore(self, acc):
 		return self.db.restore_genome_using_dnavars(acc)
 
+	def var2vcf(self, acc, date, export_all=False):
+
+		sonartogo.export2VCF(self.dbfile,acc, date, export_all,self.db.refdescr)
+		return 
+
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
@@ -480,6 +491,27 @@ if __name__ == "__main__":
 			sys.exit("input error: nothing to restore.")
 		for acc in filter(None, args.acc):
 			print("\n".join(snr.restore(acc)))
+
+	# Var2Vcf (export variants to  VCF)
+	if args.tool == "var2vcf":
+		if args.date:
+			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
+			for d in args.date:
+				if not regex.match(d):
+					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
+
+		args.acc = set([x.strip() for x in args.acc])
+		if args.file:
+			if not os.path.isfile(args.file):
+				sys.exit("input error: file " + args.file + " does not exist.")
+			with snr.open_file(fname, compressed=args.file,) as handle:
+				for line in handle:
+					args.acc.add(line.strip())
+		if len(args.acc) == 0:
+			print("Warning: export all variants, it will take a few minutes")
+			snr.var2vcf(args.acc, args.date, export_all=True)
+		else:
+			snr.var2vcf(args.acc, args.date)
 
 	# view
 	if args.tool == "view":
