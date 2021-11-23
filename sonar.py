@@ -81,7 +81,7 @@ def parse_args():
 	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
 	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
 	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
-
+	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
 	# create the parser for the "update" command
 	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
 	parser_update_input = parser_update.add_mutually_exclusive_group()
@@ -326,9 +326,9 @@ class sonar():
 	def restore(self, acc):
 		return self.db.restore_genome_using_dnavars(acc)
 
-	def var2vcf(self, acc, date, export_all=False):
+	def var2vcf(self, acc, date, output):
 
-		sonartogo.export2VCF(self.dbfile,acc, date, export_all,self.db.refdescr)
+		sonartogo.export2VCF(self.dbfile,acc, date, output,self.db.refdescr)
 		return 
 
 	def view(self, acc):
@@ -504,14 +504,13 @@ if __name__ == "__main__":
 		if args.file:
 			if not os.path.isfile(args.file):
 				sys.exit("input error: file " + args.file + " does not exist.")
-			with snr.open_file(fname, compressed=args.file,) as handle:
+			with snr.open_file(args.file, compressed='auto') as handle:
 				for line in handle:
 					args.acc.add(line.strip())
 		if len(args.acc) == 0:
 			print("Warning: export all variants, it will take a few minutes")
-			snr.var2vcf(args.acc, args.date, export_all=True)
-		else:
-			snr.var2vcf(args.acc, args.date)
+
+		snr.var2vcf(args.acc, args.date, args.output)
 
 	# view
 	if args.tool == "view":
