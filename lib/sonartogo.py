@@ -135,7 +135,6 @@ def export2VCF(
         # rows = dbm.execute(sql, [include_acc]).fetchall()
         rows = pd.read_sql(sql,
                    dbm.connection,params=where_vals)
-        #print(rows['alt'].unique())
     if not rows.empty:
         tmp_dirname = mkdtemp(prefix=".sonarCache_")
         
