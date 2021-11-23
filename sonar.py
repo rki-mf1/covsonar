@@ -507,9 +507,7 @@ if __name__ == "__main__":
 			with snr.open_file(args.file, compressed='auto') as handle:
 				for line in handle:
 					args.acc.add(line.strip())
-		if len(args.acc) == 0:
-			print("Warning: export all variants, it will take a few minutes")
-
+		
 		snr.var2vcf(args.acc, args.date, args.output)
 
 	# view

@@ -107,7 +107,7 @@ def export2VCF(
     output,
     refdescr="No ref is provided"
     ):
-
+    print('Start to export VCF')
     with ExitStack() as stack:
         dbm = stack.enter_context(sonarDBManager(db_path))
         #print(dbm.cursor)
@@ -153,9 +153,9 @@ def export2VCF(
         parallelize_dataframe(rows_grouped, tmp_dirname, refdescr, create_vcf)
         
         # bundle all vcf together 
-        print("Finish all tasks, start to merge vcfs")
+        print("Start to merge vcfs")
         cmd = "bcftools merge {}/*.vcf.gz -o {} -O v --threads 20".format(tmp_dirname, output)
-        print(cmd)
+        # print(cmd)
         with subprocess.Popen(cmd, encoding='utf8', shell=True, stdout=subprocess.PIPE) as process:
             try:
                 stdout, stderr = process.communicate(cmd)
@@ -168,6 +168,7 @@ def export2VCF(
                 raise
         if os.path.isdir(tmp_dirname):
             shutil.rmtree(tmp_dirname)
+        print("Finish! result:",output)
     else:
         print("Noting to export")
 
