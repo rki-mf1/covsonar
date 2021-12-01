@@ -1,0 +1,7 @@
+from Bio import SeqIO
+import tempfile
+from ...sonar import action
+
+#directories and files
+d = None if not config['temp_dir'] else config['temp_dir']
+TEMPDIR = tempfile.TemporaryDirectory(prefix="covsonar_", dir = d)

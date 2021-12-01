@@ -1,3 +1,4 @@
-from sonar.dbm import sonarDBManager
-from sonar.action import sonarActions
-from sonar.align import sonarAligner
+from .dbm import sonarDBManager
+from .align import sonarAligner
+from .action import sonarActions
+from .cache import sonarCache

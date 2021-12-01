@@ -17,8 +17,7 @@ from tqdm import tqdm
 import tempfile
 import itertools
 from contextlib import ExitStack
-from sonar.dbm import sonarDBManager
-from sonar.align import sonarAligner
+from sonar import sonarDBManager, sonarAligner
 
 # CLASS
 class sonarActions(object):

@@ -6,7 +6,7 @@
 import os
 import re
 import sys
-import mappy
+#import mappy
 import subprocess
 import tempfile
 

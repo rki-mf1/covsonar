@@ -63,10 +63,10 @@ class sonarDBManager():
 	"""
 
 	def __init__(self, dbfile, timeout=-1, readonly=False, debug=False, autocreate=False):
-		if not autocreate and not os.path.isfile(dbfile):
-			sys.exit("error: database does not exists")
-		self.dbfile = os.path.abspath(dbfile)
 		self.connection = None
+		if not autocreate and not os.path.isfile(dbfile):
+			sys.exit("database error: database does not exists")
+		self.dbfile = os.path.abspath(dbfile)
 		self.cursor = None
 		self.__timeout = timeout
 		self.__mode = "ro" if readonly else "rwc"
@@ -156,7 +156,7 @@ class sonarDBManager():
 		if self.__properties == False:
 			sql = "SELECT * FROM property"
 			rows = self.cursor.execute(sql).fetchall()
-			self.__properties = None if not rows else { x['name']: x for x in rows }
+			self.__properties = {} if not rows else { x['name']: x for x in rows }
 			for pname in self.__properties:
 				if self.__properties[pname]['standard'] is not None:
 					if self.__properties[pname]['datatype'] == 'integer':
@@ -313,14 +313,18 @@ class sonarDBManager():
 			row = row['id']
 		return row
 
-	def get_molecule_data(self, reference_accession=None):
+	def get_molecule_data(self, *fields, reference_accession=None):
+		if not fields:
+			fields = "*"
+		elif "\"molecule.accession\"" not in fields:
+			fields = list(fields)+ ["\"molecule.accession\""]
 		if reference_accession:
 			 condition = "\"reference.accession\" = ?"
 			 vals = [reference_accession]
 		else:
 			 condition = "\"reference.standard\" = ?"
 			 vals = [1]
-		sql = "SELECT * FROM referenceView WHERE " + condition
+		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + condition + ";"
 		row = self.cursor.execute(sql, vals).fetchall()
 		if row:
 			return { x['molecule.accession']: x for x in row }
@@ -338,7 +342,7 @@ class sonarDBManager():
 	def get_source(self, molecule_id):
 		return self.get_elements(molecule_id, 'source')[0]
 
-	def get_default_molecule_accession(self, reference_accession=None):
+	def get_default_molecule(self, reference_accession=None):
 		if reference_accession:
 			 condition = "\"reference.accession\" = ?"
 			 val = reference_accession
@@ -346,13 +350,20 @@ class sonarDBManager():
 			 condition = "\"reference.standard\" = ?"
 			 val = 1
 		sql = "SELECT \"molecule.accession\" FROM referenceView WHERE \"molecule.standard\" = ? AND " + condition
-		return self.cursor.execute(sql, [1, val]).fetchone()['molecule.accession']
+		return self.cursor.execute(sql, [1, val]).fetchone()
 
-	def get_alignment_data(self, sample_id, element_id, *fields):
+	def get_alignment_data(self, sample_id, element_id, *fields, limit=1):
 		if not fields:
 			fields = ['*']
-		sql = "SELECT " + ", ".join(fields) + " FROM alignmentView WHERE \"sample.id\" = ? AND \"element.id\" = ?;"
-		return self.cursor.execute(sql, [sample_id, element_id]).fetchone()
+		sql = "SELECT " + ", ".join(fields) + " FROM alignmentView WHERE \"sample.id\" = ? AND \"element.id\" = ? LIMIT "+ LIMIT +";"
+		return self.cursor.execute(sql, [sample_id, element_id]).fetchall()
+
+	def get_alignment_id(self, seqhash, element_id):
+		sql = "SELECT id FROM alignment WHERE \"sequence_hash\" = ? AND \"element.id\" = ? LIMIT 1;"
+		row = self.cursor.execute(sql, [seqhash, element_id]).fetchone()
+		if row:
+			return row['id']
+		return None
 
 	def get_variant_id(self, ref, alt, start, end, parent_id):
 		sql = "SELECT id FROM variant WHERE ref = ? AND alt = ? AND start = ? AND end = ? AND parent_id = ?;"

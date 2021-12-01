@@ -64,8 +64,6 @@ CREATE TABLE IF NOT EXISTS reference (
 );
 CREATE INDEX IF NOT EXISTS idx_reference_translation_id ON reference(translation_id);
 
-
-
 CREATE TABLE IF NOT EXISTS molecule (
 	id INTEGER NOT NULL PRIMARY KEY,
 	reference_id INTEGER NOT NULL,
@@ -79,7 +77,6 @@ CREATE TABLE IF NOT EXISTS molecule (
 	FOREIGN KEY(reference_id) REFERENCES reference(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_molecule_reference_id ON molecule(reference_id);
-
 
 CREATE TABLE IF NOT EXISTS element (
 	id INTEGER NOT NULL PRIMARY KEY,
