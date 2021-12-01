@@ -225,7 +225,7 @@ conda activate sonar
 # removing sequence ACC1 and ACC5 to from 'mydb'
 path/to/covsonar/sonar.py remove --acc ACC1 ACC5 --db mydb
 # removing accessions listed in file to_delete.txt (one accession per line) from 'mydb'
-path/to/covsonar/sonar.py add --file to_delete.txt --db mydb
+path/to/covsonar/sonar.py remove --file to_delete.txt --db mydb
 ```
 
 ## 4 How to contribute
