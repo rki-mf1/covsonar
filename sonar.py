@@ -43,6 +43,12 @@ def parse_args():
 	parser_add.add_argument('--lab', help="define a common lab for all genomes", type=str, default=None)
 	parser_add.add_argument('--quiet', '-q', help="do not show any output", action="store_true")
 
+	# create the parser for the "remove" command
+	parser_remove = subparsers.add_parser('remove', parents=[general_parser], help='remove genome sequences to the database.')
+	parser_remove = parser_remove.add_mutually_exclusive_group()
+	parser_remove.add_argument('--acc', metavar="STR", help="define accession(s) of sequences to delete", type=str, nargs="+", default=[])
+	parser_remove.add_argument('--file', metavar="FILE", help="define file containing accession(s) of sequences to delete (one per line)", type=str, nargs="+", default=None)
+
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
 	parser_match.add_argument('--include', '-i', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=[])
@@ -260,6 +266,14 @@ class sonar():
 				print("\tnow:   " + str(new_dbstatus['seqs']))
 				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
 
+	def remove(self, *accs):
+		with sonardb.sonarDBManager(self.dbfile) as dbm:
+			g_before = dbm.count_genomes()
+			for acc in set(accs):
+				dbm.delete_genome(acc)
+			g_after = dbm.count_genomes()
+		print(str(g_before-g_after) + " genomic entrie(s) deleted.")
+
 	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
 		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
@@ -414,6 +428,21 @@ if __name__ == "__main__":
 			sys.exit("nothing to add.")
 
 		snr.add(args.file, cachedir=args.cache, cpus=args.cpus, force=args.force, timeout=args.timeout, quiet=args.quiet, noprogress=args.noprogress, compressed=args.compressed, source=args.source, collection=args.collection, lab=args.lab)
+
+	# remove
+	if args.tool == "remove":
+		acc = []
+		if args.file:
+			if not os.isfile(args.file):
+				sys.exit("input error: file not found.")
+			with open(args.file, "r") as handle:
+				acc = [x.strip() for x in handle if x.strip() != ""]
+		elif args.acc:
+			acc = args.acc
+		if not acc:
+			print("nothing to delete.")
+		else:
+			snr.remove(*acc)
 
 	# match
 	if args.tool == "match":

@@ -204,6 +204,18 @@ else
 	  exit 1
 fi
 
+$DIR/sonar.py remove --db "$db" --acc "test3"
+
+n=$($DIR/sonar.py match --count --source TEST --db "$db")
+if [ "$n" -eq 0 ]; then
+    echo 'match 17 as expected'
+else
+    echo "match 17 not as expected (expected 1 got $n)"
+		conda deactivate
+	  conda env remove -y --name covsonar_ci
+	  exit 1
+fi
+
 #cleaning
 conda deactivate
 conda env remove -y --name covsonar_ci
