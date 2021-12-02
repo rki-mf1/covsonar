@@ -6,30 +6,13 @@ import os
 import re
 import sys
 import argparse
-import sqlite3
-from sqlite3 import Error
-from Bio.SeqUtils.CheckSum import seguid
-from Bio.Seq import Seq
-from Bio import SeqIO
-from Bio.Emboss.Applications import StretcherCommandline
-from packaging import version
-import shutil
 import base64
-from collections import OrderedDict, defaultdict
 import pickle
-from tqdm import tqdm
-from urllib.parse import quote as urlquote
-from math import floor, ceil
-from tempfile import mkstemp, TemporaryDirectory, mkdtemp
-import traceback
-import itertools
-import signal
-import csv
-from time import sleep
-from contextlib import ExitStack
-from more_itertools import consecutive_groups, split_when
 from sonar import sonarActions, sonarDBManager
 import hashlib
+import yaml
+from Bio import SeqIO
+
 
 class sonarCache():
 	"""
@@ -52,11 +35,11 @@ class sonarCache():
 		self._molregex = re.compile("\[molecule=([^\[\]=]+)\]")
 
 		self.logfile = open(logfile, "w") if logfile else None
-		self.basedir = mkdtemp(prefix=".sonarCache_")if not outdir else outdir
+		self.basedir = os.path.abspath(mkdtemp(prefix=".sonarCache_")) if not outdir else os.path.abspath(outdir)
+		self.smk_config = os.path.join(self.basedir, "config.yaml")
 		self.sample_dir = os.path.join(self.basedir, "samples")
 		self.fasta_dir = os.path.join(self.basedir, "fasta")
-		self.sample_subdirs = set()
-		self.fasta_subdirs = set()
+		self.algn_dir = os.path.join(self.basedir, "algn")
 		os.makedirs(self.basedir, exist_ok=True)
 		os.makedirs(self.sample_dir, exist_ok=True)
 		os.makedirs(self.fasta_dir, exist_ok=True)
@@ -115,7 +98,7 @@ class sonarCache():
 			return pickle.load(handle, encoding="bytes")
 
 	@staticmethod
-	def fasta_collision(fname, data):
+	def file_collision(fname, data):
 		with open(fname, "r") as handle:
 			if handle.read() != data:
 				return True
@@ -127,11 +110,28 @@ class sonarCache():
 			return True
 		return False
 
-	def get_fasta_fname(self, seqhash):
+	def write_smk_config(self):
+		data = {
+			'debug': self.debug,
+			'sample_dir': self.sample_dir,
+			'fasta_dir': self.fasta_dir,
+			'algn_dir': self.algn_dir
+		}
+		with open(self.smk_config, 'w') as handle:
+		    yaml.dump(data, handle)
+
+	def get_seq_fname(self, seqhash, ref=False):
 		seqhash = self.slugify(seqhash)
 		path = os.path.join(self.fasta_dir, seqhash[:2])
 		os.makedirs(path, exist_ok=True)
-		return os.path.join(path, seqhash + ".seq")
+		ext = ".aseq" if ref else ".bseq"
+		return os.path.join(path, seqhash + ext)
+
+	def get_algn_fname(self, seqhash):
+		seqhash = self.slugify(seqhash)
+		path = os.path.join(self.algn_dir, seqhash[:2])
+		os.makedirs(path, exist_ok=True)
+		return os.path.join(path, seqhash + "algn")
 
 	def get_sample_fname(self, fasta_header):
 		fbasename = self.slugify(hashlib.sha1(fasta_header.encode('utf-8')).hexdigest())
@@ -139,7 +139,7 @@ class sonarCache():
 		os.makedirs(path, exist_ok=True)
 		return os.path.join(path, hashlib.sha1(fasta_header.encode('utf-8')).hexdigest() + ".sample")
 
-	def cache_sample(self, name, sampleid, seqhash, header, sequence, refmol, algnid, fasta, properties):
+	def cache_sample(self, name, sampleid, seqhash, header, sequence, refmol, algnid, aseq, bseq, algn, properties):
 		fname = self.get_sample_fname(header)
 		data = {
 			"name": name,
@@ -149,7 +149,6 @@ class sonarCache():
 			"algnid": algnid,
 			"header": header,
 			"seqhash": seqhash,
-			"fasta": os.path.abspath(fasta),
 			"properties": properties,
 			}
 		if os.path.isfile(fname):
@@ -159,15 +158,14 @@ class sonarCache():
 			self.write_pickle(fname, data)
 		return fname
 
-	def cache_sequence(self, seqhash, sequence, refhash, refseq):
-		fname = self.get_fasta_fname(seqhash + "-" + refhash)
-		content = ">" + seqhash + "\n" + sequence + "\n>REF_" + refhash + "\n" + refseq
+	def cache_sequence(self, seqhash, refhash, sequence, ref=False):
+		fname = self.get_seq_fname(seqhash + "@" + refhash, ref=ref)
 		if os.path.isfile(fname):
-			if self.fasta_collision(fname, content):
+			if self.file_collision(fname, sequence):
 				sys.exit("seqhash collision: sequences differ for seqhash " + seqhash + ".")
 		else:
 			with open(fname, "w") as handle:
-				handle.write(content)
+				handle.write(sequence)
 		return fname
 
 	def iter_fasta(self, *fnames):
@@ -188,7 +186,8 @@ class sonarCache():
 					   }
 
 	def get_refmol(self, fasta_header):
-		if mol := self._molregex.search(fasta_header):
+		mol = self._molregex.search(fasta_header)
+		if not mol:
 			try:
 				return self.refmols[mol]['accession']
 			except:
@@ -244,8 +243,15 @@ class sonarCache():
 
 				# check alignment
 				data['algnid'] = dbm.get_alignment_id(data['seqhash'], refseq_id)
-				fasta = None if not data['algnid'] is None else self.cache_sequence(data['seqhash'], data['sequence'], self.get_refhash(data['refmol']), self.get_refseq(data['refmol']))
-				self.cache_sample(**data, fasta=fasta)
+				if not data['algnid']:
+					data['aseq'] = self.cache_sequence(data['seqhash'], self.get_refhash(data['refmol']), data['sequence'], ref=False)
+					data['bseq'] = self.cache_sequence(data['seqhash'], self.get_refhash(data['refmol']), self.get_refseq(data['refmol']), ref=True)
+					data['algn'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
+				else:
+					data['aseq'] = None
+					data['bseq'] = None
+					data['algn'] = None
+				self.cache_sample(**data)
 
 if __name__ == "__main__":
 	pass
