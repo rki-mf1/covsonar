@@ -14,11 +14,10 @@ from multiprocessing import Pool
 import warnings
 import math
 from tqdm import tqdm
-import sys
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 
-num_partitions = 10 #number of partitions to split dataframe
-num_cores = 10 #number of cores on your machine
+#num_partitions = 20 # number of partitions to split dataframe
+#num_cores = 20 # number of cores on your machine
 
 
 def create_fix_vcf_header(ref,sample_id):
@@ -64,11 +63,12 @@ def tabix_index(filename):
             raise
     return        
 
-def create_vcf(rows_grouped, tmp_dirname, refdescr):
+def create_vcf(rows_grouped, tmp_dirname, refdescr,_pos):
     process_id =str(getpid())
     # print(process_id+" Start")
     # iterate over each group
-    for group_name, df_group in tqdm(rows_grouped):
+    # position=_pos,bar_format='{l_bar}{bar:10}{r_bar}{bar:-2b}'
+    for group_name, df_group in tqdm(rows_grouped, mininterval=0.5):
         #print("Create VCF file:",group_name)
         vcf_filename =group_name+'.vcf'
         full_path = os.path.join(tmp_dirname,vcf_filename)
@@ -90,10 +90,10 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
 
 
 
-def parallelize_dataframe(df, tmp_dir,refdescr, func):
-    _tmp_lis = np.array_split(df, num_partitions)
-
-    zip_items = [(d,tmp_dir,refdescr) for d in _tmp_lis] # same order
+def parallelize_dataframe(df, tmp_dir, num_cores,refdescr, func):
+    _tmp_lis = np.array_split(df, num_cores)
+    counter=0
+    zip_items = [(_tmp_lis[i],tmp_dir,refdescr,i+2) for i in range(len(_tmp_lis))] # same order
     #with Pool(processes=num_cores) as pool:
     #    res = pool.starmap(func, zip_items)
     pool = Pool(num_cores)
@@ -108,15 +108,12 @@ def export2VCF(
     include_acc,
     include_dates,
     output,
+    num_cores,
     refdescr="No ref is provided"
     ):
-    print('Start to export VCF')
+    print('Prepare export2VCF workspace for',num_cores,'cpu')
     with ExitStack() as stack:
         dbm = stack.enter_context(sonarDBManager(db_path))
-        #print(dbm.cursor)
-        # for i in tqdm(range(len(fnames)), desc = msg, disable=disable_progressbar):
-        # ....self.import_genome(**self.process_fasta(fnames[i]), dbm=dbm)
-        # creating where condition
 
         where_clause = []
         where_vals = []
@@ -129,19 +126,6 @@ def export2VCF(
             where_clause.append(dbm.get_metadata_date_condition('date',
                                 *include_dates))
 
-        
-        
-        # get all list first
-       # if where_clause:
-       #     sql =  "SELECT accession, COUNT(accession) as count FROM dna_view WHERE " + " AND ".join(where_clause) + "GROUP BY accession;"
-        #else:
-       #     sql =  "SELECT accession, COUNT(accession) as count FROM dna_view GROUP BY accession;"
-
-        #_perID_df = pd.read_sql(sql,dbm.connection)
-        #print(_perID_df)
-
-
-
         #print(where_clause)
         fields = 'accession, start, end, alt, ref '
         if where_clause:
@@ -151,7 +135,7 @@ def export2VCF(
 
 
         ##############################
-        print('Start query...')
+        print('Start Bigquery...')
         rows = pd.read_sql(sql,
                    dbm.connection,params=where_vals)
       
@@ -160,7 +144,7 @@ def export2VCF(
         if not rows.empty:
             tmp_dirname = mkdtemp(dir='/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/test-vcf', prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
-         
+            print('Covsonar will compute:', len(rows), ' records')
             # create fasta_id
             chrom_id = refdescr.split()[0].replace(">", "")
             rows['CHROM'] = chrom_id
@@ -177,17 +161,17 @@ def export2VCF(
 
             # split data and write each ACC into individual VCF file.
             print('Start Divide and Conquer ...')
-            parallelize_dataframe(rows_grouped, tmp_dirname, refdescr, create_vcf)
+            parallelize_dataframe(rows_grouped, tmp_dirname, num_cores, refdescr, create_vcf)
             
             # bundle all vcf together 
-            print('Bundle all vcf together ...')
+            print('Integrate all VCFs ...')
             divide_merge_vcf(track_vcf, output)
 
 
             if os.path.isdir(tmp_dirname):
                 shutil.rmtree(tmp_dirname)
 
-    print("Finish!  final result:",output)
+    print("Finish! compress final result (gz):")
                 
 def divide_merge_vcf(list_track_vcf, global_output):
     chunk=100
@@ -195,46 +179,54 @@ def divide_merge_vcf(list_track_vcf, global_output):
     print('size:', list_length)
     first_create_ = True 
     second_create_ = True
-    third_create_ = True
- 
+    tmp_dirname = mkdtemp(dir='/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/test-vcf', prefix=".final.sonarCache_")
     # we can tweak performance by using U at Bcftools for piping between bcftools subcommands (future work)
-    locker = ''
     bar = tqdm(range(list_length), desc="Create Global VCF:")
     for i in bar:
         _vcfs = " ".join(list_track_vcf[chunk*i:chunk*i+chunk])
 
         if first_create_:
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs, global_output + '.2')    
+            tmp_output = os.path.join(tmp_dirname,'vcf.2' )
+            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs,tmp_output)    
             with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
                 stdout, stderr = process.communicate(cmd)
-            bgzip(global_output + '.2')
-            tabix_index(global_output+ '.2')  
+            bgzip(tmp_output)
+            tabix_index(tmp_output)  
             first_create_ = False
             second_create_ = True
             third_create_ = True
         elif second_create_:
-            _vcfs = _vcfs +' '+ global_output + '.2.gz'
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs,  global_output + '.3')
+            _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.2.gz' )
+            tmp_output = os.path.join(tmp_dirname,'vcf.3' )
+
+            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs,  tmp_output)
             with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
                 stdout, stderr = process.communicate(cmd)
-            bgzip(global_output + '.3')
-            tabix_index(global_output+ '.3')  
+            bgzip(tmp_output)
+            tabix_index(tmp_output)  
             second_create_ = False
             third_create_ = True
         else:
-            _vcfs = _vcfs +' '+ global_output + '.3.gz'
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs, global_output + '.2')  
+            _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.3.gz' )
+            tmp_output = os.path.join(tmp_dirname,'vcf.2' )
+
+            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs, tmp_output)  
             with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
                 stdout, stderr = process.communicate(cmd)
-            bgzip( global_output + '.2')
-            tabix_index(global_output+ '.2') 
+            bgzip( tmp_output)
+            tabix_index(tmp_output) 
             second_create_ = True
             third_create_ = False
 
-    if not first_create_ and  third_create_ and  second_create_:
-        os.rename( global_output + '.2.gz', global_output+ '.gz')
-    elif second_create_ and  not third_create_:
-        os.rename( global_output + '.2.gz', global_output+ '.gz')
-    elif  not second_create_ and   third_create_:
-        os.rename(global_output + '.3.gz', global_output+ '.gz')
+    os.rename( tmp_output + '.gz', global_output+ '.gz')
+    
+    print('Clean workspace ...')
+    if os.path.isdir(tmp_dirname):
+        shutil.rmtree(tmp_dirname)
+    #if not first_create_ and  third_create_ and  second_create_:
+    #    os.rename( global_output + '.2.gz', global_output+ '.gz')
+    #elif second_create_ and  not third_create_:
+    #    os.rename( global_output + '.2.gz', global_output+ '.gz')
+    #elif  not second_create_ and   third_create_:
+    #    os.rename(global_output + '.3.gz', global_output+ '.gz')
         

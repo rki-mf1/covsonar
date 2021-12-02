@@ -9,7 +9,7 @@ import csv
 import argparse
 import gzip
 import lzma
-from lib import sonardb, sonartogo
+from lib import sonardb, sonartoVCF
 from Bio import SeqIO
 from tempfile import mkstemp
 from collections import defaultdict
@@ -326,9 +326,9 @@ class sonar():
 	def restore(self, acc):
 		return self.db.restore_genome_using_dnavars(acc)
 
-	def var2vcf(self, acc, date, output):
+	def var2vcf(self, acc, date, output, cpu):
 
-		sonartogo.export2VCF(self.dbfile,acc, date, output,self.db.refdescr)
+		sonartoVCF.export2VCF(self.dbfile,acc, date, output, cpu,self.db.refdescr)
 		return 
 
 	def view(self, acc):
@@ -508,7 +508,7 @@ if __name__ == "__main__":
 				for line in handle:
 					args.acc.add(line.strip())
 		
-		snr.var2vcf(args.acc, args.date, args.output)
+		snr.var2vcf(args.acc, args.date, args.output, args.cpus)
 
 	# view
 	if args.tool == "view":
