@@ -12,13 +12,10 @@ import subprocess
 from os import getpid
 from multiprocessing import Pool
 import warnings
-import math
-from tqdm import tqdm
-import sys
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 
-num_partitions = 10 #number of partitions to split dataframe
-num_cores = 10 #number of cores on your machine
+num_partitions = 20 #number of partitions to split dataframe
+num_cores = 20 #number of cores on your machine
 
 
 def create_fix_vcf_header(ref,sample_id):
@@ -68,7 +65,7 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
     process_id =str(getpid())
     # print(process_id+" Start")
     # iterate over each group
-    for group_name, df_group in tqdm(rows_grouped):
+    for group_name, df_group in rows_grouped:
         #print("Create VCF file:",group_name)
         vcf_filename =group_name+'.vcf'
         full_path = os.path.join(tmp_dirname,vcf_filename)
@@ -128,20 +125,6 @@ def export2VCF(
         if include_dates:
             where_clause.append(dbm.get_metadata_date_condition('date',
                                 *include_dates))
-
-        
-        
-        # get all list first
-       # if where_clause:
-       #     sql =  "SELECT accession, COUNT(accession) as count FROM dna_view WHERE " + " AND ".join(where_clause) + "GROUP BY accession;"
-        #else:
-       #     sql =  "SELECT accession, COUNT(accession) as count FROM dna_view GROUP BY accession;"
-
-        #_perID_df = pd.read_sql(sql,dbm.connection)
-        #print(_perID_df)
-
-
-
         #print(where_clause)
         fields = 'accession, start, end, alt, ref '
         if where_clause:
@@ -149,92 +132,45 @@ def export2VCF(
         else:
             sql = "SELECT " + fields + " FROM dna_view;"
 
-
-        ##############################
-        print('Start query...')
+        # rows = dbm.execute(sql, [include_acc]).fetchall()
         rows = pd.read_sql(sql,
                    dbm.connection,params=where_vals)
-      
-        track_vcf = []
-        count = 0
-        if not rows.empty:
-            tmp_dirname = mkdtemp(dir='/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/test-vcf', prefix=".sonarCache_")
-            # vcf_path=os.path.join(tmp_dirname,)
-         
-            # create fasta_id
-            chrom_id = refdescr.split()[0].replace(">", "")
-            rows['CHROM'] = chrom_id
-            rows['QUAL'] = '.'
-            rows['FILTER'] = '.'
-            rows['INFO'] = 'AC=1;AN=1'
-            rows['FORMAT'] = 'GT'
-            rows_grouped = rows.groupby('accession')
-            
-            for group_name, df_group in rows_grouped: 
-                group_name=os.path.join(tmp_dirname, group_name+'.vcf.gz')
-                full_path = os.path.join(tmp_dirname,group_name)
-                track_vcf.append(full_path)
-
-            # split data and write each ACC into individual VCF file.
-            print('Start Divide and Conquer ...')
-            parallelize_dataframe(rows_grouped, tmp_dirname, refdescr, create_vcf)
-            
-            # bundle all vcf together 
-            print('Bundle all vcf together ...')
-            divide_merge_vcf(track_vcf, output)
-
-
-            if os.path.isdir(tmp_dirname):
-                shutil.rmtree(tmp_dirname)
-
-    print("Finish!  final result:",output)
-                
-def divide_merge_vcf(list_track_vcf, global_output):
-    chunk=100
-    list_length = math.ceil(len(list_track_vcf)/chunk) # try to merge every
-    print('size:', list_length)
-    first_create_ = True 
-    second_create_ = True
-    third_create_ = True
- 
-    # we can tweak performance by using U at Bcftools for piping between bcftools subcommands (future work)
-    locker = ''
-    bar = tqdm(range(list_length), desc="Create Global VCF:")
-    for i in bar:
-        _vcfs = " ".join(list_track_vcf[chunk*i:chunk*i+chunk])
-
-        if first_create_:
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs, global_output + '.2')    
-            with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
-                stdout, stderr = process.communicate(cmd)
-            bgzip(global_output + '.2')
-            tabix_index(global_output+ '.2')  
-            first_create_ = False
-            second_create_ = True
-            third_create_ = True
-        elif second_create_:
-            _vcfs = _vcfs +' '+ global_output + '.2.gz'
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs,  global_output + '.3')
-            with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
-                stdout, stderr = process.communicate(cmd)
-            bgzip(global_output + '.3')
-            tabix_index(global_output+ '.3')  
-            second_create_ = False
-            third_create_ = True
-        else:
-            _vcfs = _vcfs +' '+ global_output + '.3.gz'
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs, global_output + '.2')  
-            with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
-                stdout, stderr = process.communicate(cmd)
-            bgzip( global_output + '.2')
-            tabix_index(global_output+ '.2') 
-            second_create_ = True
-            third_create_ = False
-
-    if not first_create_ and  third_create_ and  second_create_:
-        os.rename( global_output + '.2.gz', global_output+ '.gz')
-    elif second_create_ and  not third_create_:
-        os.rename( global_output + '.2.gz', global_output+ '.gz')
-    elif  not second_create_ and   third_create_:
-        os.rename(global_output + '.3.gz', global_output+ '.gz')
+    if not rows.empty:
+        tmp_dirname = mkdtemp(prefix=".sonarCache_")
         
+        # vcf_path=os.path.join(tmp_dirname,)
+
+        # create fasta_id
+        chrom_id = refdescr.split()[0].replace(">", "")
+        rows['CHROM'] = chrom_id
+        rows['QUAL'] = '.'
+        rows['FILTER'] = '.'
+        rows['INFO'] = 'AC=1;AN=1'
+        rows['FORMAT'] = 'GT'
+        rows_grouped = rows.groupby('accession')
+        
+        # split data
+        parallelize_dataframe(rows_grouped, tmp_dirname, refdescr, create_vcf)
+        
+        # bundle all vcf together 
+        print("Start to merge vcfs")
+        cmd = "bcftools merge {}/*.vcf.gz -o {} -O v --threads 20".format(tmp_dirname, output)
+        # print(cmd)
+        with subprocess.Popen(cmd, encoding='utf8', shell=True, stdout=subprocess.PIPE) as process:
+            try:
+                stdout, stderr = process.communicate(cmd)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                raise subprocess.TimeoutExpired( output=stdout, stderr=stderr)
+            except Exception:
+                process.kill()
+                raise
+        if os.path.isdir(tmp_dirname):
+            shutil.rmtree(tmp_dirname)
+        print("Finish! result:",output)
+    else:
+        print("Noting to export")
+
+        return None
+
