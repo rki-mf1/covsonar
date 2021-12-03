@@ -173,7 +173,7 @@ def export2VCF(
                 group_name=os.path.join(tmp_dirname, group_name+'.vcf.gz')
                 full_path = os.path.join(tmp_dirname,group_name)
                 track_vcf.append(full_path)
-            print('With :', len(track_vcf), ' accessions')
+            print('Covsonar will compute:', len(track_vcf), ' accessions')
             # split data and write each ACC into individual VCF file.
             print('Start Divide and Conquer ...')
             parallelize_dataframe(rows_grouped, tmp_dirname, num_cores, refdescr, create_vcf)
