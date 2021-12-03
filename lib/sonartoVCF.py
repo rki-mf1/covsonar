@@ -157,7 +157,7 @@ def export2VCF(
         track_vcf = []
         count = 0
         if not rows.empty:
-            tmp_dirname = mkdtemp(dir='/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/test-vcf', prefix=".sonarCache_")
+            tmp_dirname = mkdtemp( prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
             print('Return:', len(rows), ' records')
             # create fasta_id
@@ -194,7 +194,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
     print('size:', list_length)
     first_create_ = True 
     second_create_ = True
-    tmp_dirname = mkdtemp(dir='/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/test-vcf', prefix=".final.sonarCache_")
+    tmp_dirname = mkdtemp( prefix=".final.sonarCache_")
     # we can tweak performance by using U at Bcftools for piping between bcftools subcommands (future work)
     bar = tqdm(range(list_length), desc="Create Global VCF:")
     merge_type='b'
