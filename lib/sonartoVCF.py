@@ -63,6 +63,21 @@ def tabix_index(filename):
             raise
     return        
 
+def bcftool_index(filename):
+    """Call tabix to create an index for a bgzip-compressed file."""
+    cmd = ['bcftools', 'index', filename]
+    with subprocess.Popen(cmd, encoding='utf8', stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+        try:
+            stdout, stderr = process.communicate(cmd)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired( output=stdout, stderr=stderr)
+        except Exception:
+            process.kill()
+            raise
+    return   
+
 def create_vcf(rows_grouped, tmp_dirname, refdescr,_pos):
     process_id =str(getpid())
     # print(process_id+" Start")
@@ -144,7 +159,7 @@ def export2VCF(
         if not rows.empty:
             tmp_dirname = mkdtemp(dir='/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/test-vcf', prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
-            print('Covsonar will compute:', len(rows), ' records')
+            print('Return:', len(rows), ' records')
             # create fasta_id
             chrom_id = refdescr.split()[0].replace(">", "")
             rows['CHROM'] = chrom_id
@@ -158,14 +173,14 @@ def export2VCF(
                 group_name=os.path.join(tmp_dirname, group_name+'.vcf.gz')
                 full_path = os.path.join(tmp_dirname,group_name)
                 track_vcf.append(full_path)
-
+            print('Covsonar will compute:', len(track_vcf), ' accessions')
             # split data and write each ACC into individual VCF file.
             print('Start Divide and Conquer ...')
             parallelize_dataframe(rows_grouped, tmp_dirname, num_cores, refdescr, create_vcf)
             
             # bundle all vcf together 
             print('Integrate all VCFs ...')
-            divide_merge_vcf(track_vcf, output)
+            divide_merge_vcf(track_vcf, output, num_cores)
 
 
             if os.path.isdir(tmp_dirname):
@@ -173,8 +188,8 @@ def export2VCF(
 
     print("Finish! compress final result (gz):")
                 
-def divide_merge_vcf(list_track_vcf, global_output):
-    chunk=100
+def divide_merge_vcf(list_track_vcf, global_output, num_cores):
+    chunk=500
     list_length = math.ceil(len(list_track_vcf)/chunk) # try to merge every
     print('size:', list_length)
     first_create_ = True 
@@ -182,41 +197,55 @@ def divide_merge_vcf(list_track_vcf, global_output):
     tmp_dirname = mkdtemp(dir='/scratch/kongkitimanonk/CovSonar1/workdir_covsonar/test-vcf', prefix=".final.sonarCache_")
     # we can tweak performance by using U at Bcftools for piping between bcftools subcommands (future work)
     bar = tqdm(range(list_length), desc="Create Global VCF:")
+    merge_type='b'
     for i in bar:
         _vcfs = " ".join(list_track_vcf[chunk*i:chunk*i+chunk])
 
+
+        if(i == list_length-1):
+            merge_type='v'
+            #print('final merge')
+
+
         if first_create_:
             tmp_output = os.path.join(tmp_dirname,'vcf.2' )
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs,tmp_output)    
+            cmd = "bcftools merge {} -o {} -O{} --threads {}".format(_vcfs,tmp_output, merge_type, num_cores)    
             with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
                 stdout, stderr = process.communicate(cmd)
-            bgzip(tmp_output)
-            tabix_index(tmp_output)  
+            #bgzip(tmp_output)
+            #tabix_index(tmp_output)  
+            bcftool_index(tmp_output)
             first_create_ = False
             second_create_ = True
             third_create_ = True
         elif second_create_:
-            _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.2.gz' )
+            _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.2' )
             tmp_output = os.path.join(tmp_dirname,'vcf.3' )
 
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs,  tmp_output)
+            cmd = "bcftools merge {} -o {} -O{} --threads {}".format(_vcfs,  tmp_output, merge_type, num_cores)
             with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
                 stdout, stderr = process.communicate(cmd)
-            bgzip(tmp_output)
-            tabix_index(tmp_output)  
+            #bgzip(tmp_output)
+            #tabix_index(tmp_output) 
+            bcftool_index(tmp_output)
             second_create_ = False
             third_create_ = True
         else:
-            _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.3.gz' )
+            _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.3' )
             tmp_output = os.path.join(tmp_dirname,'vcf.2' )
 
-            cmd = "bcftools merge {} -o {} -O v --threads 20".format(_vcfs, tmp_output)  
+            cmd = "bcftools merge {} -o {} -O{} --threads {}".format(_vcfs, tmp_output, merge_type, num_cores)  
             with subprocess.Popen(cmd, encoding='utf8', shell=True) as process:
                 stdout, stderr = process.communicate(cmd)
-            bgzip( tmp_output)
-            tabix_index(tmp_output) 
+            #bgzip( tmp_output)
+            #tabix_index(tmp_output) 
+            bcftool_index(tmp_output)
             second_create_ = True
             third_create_ = False
+
+        if(merge_type =='v'):
+            bgzip(tmp_output)
+            tabix_index(tmp_output)  
 
     os.rename( tmp_output + '.gz', global_output+ '.gz')
     
