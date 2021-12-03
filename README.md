@@ -215,6 +215,18 @@ path/to/covsonar/sonar.py info
 path/to/covsonar/sonar.py info --db mydb
 ```
 
+### 3.6 Deleting genomes from the database
+
+If needed, genomes can be removed from the database using the respective genome accession(s)
+
+```sh
+# activating conda environment if built and not active yet (see section 2)
+conda activate sonar
+# removing sequence ACC1 and ACC5 to from 'mydb'
+path/to/covsonar/sonar.py remove --acc ACC1 ACC5 --db mydb
+# removing accessions listed in file to_delete.txt (one accession per line) from 'mydb'
+path/to/covsonar/sonar.py remove --file to_delete.txt --db mydb
+```
 
 ## 4 How to contribute
 
