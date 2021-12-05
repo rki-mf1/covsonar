@@ -1,0 +1,6 @@
+channels:
+  - bioconda
+  - r
+  - defaults
+dependencies:
+  - minimap2

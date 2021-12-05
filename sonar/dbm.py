@@ -371,9 +371,10 @@ class sonarDBManager():
 		return None if row is None else row['id']
 
 	def iter_dna_variants(self, sample_name, *element_ids):
-		sql = "SELECT element_id, element.symbol, start, end, ref, alt, frameshift FROM variant WHERE name = ? AND element.id IN (" + ", ".join(['?'] * len(element_ids)) + ") AND type != 'protein' LEFT JOIN element ON element.id = element_id;"
-		for row in self.cursor.execute(sql, [sample_name] + element_ids):
-			yield row
+		sql = "SELECT DISTINCT \"element.id\", \"element.symbol\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" IN (" + ", ".join(['?'] * len(element_ids)) + ");"
+		for row in self.cursor.execute(sql, [sample_name] + [str(x) for x in element_ids]):
+			if row["variant.start"] is not None:
+				yield row
 
 	def iter_profile(self, sample_name, element_id):
 		sql = "SELECT * FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" = ? ORDER BY \"variant.start\";"
@@ -422,10 +423,9 @@ class sonarDBManager():
 		sql = "SELECT \"sequence.hash\" FROM sequenceView WHERE sequence.name = ?"
 		return [ x[sequence.hash] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
 
-	def get_sequence(self, sample_name):
+	def get_sequence(self, seq_name):
 		sql = "SELECT \"sequence.hash\" FROM sequenceView WHERE sequence.name = ?"
-		return [ x[sequence.hash] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
-
+		return [ x[sequence.hash] for x in self.cursor.execute(sql, [seq_name]).fetchall() if x is not None ]
 
 	def get_earliest_import(self):
 		sql = "SELECT MIN(imported) as import FROM genome WHERE import IS NOT NULL;"

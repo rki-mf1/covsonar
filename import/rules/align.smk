@@ -1,12 +1,13 @@
-def input_align(wildcards):
-	return [x for x in Path(os.path.join(config['cache'], 'fasta')).rglob('*.seq')]
-
 rule align:
 	input:
-		input_align
+		aseq = os.path.join(config['seq_dir'], '{subdir}', '{fname}' + '.aseq'),
+		bseq = os.path.join(config['seq_dir'], '{subdir}', '{fname}' + '.bseq')
 	output:
-		os.path.join(config['cache'], 'algn', '{subdir}', '{fname}.algn')
+		os.path.join(config['algn_dir'], '{subdir}', '{fname}.algn')
 	conda:
-		"../envs/stretcher.yaml"
-	run:
-		
+		"../envs/emboss.yaml"
+	threads: 1
+	shell:
+		'''
+		stretcher -asequence {input.aseq} -bsequence {input.bseq} -outfile {output} -auto -aformat markx3
+		'''

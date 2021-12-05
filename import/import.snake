@@ -1,7 +1,16 @@
 from Bio import SeqIO
-import tempfile
-from ...sonar import action
+from pathlib import Path
 
-#directories and files
-d = None if not config['temp_dir'] else config['temp_dir']
-TEMPDIR = tempfile.TemporaryDirectory(prefix="covsonar_", dir = d)
+def get_diff_fname(path):
+	elems = os.path.normpath(path).split(os.sep)
+	return os.path.join(config['diff_dir'], elems[-2], os.path.splitext(elems[-1])[0] + ".diff")
+
+def input_all(wildcards):
+	return [ get_diff_fname(x) for x in Path(config['seq_dir']).rglob("*.aseq") ]
+
+rule all:
+	input:
+		input_all
+
+include: "rules/align.smk"
+include: "rules/diff.smk"

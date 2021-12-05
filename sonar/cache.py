@@ -12,6 +12,7 @@ from sonar import sonarActions, sonarDBManager
 import hashlib
 import yaml
 from Bio import SeqIO
+import difflib as dl
 
 
 class sonarCache():
@@ -29,6 +30,7 @@ class sonarCache():
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
 			self.refmols = dbm.get_molecule_data("\"molecule.accession\"", "\"molecule.id\"", "\"molecule.standard\"" , reference_accession=self.refacc)
 			self.default_refmol_acc = [x for x in self.refmols if self.refmols[x]['molecule.standard'] == 1 ][0]
+			self.default_refmol_id = [x for x in self.refmols if self.refmols[x]['molecule.id'] == 1 ][0]
 			self.sources = {x['molecule.accession']: dbm.get_source(x['molecule.id']) for x in self.refmols.values()}
 			self.properties = dbm.properties
 		self._propregex = re.compile("\[(" + "|".join(self.properties.keys()) + ")=([^\[\]=]+)\]")
@@ -38,11 +40,16 @@ class sonarCache():
 		self.basedir = os.path.abspath(mkdtemp(prefix=".sonarCache_")) if not outdir else os.path.abspath(outdir)
 		self.smk_config = os.path.join(self.basedir, "config.yaml")
 		self.sample_dir = os.path.join(self.basedir, "samples")
-		self.fasta_dir = os.path.join(self.basedir, "fasta")
+		self.seq_dir = os.path.join(self.basedir, "seq")
 		self.algn_dir = os.path.join(self.basedir, "algn")
+		self.diff_dir = os.path.join(self.basedir, "diff")
 		os.makedirs(self.basedir, exist_ok=True)
 		os.makedirs(self.sample_dir, exist_ok=True)
-		os.makedirs(self.fasta_dir, exist_ok=True)
+		os.makedirs(self.seq_dir, exist_ok=True)
+		os.makedirs(self.algn_dir, exist_ok=True)
+		os.makedirs(self.diff_dir, exist_ok=True)
+
+		self._samplefiles = set()
 
 	def __enter__(self):
 		return self
@@ -114,24 +121,31 @@ class sonarCache():
 		data = {
 			'debug': self.debug,
 			'sample_dir': self.sample_dir,
-			'fasta_dir': self.fasta_dir,
-			'algn_dir': self.algn_dir
+			'seq_dir': self.seq_dir,
+			'algn_dir': self.algn_dir,
+			'diff_dir': self.diff_dir
 		}
 		with open(self.smk_config, 'w') as handle:
 		    yaml.dump(data, handle)
 
 	def get_seq_fname(self, seqhash, ref=False):
 		seqhash = self.slugify(seqhash)
-		path = os.path.join(self.fasta_dir, seqhash[:2])
+		path = os.path.join(self.seq_dir, seqhash[:2])
 		os.makedirs(path, exist_ok=True)
-		ext = ".aseq" if ref else ".bseq"
+		ext = ".bseq" if ref else ".aseq"
 		return os.path.join(path, seqhash + ext)
 
 	def get_algn_fname(self, seqhash):
 		seqhash = self.slugify(seqhash)
 		path = os.path.join(self.algn_dir, seqhash[:2])
 		os.makedirs(path, exist_ok=True)
-		return os.path.join(path, seqhash + "algn")
+		return os.path.join(path, seqhash + ".algn")
+
+	def get_diff_fname(self, seqhash):
+		seqhash = self.slugify(seqhash)
+		path = os.path.join(self.diff_dir, seqhash[:2])
+		os.makedirs(path, exist_ok=True)
+		return os.path.join(path, seqhash + ".diff")
 
 	def get_sample_fname(self, fasta_header):
 		fbasename = self.slugify(hashlib.sha1(fasta_header.encode('utf-8')).hexdigest())
@@ -139,24 +153,33 @@ class sonarCache():
 		os.makedirs(path, exist_ok=True)
 		return os.path.join(path, hashlib.sha1(fasta_header.encode('utf-8')).hexdigest() + ".sample")
 
-	def cache_sample(self, name, sampleid, seqhash, header, sequence, refmol, algnid, aseq, bseq, algn, properties):
+	def cache_sample(self, name, sampleid, seqhash, header, sequence, refmol, refmolid, algnid, aseq, bseq, algn, diff, properties):
 		fname = self.get_sample_fname(header)
 		data = {
 			"name": name,
 			"sampleid": sampleid,
 			"sequence": sequence,
 			"refmol": refmol,
+			"refmolid": refmolid,
 			"algnid": algnid,
 			"header": header,
 			"seqhash": seqhash,
-			"properties": properties,
+			"aseq_file": aseq,
+			"bseq_file": bseq,
+			"algn_file": algn,
+			"diff_file": diff
 			}
 		if os.path.isfile(fname):
 			if self.sample_collision(fname, data):
 				sys.exit("sample data collision: data differs for sample " + name + " (" + header + ").")
 		else:
 			self.write_pickle(fname, data)
+		self._samplefiles.add(fname)
 		return fname
+
+	def iter_samples(self):
+		for fname in self._samplefiles:
+			yield self.load_pickle(fname)
 
 	def cache_sequence(self, seqhash, refhash, sequence, ref=False):
 		fname = self.get_seq_fname(seqhash + "@" + refhash, ref=ref)
@@ -174,6 +197,7 @@ class sonarCache():
 				refmol = self.get_refmol(record.description)
 				if not refmol:
 					sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(fasta_header) + ").")
+				refmolid = self.refmols[refmol]['molecule.id']
 				seq = sonarActions.harmonize(record.seq)
 				seqhash = sonarActions.hash(seq)
 				yield {
@@ -182,6 +206,7 @@ class sonarCache():
 					   'seqhash': sonarActions.hash(seq),
 					   'sequence': seq,
 					   'refmol': refmol,
+					   'refmolid': refmolid,
 					   'properties': self.get_properties(record.description)
 					   }
 
@@ -243,15 +268,60 @@ class sonarCache():
 
 				# check alignment
 				data['algnid'] = dbm.get_alignment_id(data['seqhash'], refseq_id)
-				if not data['algnid']:
+				if data['algnid'] is None:
 					data['aseq'] = self.cache_sequence(data['seqhash'], self.get_refhash(data['refmol']), data['sequence'], ref=False)
 					data['bseq'] = self.cache_sequence(data['seqhash'], self.get_refhash(data['refmol']), self.get_refseq(data['refmol']), ref=True)
 					data['algn'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
+					data['diff'] = self.get_diff_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 				else:
 					data['aseq'] = None
 					data['bseq'] = None
 					data['algn'] = None
+					data['diff'] = None
 				self.cache_sample(**data)
+				self.write_smk_config()
+
+	def import_samples(self):
+		refseqs = {}
+		with sonarDBManager(self.db, debug=False) as dbm:
+			for sample_data in self.iter_samples():
+				# nucleotide level import
+				sampid = dbm.insert_sample(sample_data['name'])
+				dbm.insert_sequence(sampid, sample_data['seqhash'])
+				if sample_data['algnid'] is None:
+					algnid = dbm.insert_alignment(sample_data['seqhash'], sample_data['refmolid'])
+					with open(sample_data['diff_file'], "r") as handle:
+						for line in handle:
+							vardat = line.strip("\r\n").split("\t")
+							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
+
+				# paranoia test
+				try:
+					seq = list(refseqs[sample_data['refmolid']])
+				except:
+					refseqs[sample_data['refmolid']] = list(dbm.get_sequence(sample_data['refmolid']))
+					seq = list(refseqs[sample_data['refmolid']])
+
+				for vardata in dbm.iter_dna_variants(sample_data['name'], sample_data['refmolid']):
+					#sys.stderr.write(str(vardata))
+					#sys.stderr.write("\n")
+					#if vardata['variant.start'] != -1 and vardata['variant.ref'] != seq[vardata['variant.start']]:
+					#	sys.exit("error: paranoid1 (expected " + vardata['variant.ref'] + " got " + seq[vardata['variant.start']] + " at reference position " + str(vardata['variant.start']) + ")")
+					if vardata['variant.alt'] == " ":
+						for i in range(vardata['variant.start'], vardata['variant.end']):
+							seq[i] = ""
+					else:
+						seq[vardata['variant.start']] = vardata['variant.alt']
+				seq = "".join(seq)
+				if seq != sample_data['sequence']:
+					for x, y in sample_data.items():
+						if x != "sequence":
+							print(x + ":", y)
+							print()
+					print()
+					for line in dl.ndiff([sample_data['sequence']], [seq]):
+						print(line)
+					sys.exit("error: paranoid2 caused " + sample_data['diff_file'])
 
 if __name__ == "__main__":
 	pass
