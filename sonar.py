@@ -53,6 +53,8 @@ def parse_args():
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
 	parser_match.add_argument('--include', '-i', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=[])
 	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=[])
+	parser_match.add_argument('--with-sublineage',  help="recursively get all sublineages from a given lineage (--lineage) (only child) ",action="store_true")
+	# parser_match.add_argument('--recursion',  help="recursively get all sublineages of a given lineage (--lineage). this will work only if '--with-sublineage' is used",action="store_true")
 	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
@@ -280,8 +282,8 @@ class sonar():
 			g_after = dbm.count_genomes()
 		print(str(g_before-g_after) + " genomic entrie(s) deleted.")
 
-	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
+	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, with_sublineage, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
 			print(rows)
 		else:
@@ -491,7 +493,7 @@ if __name__ == "__main__":
 		if args.material:
 			args.material = [x.upper() for x in args.material]
 
-		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
+		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, with_sublineage=args.with_sublineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
 
 	# update
 	if args.tool == "update":

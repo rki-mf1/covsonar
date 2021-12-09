@@ -28,6 +28,8 @@ import csv
 from time import sleep
 from contextlib import ExitStack
 from more_itertools import consecutive_groups, split_when
+import pandas as pd
+
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 3
@@ -1867,7 +1869,10 @@ class sonarDB(object):
 		self.__moduledir = os.path.dirname(os.path.realpath(__file__))
 		self.reffna = os.path.join(self.__moduledir, "ref.fna")
 		self.refgff = os.path.join(self.__moduledir, "ref.gff3")
+		self.lineagewithsublineages = os.path.join(self.__moduledir, "lineages.all.2021-12-08.tsv")
+
 		self.translation_table = translation_table
+		self.__lineage_sublineage_dict = None
 		self.__refseq = None
 		self.__refdescr = None
 		self.__refgffObj = None
@@ -1885,6 +1890,13 @@ class sonarDB(object):
 		self.__codedict = None
 
 	# PROPERTIES ON DEMAND
+
+	@property
+	def lineage_sublineage_dict(self):
+		if not self.__lineage_sublineage_dict:
+			df = pd.read_csv(self.lineagewithsublineages, sep='\t')
+			self.__lineage_sublineage_dict = dict(zip(df.lineage, df.sublineage))
+		return self.__lineage_sublineage_dict
 
 	@property
 	def refseq(self):
@@ -2635,6 +2647,7 @@ class sonarDB(object):
 		exclude_profiles=[],
 		accessions=[],
 		lineages=[],
+		with_sublineage=False,
 		zips=[],
 		dates=[],
 		labs=[],
@@ -2677,6 +2690,8 @@ class sonarDB(object):
 			list of pangolin lineages. Only genomes assigend to a
 			pangolin lineage in this list will be matched. Lineages are
 			negated when starting with ^.
+		with_sublineage :False,
+		
 		zips : list [ [] ]
 			list of zip codes. Only genomes linked to one of the given zip
 			codes or whose linked zip code starts like one of the given
@@ -2856,6 +2871,29 @@ class sonarDB(object):
 				else:
 					_tmp_exclude_lin.append(ex_lin)
 			exclude_lin = _tmp_exclude_lin
+			### support paren-child relationship ####
+			if(with_sublineage):
+				print('sublineage query is enbable for all included lineages')
+				_tmp_include_lin = []
+
+				while include_lin:
+					in_lin = include_lin.pop(0)	
+					value = self.lineage_sublineage_dict.get(in_lin, 'none') # provide a default value if the key is missing:
+
+					if value != 'none':
+						_tmp_include_lin.append(in_lin)
+						_list = value.split(',')
+
+						for i in _list:
+							include_lin.append(i)
+								# _tmp_include_lin.append(i)
+								## if we don't find this wildcard so we discard it
+					else: # None
+						_tmp_include_lin.append(in_lin)
+
+
+				include_lin = _tmp_include_lin
+
 			########################
 			rows = dbm.match(
 					  include_profiles,
