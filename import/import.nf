@@ -44,20 +44,19 @@ if (workflow.profile.contains('standard') || workflow.profile.contains('local'))
     println " "
 }
 
-// if ( !params.fasta ) {
-//     exit 1, "input missing, use [--fasta]"
-// }
-// if ( !params.db ) {
-//     exit 1, "input missing, use [--db]"
-// }
+if ( !params.cache_dir ) {
+    exit 1, "input missing, use [--cache_dir]"
+}
 
 // input
-// fasta_ch = Channel.fromPath( params.fasta, checkIfExists: true )
-seq_ch = Channel.fromFilePairs( "$params.seq_dir/*/*.[a,b]seq" ){ file -> file.getParent().getName() }
+seq_ch = Channel.fromFilePairs( "$params.cache_dir/$params.seq_dir/*/*.[a,b]seq" ){ file -> file.getParent().getName() }
+// globs, returns a key and a tuple of two flies with matching pattern
+// emits [parent_dir, [xyz.aseq, xyz.bseq]]
+// see https://www.nextflow.io/docs/latest/channel.html#fromfilepairs
 
 process align {
     label 'emboss'
-    publishDir "${params.algn_dir}/${parent}/", mode: params.publish_dir_mode
+    publishDir "${params.cache_dir}/${params.algn_dir}/${parent}/", mode: params.publish_dir_mode
     
     input:
     tuple val(parent), path(aseq_bseq)
@@ -77,7 +76,7 @@ process align {
 
 process diff {
     label 'python'
-    publishDir "${params.diff_dir}/${parent}/", mode: params.publish_dir_mode
+    publishDir "${params.cache_dir}/${params.diff_dir}/${parent}/", mode: params.publish_dir_mode
     
     input:
     tuple val(parent), path(algn)
@@ -108,9 +107,11 @@ def helpMSG() {
     c_dim = "\033[2m";
     log.info """
     ${c_yellow}Input:${c_reset}
-    --algn_dir              [default: $params.algn_dir]
-    --diff_dir              [default: $params.diff_dir]
-    --seq_dir               [default: $params.seq_dir]
+    --cache_dir             Location of the cache. REQUIRED [default: $params.cache_dir]
+
+    --algn_dir              Name of the cache algn subdirectory [default: $params.algn_dir]
+    --diff_dir              Name of the cache diff subdirectory [default: $params.diff_dir]
+    --seq_dir               Name of the cache seq subdirectory [default: $params.seq_dir]
 
     ${c_yellow}Computing options:${c_reset}
     --cores                  Max cores per process for local use [default: $params.cores]
