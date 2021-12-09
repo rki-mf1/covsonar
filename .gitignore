@@ -1,1 +1,6 @@
 __pycache__/
+conda/
+import/.nextflow/
+import/.nextflow*
+import/work
+import/Logs
