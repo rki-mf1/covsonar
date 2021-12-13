@@ -138,8 +138,8 @@ def helpMSG() {
     
     ${c_blue}Engines${c_reset} (choose one):
       conda
-      docker
-      singularity
+      docker // not implemented yet
+      singularity // not implemented yet
     
     Per default: -profile local,conda is executed. 
     ${c_reset}
