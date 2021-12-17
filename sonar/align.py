@@ -6,9 +6,11 @@
 import os
 import re
 import sys
-#import mappy
+import pickle
 import subprocess
 import tempfile
+from Bio.Emboss.Applications import StretcherCommandline
+
 
 # CLASS
 class sonarAligner(object):
@@ -18,114 +20,66 @@ class sonarAligner(object):
 	"""
 
 	def __init__(self):
-		self.__cs_regex = re.compile(r':[0-9]+|\*[a-z][a-z]|[+-][A-Za-z]+')
+		pass
 
-	def map(self, ref_seq, qry_seq, cpus=1):
-		#aligner = mappy.Aligner(seq=ref_seq, preset="asm20", n_threads=threads)
-		#scoring list contains in the respective order:
-		# -A Matching score [2]
-		# -B Mismatching penalty [4]
-		# -q Gap open penalty [4]
-		# -e Gap extension penalty [2]
-		# -q2 Long gap open penalty [24]
-		# -e2 Long gap extension penalty [1]
-		# -sc_ambi score involving ambiguous bases [1]
 
-		aligner = mappy.Aligner(seq=ref_seq, scoring=[2, 4, 4, 2, 24, 1, 0], best_n=1, n_threads=cpus)
-		if not aligner:
-			sys.exit("aligner error: minimap2 failed to build index")
+	def align(self, qry, ref, gapopen= 16, gapextend = 4):
+		"""
+		"""
+		cline = StretcherCommandline(asequence=qry, bsequence=ref, gapopen=gapopen, gapextend=gapextend, outfile='stdout', aformat="fasta")
+		stdout, stderr = cline()
+		s1=stdout.find("\n")+1
+		e=stdout[1:].find(">")+1
+		s2=stdout[e:].find("\n") + e
+		qry = stdout[s1:e].replace("\n", "")
+		ref = stdout[s2:].replace("\n", "")
+		return qry, ref
 
-		hits = aligner.map(qry_seq, cs=True, MD=False)
+	def process_cached_sample(self, fname):
+		"""
+		"""
+		with open(fname, 'rb') as handle:
+			data = pickle.load(handle, encoding="bytes")
+		alignment = self.align(data['seq_file'], data['ref_file'])
+		vars = "\n".join(["\t".join(x) for x in self.extract_vars(*alignment)])
 		try:
-			hit = next(hits)
+			with open(data['var_file'], "w") as handle:
+				handle.write(vars)
 		except:
-			return None
-		return [hit.r_st, hit.r_en, hit.q_st, hit.q_en, hit.cs]
+			os.makedirs(os.path.dirname(data['var_file']))
+			with open(data['var_file'], "w") as handle:
+				handle.write(vars)
 
-	def itermap(self, ref_seq, qry_seq, cpus=1):
-		mapping = self.map(ref_seq, qry_seq, cpus)
-		if not mapping:
-			return None
-
-		ref_start, ref_end, qry_start, qry_end, cs = mapping
-
-		ref_last_pos = len(ref_seq)-1
-		qry_last_pos = len(qry_seq)-1
-
-		# iterations
-		while ref_end < ref_last_pos and qry_end < qry_last_pos:
-			rseq = ref_seq[ref_end:]
-			qseq = qry_seq[qry_end:]
-			iteration = self.map(rseq, qseq, cpus)
-			if not iteration:
-				qry_end = qry_last_pos
-				cs += "+" + qseq
-				break
-			if iteration[2] != 0:
-				if iteration[0] == iteration[2]:
-					for i in range(iteration[0]):
-						#print("*"+ rseq[i].lower() + qseq[i].lower())
-						cs += "*"+ rseq[i].lower() + qseq[i].lower()
+	def extract_vars(self, qry_seq, ref_seq):
+		l = len(qry_seq)
+		if l != len(ref_seq):
+			sys.exit("error: sequences differ in length")
+		qry_seq += " "
+		ref_seq += " "
+		i = 0
+		offset = 0
+		while i < l:
+			#match
+			if qry_seq[i] == ref_seq[i]:
+				pass
+			#deletion
+			elif qry_seq[i] == "-":
+				s = i
+				while qry_seq[i+1] == "-":
+					i += 1
+				yield ref_seq[s:i+1], str(s-offset), str(i+1-offset), " "
+			#insertion
+			elif ref_seq[i] == "-":
+				s = i-1
+				while ref_seq[i+1] == "-":
+					i += 1
+				if s == -1:
+					ref = " "
 				else:
-					sys.exit("alignment error: iterative alignment exception")
-			ref_end += iteration[1]
-			qry_end += iteration[3]
-			cs += iteration[4]
-
-		return ref_start, ref_end, qry_start, qry_end,cs
-
-
-	def minimap2(self, ref_file, qry_file):
-		with open(ref_file) as handle:
-			ref_seq = "".join([x.strip() for x in handle.readlines()[1:]])
-
-		with open(qry_file) as handle:
-			qry_seq = "".join([x.strip() for x in handle.readlines()[1:]])
-
-		cmd = ['minimap2', '-t', str(cpus), '--cs', '-x', 'asm10', '--score-N=0', "--end-bonus=30000",  "-z", "10000" , ref_file, qry_file]
-		p = subprocess.Popen(cmd, encoding='utf8', stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-		output, outerr = p.communicate()
-
-		return output.split('\n')[0].split('\t')
-
-
-	def iter_diffs(self, ref_seq, qry_seq, cpus=1, terminal_fill="."):
-		alignment = self.itermap(ref_seq, qry_seq, cpus=cpus)
-		if not alignment:
-			sys.exit("alignment error: alignment failed.")
-
-		ref_start, ref_end, qry_start, qry_end, cs = alignment
-
-		# handling unaligned regions at the start of the query sequence
-		if qry_start > 0:
-			yield "", -1, qry_seq[:qry_start]
-			if ref_start > 0:
-				yield ref_seq[:ref_start], 0, ""
-		elif ref_start > 0:
-			for i in range(ref_start):
-				yield ref_seq[i], i, terminal_fill
-
-		# handling variations / snps, deletions or insertions within the query sequence
-		pos = ref_start-1
-		for match in self.__cs_regex.finditer(cs):
-			match = match.group(0)
-			if match[0] == ":":
-				pos += int(match[1:])
-			elif match[0] == "*":
-				pos += 1
-				yield match[1].upper(), pos, match[2].upper()
-			elif match[0] == "+":
-				yield "", pos, match[1:].upper()
-			elif match[0] == "-":
-				yield match[1:].upper(), pos+1, ""
-				pos += len(match)-1
-
-		#ending insert
-		if qry_end != len(qry_seq):
-			yield "", -1, qry_seq[:qry_start]
-			if ref_start > 0:
-				yield ref_seq[:ref_start], 0, ""
-
-		#trailing N
-		for i in range(ref_end, len(ref_seq)):
-			yield ref_seq[i], i, terminal_fill
+					ref = ref_seq[s]
+				yield ref, str(s-offset), str(s-offset+1), qry_seq[s:i+1]
+				offset += i-s
+			#snps
+			else:
+				yield ref_seq[i], str(i-offset), str(i-offset+1), qry_seq[i]
+			i += 1

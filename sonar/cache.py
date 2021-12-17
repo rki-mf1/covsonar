@@ -13,7 +13,7 @@ import hashlib
 import yaml
 from Bio import SeqIO
 import difflib as dl
-
+from math import ceil
 
 class sonarCache():
 	"""
@@ -42,14 +42,17 @@ class sonarCache():
 		self.sample_dir = os.path.join(self.basedir, "samples")
 		self.seq_dir = os.path.join(self.basedir, "seq")
 		self.algn_dir = os.path.join(self.basedir, "algn")
-		self.diff_dir = os.path.join(self.basedir, "diff")
-		os.makedirs(self.basedir, exist_ok=True)
-		os.makedirs(self.sample_dir, exist_ok=True)
-		os.makedirs(self.seq_dir, exist_ok=True)
-		os.makedirs(self.algn_dir, exist_ok=True)
-		os.makedirs(self.diff_dir, exist_ok=True)
+		self.var_dir = os.path.join(self.basedir, "var")
+		self.ref_dir = os.path.join(self.basedir, "ref")
 
+		os.makedirs(self.basedir, exist_ok=True)
+		os.makedirs(self.seq_dir, exist_ok=True)
+		os.makedirs(self.ref_dir, exist_ok=True)
+		#os.makedirs(self.algn_dir, exist_ok=True)
+		os.makedirs(self.var_dir, exist_ok=True)
+		os.makedirs(self.sample_dir, exist_ok=True)
 		self._samplefiles = set()
+		self._refs = set()
 
 	def __enter__(self):
 		return self
@@ -100,20 +103,14 @@ class sonarCache():
 		return False
 
 	@staticmethod
-	def load_pickle(fname):
-		with open(fname, 'rb') as handle:
-			return pickle.load(handle, encoding="bytes")
-
-	@staticmethod
 	def file_collision(fname, data):
 		with open(fname, "r") as handle:
 			if handle.read() != data:
 				return True
 		return False
 
-	@staticmethod
-	def sample_collision(fname, datadict):
-		if sonarCache.read_pickle(fname) != datadict:
+	def sample_collision(self, key, datadict):
+		if sonarCache.read_pickle(key) != datadict:
 			return True
 		return False
 
@@ -123,70 +120,80 @@ class sonarCache():
 			'sample_dir': self.sample_dir,
 			'seq_dir': self.seq_dir,
 			'algn_dir': self.algn_dir,
-			'diff_dir': self.diff_dir
+			'var_dir': self.var_dir
 		}
 		with open(self.smk_config, 'w') as handle:
 		    yaml.dump(data, handle)
 
-	def get_seq_fname(self, seqhash, ref=False):
-		seqhash = self.slugify(seqhash)
-		path = os.path.join(self.seq_dir, seqhash[:2])
-		os.makedirs(path, exist_ok=True)
-		ext = ".bseq" if ref else ".aseq"
-		return os.path.join(path, seqhash + ext)
+	def get_seq_fname(self, seqhash):
+		fn = self.slugify(seqhash)
+		return os.path.join(self.seq_dir, fn[:2], fn + ".seq")
+
+	def get_ref_fname(self, refid):
+		return os.path.join(self.ref_dir, str(refid) + ".seq")
 
 	def get_algn_fname(self, seqhash):
-		seqhash = self.slugify(seqhash)
-		path = os.path.join(self.algn_dir, seqhash[:2])
-		os.makedirs(path, exist_ok=True)
-		return os.path.join(path, seqhash + ".algn")
+		fn = self.slugify(seqhash)
+		return os.path.join(self.algn_dir, fn[:2], fn + ".algn")
 
-	def get_diff_fname(self, seqhash):
-		seqhash = self.slugify(seqhash)
-		path = os.path.join(self.diff_dir, seqhash[:2])
-		os.makedirs(path, exist_ok=True)
-		return os.path.join(path, seqhash + ".diff")
+	def get_var_fname(self, seqhash):
+		fn = self.slugify(seqhash)
+		return os.path.join(self.var_dir, fn[:2], fn + ".var")
 
-	def get_sample_fname(self, fasta_header):
-		fbasename = self.slugify(hashlib.sha1(fasta_header.encode('utf-8')).hexdigest())
-		path = os.path.join(self.sample_dir, fbasename[:2])
-		os.makedirs(path, exist_ok=True)
-		return os.path.join(path, hashlib.sha1(fasta_header.encode('utf-8')).hexdigest() + ".sample")
+	def get_sample_fname(self, sample_name):
+		fn = self.slugify(hashlib.sha1(sample_name.encode('utf-8')).hexdigest())
+		return os.path.join(self.sample_dir, fn[:2], fn + ".sample")
 
-	def cache_sample(self, name, sampleid, seqhash, header, sequence, refmol, refmolid, algnid, aseq, bseq, algn, diff, properties):
-		fname = self.get_sample_fname(header)
+	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, algnid, seqfile, reffile, algnfile, varfile, properties):
 		data = {
 			"name": name,
 			"sampleid": sampleid,
-			"sequence": sequence,
 			"refmol": refmol,
 			"refmolid": refmolid,
 			"algnid": algnid,
 			"header": header,
 			"seqhash": seqhash,
-			"aseq_file": aseq,
-			"bseq_file": bseq,
-			"algn_file": algn,
-			"diff_file": diff
+			"seq_file": seqfile,
+			"ref_file": reffile,
+			"algn_file": algnfile,
+			"var_file": varfile
 			}
+		fname = self.get_sample_fname(name)
 		if os.path.isfile(fname):
 			if self.sample_collision(fname, data):
 				sys.exit("sample data collision: data differs for sample " + name + " (" + header + ").")
 		else:
-			self.write_pickle(fname, data)
+			try:
+				self.write_pickle(fname, data)
+			except:
+				os.makedirs(os.path.dirname(fname))
+				self.write_pickle(fname, data)
 		self._samplefiles.add(fname)
 		return fname
 
 	def iter_samples(self):
 		for fname in self._samplefiles:
-			yield self.load_pickle(fname)
+			yield self.read_pickle(fname)
 
-	def cache_sequence(self, seqhash, refhash, sequence, ref=False):
-		fname = self.get_seq_fname(seqhash + "@" + refhash, ref=ref)
+	def cache_sequence(self, seqhash, sequence):
+		fname = self.get_seq_fname(seqhash)
 		if os.path.isfile(fname):
 			if self.file_collision(fname, sequence):
 				sys.exit("seqhash collision: sequences differ for seqhash " + seqhash + ".")
 		else:
+			try:
+				with open(fname, "w") as handle:
+					handle.write(sequence)
+			except:
+				os.makedirs(os.path.dirname(fname))
+				with open(fname, "w") as handle:
+					handle.write(sequence)
+		return fname
+
+	def cache_reference(self, refid, sequence):
+		fname = self.get_ref_fname(refid)
+		if refid not in self._refs:
+			self._refs.add(refid)
 			with open(fname, "w") as handle:
 				handle.write(sequence)
 		return fname
@@ -269,17 +276,17 @@ class sonarCache():
 				# check alignment
 				data['algnid'] = dbm.get_alignment_id(data['seqhash'], refseq_id)
 				if data['algnid'] is None:
-					data['aseq'] = self.cache_sequence(data['seqhash'], self.get_refhash(data['refmol']), data['sequence'], ref=False)
-					data['bseq'] = self.cache_sequence(data['seqhash'], self.get_refhash(data['refmol']), self.get_refseq(data['refmol']), ref=True)
-					data['algn'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
-					data['diff'] = self.get_diff_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
+					data['seqfile'] = self.cache_sequence(data['seqhash'], data['sequence'])
+					data['reffile'] = self.cache_reference(refseq_id, self.get_refseq(data['refmol']))
+					data['algnfile'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
+					data['varfile'] = self.get_var_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 				else:
-					data['aseq'] = None
-					data['bseq'] = None
-					data['algn'] = None
-					data['diff'] = None
+					data['seqfile'] = None
+					data['reffile'] = None
+					data['algnfile'] = None
+					data['varfile'] = None
+				del(data['sequence'])
 				self.cache_sample(**data)
-				self.write_smk_config()
 
 	def import_samples(self):
 		refseqs = {}
@@ -290,7 +297,7 @@ class sonarCache():
 				dbm.insert_sequence(sampid, sample_data['seqhash'])
 				if sample_data['algnid'] is None:
 					algnid = dbm.insert_alignment(sample_data['seqhash'], sample_data['refmolid'])
-					with open(sample_data['diff_file'], "r") as handle:
+					with open(sample_data['var_file'], "r") as handle:
 						for line in handle:
 							vardat = line.strip("\r\n").split("\t")
 							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
@@ -313,7 +320,9 @@ class sonarCache():
 					else:
 						seq[vardata['variant.start']] = vardata['variant.alt']
 				seq = "".join(seq)
-				if seq != sample_data['sequence']:
+				with open(sample_data['seq_file'], "r") as handle:
+					orig_seq = handle.read()
+				if seq != orig_seq:
 					for x, y in sample_data.items():
 						if x != "sequence":
 							print(x + ":", y)
@@ -321,7 +330,7 @@ class sonarCache():
 					print()
 					for line in dl.ndiff([sample_data['sequence']], [seq]):
 						print(line)
-					sys.exit("error: paranoid2 caused " + sample_data['diff_file'])
+					sys.exit("error: paranoid2 caused " + sample_data['var_file'])
 
 if __name__ == "__main__":
 	pass
