@@ -197,25 +197,40 @@ class sonarCache():
 			with open(fname, "w") as handle:
 				handle.write(sequence)
 		return fname
+	@staticmethod
+	def open_file(fname, mode="r", compressed="auto", encoding=None):
+		if not os.path.isfile(fname):
+			sys.exit("input error: " + fname + " does not exist.")
+		if compressed == "auto":
+			compressed = os.path.splitext(fname)[1][1:]
+		try:
+			if compressed == "gz":
+				return gzip.open(fname, mode + "t", encoding=encoding)
+			if compressed == "xz":
+				return lzma.open(fname, mode + "t", encoding=encoding)
+			return open(fname, mode, encoding=encoding)
+		except:
+			sys.exit("input error: " + fname + " cannot be opened.")
 
 	def iter_fasta(self, *fnames):
 		for fname in fnames:
-			for record in SeqIO.parse(fname, "fasta"):
-				refmol = self.get_refmol(record.description)
-				if not refmol:
-					sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(fasta_header) + ").")
-				refmolid = self.refmols[refmol]['molecule.id']
-				seq = sonarActions.harmonize(record.seq)
-				seqhash = sonarActions.hash(seq)
-				yield {
-					   'name': record.id,
-					   'header': record.description,
-					   'seqhash': sonarActions.hash(seq),
-					   'sequence': seq,
-					   'refmol': refmol,
-					   'refmolid': refmolid,
-					   'properties': self.get_properties(record.description)
-					   }
+			with self.open_file(fname) as handle:
+				for record in SeqIO.parse(handle, "fasta"):
+					refmol = self.get_refmol(record.description)
+					if not refmol:
+						sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(fasta_header) + ").")
+					refmolid = self.refmols[refmol]['molecule.id']
+					seq = sonarActions.harmonize(record.seq)
+					seqhash = sonarActions.hash(seq)
+					yield {
+						   'name': record.id,
+						   'header': record.description,
+						   'seqhash': sonarActions.hash(seq),
+						   'sequence': seq,
+						   'refmol': refmol,
+						   'refmolid': refmolid,
+						   'properties': self.get_properties(record.description)
+						   }
 
 	def get_refmol(self, fasta_header):
 		mol = self._molregex.search(fasta_header)
