@@ -1869,7 +1869,7 @@ class sonarDB(object):
 		self.__moduledir = os.path.dirname(os.path.realpath(__file__))
 		self.reffna = os.path.join(self.__moduledir, "ref.fna")
 		self.refgff = os.path.join(self.__moduledir, "ref.gff3")
-		self.lineagewithsublineages = os.path.join(self.__moduledir, "lineages.all.2021-12-08.tsv")
+		self.lineagewithsublineages = os.path.join(self.__moduledir, "lineage.all.tsv")
 
 		self.translation_table = translation_table
 		self.__lineage_sublineage_dict = None

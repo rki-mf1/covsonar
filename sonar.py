@@ -525,6 +525,9 @@ if __name__ == "__main__":
 
 	# Var2Vcf (export variants to  VCF)
 	if args.tool == "var2vcf":
+		import time
+		start = time.time()
+
 		if args.date:
 			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
 			for d in args.date:
@@ -540,6 +543,10 @@ if __name__ == "__main__":
 					args.acc.add(line.strip())
 		
 		snr.var2vcf(args.acc, args.date, args.output, args.cpus)
+		end = time.time()
+		hours, rem = divmod(end-start, 3600)
+		minutes, seconds = divmod(rem, 60)
+		print("Runtime (H:M:S): {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
 
 	# view
 	if args.tool == "view":

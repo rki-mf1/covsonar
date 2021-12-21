@@ -5,6 +5,7 @@
 
 covSonar is a database-driven system for handling genomic sequences of SARS-CoV-2 and screening genomic profiles.
 
+<img src="https://img.shields.io/badge/covSonar-1.1.2-pink" />
 
 ## 1. Prerequisites
 
@@ -184,6 +185,41 @@ path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb
 path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1.7 --db mydb > out.csv
 ```
 
+**Wildcard**
+
+CovSonar also supports wildcard query (symbol `%`) to handle more complexity of the query. The operator is used in a **lineage query** to search for a specified pattern in lineage. It can be used in combinations of including and excluding command, for example;
+
+```sh
+# edit command at --lineage tag
+path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1% AY.4% --db mydb > out.csv
+```
+
+This query will include all lineages that start with 'AY.4'.
+```
+['AY.4', 'AY.4.1', 'AY.4.2', .... , 'AY.46.5', 'AY.46.6', 'AY.47']
+```
+
+and exclude all lineages that start with 'B.1.1'.
+```
+['B.1.1', 'B.1.1.1', 'B.1.1.10', 'B.1.1.121', ... , 'B.1.177.9', 'B.1.179', 'B.1.187']
+```
+Here are some examples showing different queries with `%`
+
+| query              | description                                       |
+|--------------------|---------------------------------------------------|
+| AY%                | Finds any lineage that starts with "AY"           |
+| %1.1.%             | Finds any lineage that have "1.1." in any position|
+| %.1                | Finds any lineage that ends with ".1"             |
+
+**Parent-Child relationship**
+
+If we want to query all sublineages, covSonar offers `--with-sublineage` tag along with match command.
+
+```sh
+# We want to get all sublineages of delta variant (B.1.617.2).
+# This query will return result from ['B.1.617.2', 'AY.1', 'AY.2', ..., , 'AY.129', 'AY.130']
+path/to/covsonar/sonar.py match -i S:N501Y --lineage  B.1.617.2 --with-sublineage --db mydb > out.csv
+```
 
 ### 3.4 Restore genome sequences from the database
 
@@ -227,6 +263,21 @@ path/to/covsonar/sonar.py remove --acc ACC1 ACC5 --db mydb
 # removing accessions listed in file to_delete.txt (one accession per line) from 'mydb'
 path/to/covsonar/sonar.py remove --file to_delete.txt --db mydb
 ```
+
+### 3.7 Export DB to VCF file
+
+covSonar can export accession records in a VCF format using the `var2vcf` command. The output from this feature is a single VCF file that combines all accessions. The output format is in **.gz** form.
+
+```sh
+# Export all accessions in the database.
+path/to/covsonar/sonar.py var2vcf --db mydb -o merge.vcf
+# Just like the option in the match command, we can use  --file, --acc and --date to enable specific accession export.
+path/to/covsonar/sonar.py var2vcf --db mydb -f acc.10.txt -o merge.vcf
+# To speed up the query, we can use --cpus tag to aid us.
+path/to/covsonar/sonar.py var2vcf --db mydb --date 2021-08-01:2021-08-10 -o merge.vcf --cpus 20
+```
+
+:warning:**Note:** The current performance of this feature still does not perform well when trying to export many accessions (for example, export more than 20,000 accessions). However, we are constantly working on improving the performance. :monkey: 
 
 ## 4 How to contribute
 

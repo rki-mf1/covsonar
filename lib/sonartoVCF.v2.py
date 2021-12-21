@@ -14,6 +14,8 @@ from multiprocessing import Pool
 import warnings
 import math
 from tqdm import tqdm
+from fuc import pyvcf
+
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 
 #num_partitions = 20 # number of partitions to split dataframe
@@ -21,7 +23,7 @@ warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 
 def create_fix_vcf_header(ref,sample_id):
-    header = "##fileformat=VCFv4.2\n##poweredby=CovSonarV1\n##reference="+ref
+    header = "##fileformat=VCFv4.2\n##poweredby=CovSonarV1.1.2\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
     info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">'
@@ -247,7 +249,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
             bgzip(tmp_output)
             tabix_index(tmp_output)  
 
-    os.rename( tmp_output + '.gz', global_output+ '.gz')
+    shutil.copy( tmp_output + '.gz', global_output+ '.gz')
     
     print('Clean workspace ...')
     if os.path.isdir(tmp_dirname):
