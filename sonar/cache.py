@@ -197,6 +197,7 @@ class sonarCache():
 			with open(fname, "w") as handle:
 				handle.write(sequence)
 		return fname
+
 	@staticmethod
 	def open_file(fname, mode="r", compressed="auto", encoding=None):
 		if not os.path.isfile(fname):
@@ -305,18 +306,20 @@ class sonarCache():
 
 	def import_samples(self):
 		refseqs = {}
-		with sonarDBManager(self.db, debug=False) as dbm:
+		with sonarDBManager(self.db, debug=self.debug) as dbm:
 			for sample_data in self.iter_samples():
 				# nucleotide level import
-				sampid = dbm.insert_sample(sample_data['name'])
-				dbm.insert_sequence(sampid, sample_data['seqhash'])
+				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 				if sample_data['algnid'] is None:
 					algnid = dbm.insert_alignment(sample_data['seqhash'], sample_data['refmolid'])
 					with open(sample_data['var_file'], "r") as handle:
 						for line in handle:
+							if line == "//":
+								break
 							vardat = line.strip("\r\n").split("\t")
 							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
-
+						if line != "//":
+							sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
 				# paranoia test
 				try:
 					seq = list(refseqs[sample_data['refmolid']])
@@ -343,7 +346,7 @@ class sonarCache():
 							print(x + ":", y)
 							print()
 					print()
-					for line in dl.ndiff([sample_data['sequence']], [seq]):
+					for line in dl.ndiff([orig_seq], [seq]):
 						print(line)
 					sys.exit("error: paranoid2 caused " + sample_data['var_file'])
 

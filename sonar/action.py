@@ -18,6 +18,7 @@ import tempfile
 import itertools
 from contextlib import ExitStack
 from sonar import sonarDBManager, sonarAligner
+import csv
 
 # CLASS
 class sonarActions(object):
@@ -105,7 +106,7 @@ class sonarActions(object):
 	def __init__(self, dbfile, translation_table = 1, debug=False):
 		self.db = os.path.abspath(dbfile)
 		self.debug = debug
-		self.__moduledir = self.get_module_file()
+		self.__moduledir = self.get_module_base()
 		self.reffna = os.path.join(self.__moduledir, "ref.fna")
 		self.refgff = os.path.join(self.__moduledir, "ref.gff3")
 		self.translation_table = translation_table
@@ -129,7 +130,7 @@ class sonarActions(object):
 	# DB MAINTENANCE
 
 	@staticmethod
-	def get_module_file(*join_with):
+	def get_module_base(*join_with):
 		return os.path.join(os.path.dirname(os.path.realpath(__file__)), *join_with)
 
 	@staticmethod
@@ -137,52 +138,44 @@ class sonarActions(object):
 		if os.path.isfile(fname):
 			sys.exit("setup error: " + fname + " does already exist.")
 		sonarDBManager.setup(fname, debug=debug)
+		## loading default data
 		if default_setup:
 			with sonarDBManager(fname, debug=debug) as dbm:
-				## adding pre-defined sample properties
+				### adding pre-defined sample properties
 				dbm.add_property("accession", "text", "text", "sample accession", "")
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database", "")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly", "")
 
-				## adding built-in reference (unsegmented genome)
-				records = [x for x in sonarActions.iter_genbank(sonarActions.get_module_file("ref.gb"))]
+				### adding built-in reference (unsegmented genome)
+				records = [x for x in sonarActions.iter_genbank(sonarActions.get_module_base("ref.gb"))]
 				ref_id = dbm.add_reference(records[0]['accession'], records[0]['description'], records[0]['organism'], 1, 1)
 
-				## adding reference molecule and elements
+				### adding reference molecule and elements
 				for i, record in enumerate(records):
 					gene_ids = {}
 					s = 1 if i == 0 else 0
 
 					mol_id = dbm.insert_molecule(ref_id, record['moltype'], record['accession'], record['symbol'], record['description'], i, record['length'], s)
 
-					### source handling
+					#### source handling
 					source_id = dbm.insert_element(mol_id, "source", record['source']['accession'], record['source']['symbol'], record['source']['description'], record['source']['start'], record['source']['end'], record['source']['strand'], record['source']['sequence'], parts=record['source']['parts'])
 					if record['source']['sequence'] != dbm.get_sequence(source_id):
 						sys.exit("genbank error: could not recover sequence of '" + record['source']['accession'] + "' (source)")
 
-					### gene handling
+					#### gene handling
 					for elem in record['gene']:
 						gene_ids[elem['accession']] = dbm.insert_element(mol_id, "gene", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], elem['strand'], elem['sequence'], parent_id=source_id, parts=elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(gene_ids[elem['accession']]):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (gene)")
 
-					### cds handling
+					#### cds handling
 					for elem in record['cds']:
 						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], "", elem['sequence'], gene_ids[elem['gene']], elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(cid, translation_table=1):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (cds)")
 	# DATA IMPORT
-	@property
-	def fasta_tag_regex(self):
-		if self.__fasta_tag_regex == None:
-			tags = set("molecule")
-			with sonarDBManager(self.db, readonly=True, debug=self.debug) as dbm:
-				if dbm.properties:
-					tags.update(dbm.properties.keys())
-			self.__fasta_tag_regex = re.compile("\[(" + "|".join(tags) + ")=([^\[\]=]+)\]")
-		return self.__fasta_tag_regex
 
-	## fasta and genbank handling handling
+	## genbank handling handling
 	@staticmethod
 	def iter_genbank(fname):
 		gb_data = {}
@@ -248,58 +241,38 @@ class sonarActions(object):
 					})
 			yield gb_data
 
-	@staticmethod
-	def iter_fasta(fname):
-		seq = []
-		header = None
-		with open(fname) as handle:
-			for line in handle:
-				line = line.strip()
-				if line.startswith(">"):
-					if header and seq:
-						yield id, header, sonarActions.harmonize("".join(seq))
-					header = line[1:]
-					id = header.split()[0]
-					seq = []
-				elif line != "":
-					seq.append(line)
-			if header and seq:
-				yield id, header, sonarActions.harmonize("".join(seq))
 
 	## seq handling
 	@staticmethod
 	def hash(seq):
 		"""
-		static function to hash any sequence using SEGUID (SHA-1 hash of the
-		upper-case sequence)
-
-		Parameters
-		----------
-		seq : str
-			define a sequence to hash
-
-		Returns
-		-------
-		str
-			seguid
-
 		"""
 		return seguid(seq)
 
 	@staticmethod
 	def harmonize(seq):
 		"""
-		static function to return a sequence in upper case format and with T instead of U
-
-		Parameters
-		----------
-		seq : str
-			define a sequence to harmonize
-
-		Returns
-		-------
-		str
-			sequence
-
 		"""
 		return str(seq).strip().upper().replace("U", "T")
+
+	# matching
+	def match(self, profiles, count=None):
+		with sonarDBManager(self.db, debug=self.debug) as dbm:
+			rows = dbm.match(*profiles)
+			if count:
+				print(len(rows))
+			else:
+				print(rows)
+
+				self.rows_to_csv(rows, na="*** no match ***", tsv=True)
+
+	# output
+	def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
+		if not rows:
+			print(na, file=sys.stderr)
+		else:
+			file = sys.stdout if file is None else open(file, "w")
+			sep = "\t" if tsv else ","
+			writer = csv.DictWriter(file, rows[0].keys(), delimiter=sep, lineterminator=os.linesep)
+			writer.writeheader()
+			writer.writerows(rows)

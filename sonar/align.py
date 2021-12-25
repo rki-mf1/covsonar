@@ -40,15 +40,22 @@ class sonarAligner(object):
 		"""
 		with open(fname, 'rb') as handle:
 			data = pickle.load(handle, encoding="bytes")
+		if os.path.isfile(data['var_file']):
+			line = ""
+			with open(data['var_file'], "r") as handle:
+				for line in handle:
+					pass
+			if line == "//":
+				return
 		alignment = self.align(data['seq_file'], data['ref_file'])
 		vars = "\n".join(["\t".join(x) for x in self.extract_vars(*alignment)])
 		try:
 			with open(data['var_file'], "w") as handle:
-				handle.write(vars)
+				handle.write(vars + "\n//")
 		except:
 			os.makedirs(os.path.dirname(data['var_file']))
 			with open(data['var_file'], "w") as handle:
-				handle.write(vars)
+				handle.write(vars + "\n//")
 
 	def extract_vars(self, qry_seq, ref_seq):
 		l = len(qry_seq)

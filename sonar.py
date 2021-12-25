@@ -51,30 +51,30 @@ def parse_args():
 
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
-	parser_match.add_argument('--include', '-i', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=[])
-	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=[])
-	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
-	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
-	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--source', metavar="STR", help="match genomes of the given data source only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--technology', metavar="STR", help="match genomes of the given sequencing technology only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--platform', metavar="STR", help="match genomes of the given sequencing platform only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--chemistry', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--software', metavar="STR", help="software used for genome reconstruction", type=str, default=None)
-	parser_match.add_argument('--version', metavar="STR", help="software version used for genome reconstruction", type=str, default=None)
-	parser_match.add_argument('--material', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
-	parser_match.add_argument('--min_ct', metavar="STR", help="minimal ct value of samples resulting genomes are matched to", type=float, default=None)
-	parser_match.add_argument('--max_ct', metavar="STR", help="maximal ct value of samples resulting genomes are matched to", type=float, default=None)
-	parser_match_g1 = parser_match.add_mutually_exclusive_group()
-	parser_match_g1.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
-	parser_match_g1.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
-	parser_match_g2 = parser_match.add_mutually_exclusive_group()
-	parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
-	parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
-	parser_match_g2.add_argument('--tsv', help="use tsv instead of csv output", action="store_true")
+	parser_match.add_argument('--profile', '-p', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=[])
+	#parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=[])
+	##parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
+	##parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
+	#parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--source', metavar="STR", help="match genomes of the given data source only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--technology', metavar="STR", help="match genomes of the given sequencing technology only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--platform', metavar="STR", help="match genomes of the given sequencing platform only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--chemistry', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--software', metavar="STR", help="software used for genome reconstruction", type=str, default=None)
+	#parser_match.add_argument('--version', metavar="STR", help="software version used for genome reconstruction", type=str, default=None)
+	#parser_match.add_argument('--material', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
+	#parser_match.add_argument('--min_ct', metavar="STR", help="minimal ct value of samples resulting genomes are matched to", type=float, default=None)
+	#parser_match.add_argument('--max_ct', metavar="STR", help="maximal ct value of samples resulting genomes are matched to", type=float, default=None)
+	#parser_match_g1 = parser_match.add_mutually_exclusive_group()
+	parser_match.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
+	#parser_match_g1.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
+	#parser_match_g2 = parser_match.add_mutually_exclusive_group()
+	#parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
+	#parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
+	#parser_match_g2.add_argument('--tsv', help="use tsv instead of csv output", action="store_true")
 
 	#create the parser for the "restore" command
 	parser_restore = subparsers.add_parser('restore', parents=[general_parser], help='restore sequence(s) from the database.')
@@ -109,165 +109,7 @@ class sonar():
 		self.gff = gff
 		self.debug = debug
 
-	def open_file(self, fname, mode="r", compressed=False, encoding=None):
-		if not os.path.isfile(fname):
-			sys.exit("input error: " + fname + " does not exist.")
-		if compressed == "auto":
-			compressed = os.path.splitext(fname)[1][1:]
-		try:
-			if compressed == "gz":
-				return gzip.open(fname, mode + "t", encoding=encoding)
-			if compressed == "xz":
-				return lzma.open(fname, mode + "t", encoding=encoding)
-			else:
-				return open(fname, mode, encoding=encoding)
-		except:
-			sys.exit("input error: " + fname + " cannot be opened.")
 
-
-	def add(self, fnames, cachedir=None, cpus=1, timeout=600, force=False, paranoid=True, quiet=False, noprogress=False, compressed=False, source=None, collection=None, lab=None):
-		'''
-		Adds genome sequence(s) from given FASTA file(s) to the database.
-		If cachedir is not defined, a temporary directory will be used as cache.
-		'''
-
-		# set display options
-		disable_progressbar = False if not quiet and not noprogress else True
-		print_steps = True if not quiet and noprogress else False
-
-		# set global update vals
-		updates = {}
-		if source:
-			updates['source'] = source
-		if lab:
-			updates['lab'] = lab
-		if collection:
-			updates['collection'] = collection
-
-		# create db if necessary
-		step = 0
-		if cachedir and os.path.isdir(cachedir):
-			step += 1
-			if print_steps:
-				print("[step", str(step) + "] restoring ... ")
-
-		with sonardb.sonarCache(cachedir) as cache, sonardb.sonarDBManager(self.dbfile) as dbm:
-			# db status
-			if not quiet:
-				dbstatus ={
-						'genomes': dbm.count_genomes(),
-						'seqs': dbm.count_sequences(),
-						'labs': dbm.count_labs(),
-				}
-
-			# add fasta files to cache
-			step += 1
-			msg = "[step " + str(step) + "] caching ...   "
-			if print_steps:
-				print(msg)
-
-			to_process = []
-			to_import = defaultdict(set)
-			to_update = set()
-
-			for i in tqdm(range(len(fnames)), desc = msg, disable = disable_progressbar):
-				with self.open_file(fnames[i], compressed=compressed) as handle:
-					for record in SeqIO.parse(handle, "fasta"):
-						acc = record.id
-						descr = record.description
-						seq = self.db.harmonize(record.seq)
-						seqhash = self.db.hash(seq)
-						genome_data = dbm.get_genome(acc)
-
-						if updates:
-							to_update.add(acc)
-
-						if genome_data:
-							if genome_data['seqhash'] != seqhash:
-								if not force:
-									sys.exit("database error: " + acc + " exists in the database with a different sequence (use --force to allow updating)")
-								dbm.delete_genome(acc)
-							elif genome_data['description'] != descr:
-								if not force:
-									sys.exit("database error: " + acc + " exists in the database with a different description (use --force to allow updating)")
-								dbm.update_genome(acc, description = descr)
-								continue
-							else:
-								continue
-
-						if dbm.seq_exists(seqhash):
-							cache.prep_cached_files(seqhash)
-							cache.write_info(seqhash)
-							cache.add_seq(seqhash, seq)
-						elif seqhash not in to_import:
-							algn = cache.get_algn_fname(seqhash)
-							fasta = cache.get_fasta_fname(seqhash)
-							info = cache.get_info_fname(seqhash)
-
-							if not os.path.isfile(fasta):
-								unvalid_letters =  sorted(self.db.check_iupac_nt_code(seq))
-								if unvalid_letters:
-									sys.exit("input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")
-								cache.add_seq(seqhash, seq)
-								to_process.append([fasta, algn, info, seqhash, timeout])
-							elif SeqIO.read(fasta, "fasta").seq != seq:
-									sys.exit("cache error: sequence hash " + seqhash + " exists in cache but refers to a different sequence")
-							elif not os.path.isfile(info):
-								to_process.append([fasta, algn, info, seqhash, timeout])
-
-						to_import[seqhash].add((acc, descr))
-
-			step += 1
-			msg = "[step " + str(step) + "] processing ..."
-			if print_steps:
-				print(msg)
-			pool = Pool(processes=cpus)
-			failed = set()
-			for status, seqhash in tqdm(pool.imap_unordered(self.db.multi_process_fasta_wrapper, to_process), total=len(to_process), desc = msg, disable = disable_progressbar):
-				if not status:
-					failed.update([x[1] for x in cache.cache[seqhash]])
-				if failed:
-					print("timeout warning: following genomes were not added to the database since the respective sequence produced an timeout while aligning:", file=sys.stderr)
-					for f in failed:
-						print(f, file=sys.stderr)
-
-			step += 1
-			msg = "[step " + str(step) + "] importing ... "
-			if print_steps:
-				print(msg)
-			self.db.import_genome_from_cache(cache.dirname, to_import, msg=msg, dbm=dbm, disable_progressbar=disable_progressbar)
-
-			if updates:
-				step += 1
-				msg = "[step " + str(step) + "] updating ...  "
-				if print_steps:
-					print(msg)
-				for i in tqdm(range(len(to_update)), desc = msg, disable = disable_progressbar):
-					dbm.update_genome(to_update.pop(), **updates)
-
-			# db status
-			if not quiet:
-				new_dbstatus ={
-						'genomes': dbm.count_genomes(),
-						'seqs': dbm.count_sequences(),
-						'labs': dbm.count_labs(),
-				}
-
-				print("number of genomes:")
-				print("\twas:   " + str(dbstatus['genomes']))
-				print("\tnow:   " + str(new_dbstatus['genomes']))
-				print("\tadded: " + str(new_dbstatus['genomes']-dbstatus['genomes']))
-				print("number of unique sequences:")
-				print("\twas:   " + str(dbstatus['seqs']))
-				print("\tnow:   " + str(new_dbstatus['seqs']))
-				print("\tadded: " + str(new_dbstatus['seqs']-dbstatus['seqs']))
-
-	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
-		if count:
-			print(rows)
-		else:
-			self.rows_to_csv(rows, na="*** no match ***", tsv=tsv)
 
 	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
 		updates = defaultdict(dict)
@@ -404,54 +246,9 @@ if __name__ == "__main__":
 	with sonarDBManager(args.db, readonly=True) as dbm:
 		dbm.check_db_compatibility()
 
-	# add
-	if args.tool == "add":
-
-		# sanity check
-		if not args.file and not args.cache:
-			sys.exit("nothing to add.")
-
-		snr.add_samples_from_fasta(*args.file, reference_accession=None)
-
 	# match
 	if args.tool == "match":
-		# sanity check
-		if args.date:
-			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
-			for d in args.date:
-				if not regex.match(d):
-					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
-		if args.no_frameshifts:
-			frameshifts = -1
-		elif args.only_frameshifts:
-			frameshifts = 1
-		else:
-			frameshifts = 0
-
-		if args.lineage:
-			args.lineage = [x.upper() for x in args.lineage]
-		if args.lab:
-			args.lab = [x.upper() for x in args.lab]
-		if args.source:
-			args.source = [x.upper() for x in args.source]
-		if args.collection:
-			args.collection = [x.upper() for x in args.collection]
-		if args.technology:
-			args.technology = [x.upper() for x in args.technology]
-		if args.platform:
-			args.platform = [x.upper() for x in args.platform]
-		if args.lineage:
-			args.lineage = [x.upper() for x in args.lineage]
-		if args.chemistry:
-			args.chemistry = [x.upper() for x in args.chemistry]
-		if args.software:
-			args.software = args.software.upper()
-		if args.version:
-			args.version = args.version.upper()
-		if args.material:
-			args.material = [x.upper() for x in args.material]
-
-		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
+		snr.match(args.profile, args.count)
 
 	# update
 	if args.tool == "update":
