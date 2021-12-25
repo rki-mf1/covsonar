@@ -92,7 +92,7 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr,_pos):
             df_group = df_group.sort_values(by='start', ascending=True)
             # replace null to .
             df_group['alt'] = df_group['alt'].replace('', np.nan)
-            df_group = df_group .dropna(axis=0, subset=['alt'])
+            df_group = df_group.dropna(axis=0, subset=['alt']) # remove Deletion
             for index, row in df_group.iterrows():
                 id = row['ref']+str(row['start'])+row['alt']
                 f.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(row['CHROM'], row['start'], id, 
@@ -167,8 +167,11 @@ def export2VCF(
             rows['FILTER'] = '.'
             rows['INFO'] = 'AC=1;AN=1'
             rows['FORMAT'] = 'GT'
+            # POS or start position: The reference position, with the 1st base is position 1 not 0 , but in covsonar use 0 as the 1st position
+            # so we should + 1
+            # http://samtools.github.io/hts-specs/VCFv4.2.pdf
+            rows['start'] = rows['start'] + 1
             rows_grouped = rows.groupby('accession')
-            
             for group_name, df_group in rows_grouped: 
                 group_name=os.path.join(tmp_dirname, group_name+'.vcf.gz')
                 full_path = os.path.join(tmp_dirname,group_name)
@@ -201,6 +204,10 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
     for i in bar:
         _vcfs = " ".join(list_track_vcf[chunk*i:chunk*i+chunk])
 
+
+        if(len(list_track_vcf)==1):
+            tmp_output = list_track_vcf[i].replace('.gz', '')
+            continue
 
         if(i == list_length-1):
             merge_type='v'
