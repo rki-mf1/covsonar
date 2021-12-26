@@ -698,27 +698,24 @@ class sonarDBManager():
 		profile_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?(del:\*?[0-9]+(?:-[0-9]+)?\*?|[A-Z]+[0-9]+[A-Z]+)$')
 		snv_regex = re.compile(r'^([A-Z]+)([0-9]+)([A-Z]+)$')
 
-
 		# set default element
 		default_element_id = self.get_annotation(reference_accession, molecule_accession, element_accession, ["\"element.id\""])["element.id"]
-		include_selects = []
-		exclude_selects = []
-		include_vals = []
-		exclude_vals = []
 
 		# set variants and generate sql
-		base_sql = "SELECT \"sample.id\" FROM variantView WHERE \"sample.id\" > -1 AND \"a2v.a_id\" > -1"
-		sql = base_sql
-		conditions = []
-		vals = []
+		base_sql = "SELECT \"sample.id\" FROM variantView WHERE "
+		intercept_conditions = []
+		intercept_vals = []
+		except_conditions = []
+		except_vals = []
 		for var in vars:
 			c = []
+			v = []
 
 			if var.startswith("^"):
 				var = var[1:]
-				op = " IN "
+				negate = True
 			else:
-				op = " NOT IN "
+				negate = False
 
 			match = profile_regex.match(var)
 			if not match:
@@ -727,12 +724,12 @@ class sonarDBManager():
 			## set element
 			if match.group(2):
 				c.append("\"element.type\" = ?")
-				vals.append("protein")
+				v.append("protein")
 				c.append("\"element.symbol\" = ?")
-				vals.append(match.group(2)[:-1])
+				v.append(match.group(2)[:-1])
 			else:
 				c.append("\"element.id\" = ?")
-				vals.append(default_element_id)
+				v.append(default_element_id)
 
 			## set variant:
 			### snv
@@ -742,7 +739,7 @@ class sonarDBManager():
 				c.append("\"variant.end\" = ?")
 				c.append("\"variant.ref\" = ?")
 				c.append("\"variant.alt\" = ?")
-				vals.extend([int(mut.group(2))-1, int(mut.group(2)), mut.group(1), mut.group(3)])
+				v.extend([int(mut.group(2))-1, int(mut.group(2)), mut.group(1), mut.group(3)])
 
 			### del
 			else:
@@ -753,7 +750,7 @@ class sonarDBManager():
 				x = coords[0]-1
 				y = coords[1] if len(coords) == 2 else coords[0]
 				c.append(["\"variant.start\" = ? AND variant.end = ?"])
-				vals.extend([x, y])
+				v.extend([x, y])
 
 			# deletion handling
 			if match.group(2) == "del":
@@ -762,19 +759,30 @@ class sonarDBManager():
 				if coords[0][0] == "*" and start > 0:
 					# TODO: ſrong has tobe with > <
 					c.append("\"variant.start\"= ?")
-					vals.append(start-1)
+					v.append(start-1)
 					c.append("\"variant.alt\" != ?")
-					vals.append("")
+					v.append("")
 				if len(coords) == 2:
 					end = int(coords[1].strip("*"))
 					if coords[0][0] == "*" and start > 0:
 						pass
+			if negate:
+				except_conditions.append(base_sql + " AND ".join(c))
+				except_vals.extend(v)
+			else:
+				intercept_conditions.append(base_sql + " AND ".join(c))
+				intercept_vals.extend(v)
 
-			conditions.append("\"sample.id\"" + op + "(" + base_sql + " AND " + " AND ".join(c) + ")")
+		if not intercept_conditions and not except_conditions:
+			return None
+		if not intercept_conditions:
+			intercept_conditions = [base_sql + "1"]
 
-		sql += " AND " + " AND ".join(conditions)
+		sql = " INTERCEPT ".join(intercept_conditions)
+		if except_conditions:
+			sql += " EXCEPT " + " EXCEPT ".join(except_conditions)
 
-		return sql, vals #+ exclude_vals
+		return sql, intercept_vals + except_vals
 
 	def match(self, profiles, metadata=None, reference_accession=None, molecule_accession=None, element_accession = None):
 		#sqls for metadata-based filtering
