@@ -9,7 +9,8 @@ import csv
 import argparse
 import gzip
 import lzma
-from lib import sonardb, sonartoVCF
+from lib import sonardb
+from lib import sonartoVCF as sonartoVCF
 from Bio import SeqIO
 from tempfile import mkstemp
 from collections import defaultdict
