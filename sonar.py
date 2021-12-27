@@ -248,7 +248,7 @@ if __name__ == "__main__":
 
 	# match
 	if args.tool == "match":
-		snr.match(args.profile, args.count)
+		snr.match(args.profile, count=args.count)
 
 	# update
 	if args.tool == "update":

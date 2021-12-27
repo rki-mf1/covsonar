@@ -158,19 +158,19 @@ class sonarActions(object):
 					mol_id = dbm.insert_molecule(ref_id, record['moltype'], record['accession'], record['symbol'], record['description'], i, record['length'], s)
 
 					#### source handling
-					source_id = dbm.insert_element(mol_id, "source", record['source']['accession'], record['source']['symbol'], record['source']['description'], record['source']['start'], record['source']['end'], record['source']['strand'], record['source']['sequence'], parts=record['source']['parts'])
+					source_id = dbm.insert_element(mol_id, "source", record['source']['accession'], record['source']['symbol'], record['source']['description'], record['source']['start'], record['source']['end'], record['source']['strand'], record['source']['sequence'], standard=1, parts=record['source']['parts'])
 					if record['source']['sequence'] != dbm.get_sequence(source_id):
 						sys.exit("genbank error: could not recover sequence of '" + record['source']['accession'] + "' (source)")
 
 					#### gene handling
 					for elem in record['gene']:
-						gene_ids[elem['accession']] = dbm.insert_element(mol_id, "gene", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], elem['strand'], elem['sequence'], parent_id=source_id, parts=elem['parts'])
+						gene_ids[elem['accession']] = dbm.insert_element(mol_id, "gene", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], elem['strand'], elem['sequence'], standard=0, parent_id=source_id, parts=elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(gene_ids[elem['accession']]):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (gene)")
 
 					#### cds handling
 					for elem in record['cds']:
-						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], "", elem['sequence'], gene_ids[elem['gene']], elem['parts'])
+						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], "", elem['sequence'], 0, gene_ids[elem['gene']], elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(cid, translation_table=1):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (cds)")
 	# DATA IMPORT

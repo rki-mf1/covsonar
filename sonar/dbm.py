@@ -238,18 +238,25 @@ class sonarDBManager():
 		return aid
 
 	def insert_molecule(self, reference_id, type, accession, symbol, description, segment, length, standard=0):
+		if symbol.strip() == "":
+			symbol = accession
 		if standard:
-			sql = "UPDATE molecule SET standard = 0 WHERE reference_id = ? AND standard != 0"
-			self.cursor.execute(sql, [reference_id])
+			sql = "UPDATE molecule SET standard = ? WHERE reference_id = ? AND standard != 0"
+			self.cursor.execute(sql, [0, reference_id])
 		sql = "INSERT INTO molecule (id, reference_id, type, accession, symbol, description, segment, length, standard) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);"
 		self.cursor.execute(sql, [None, reference_id, type, accession, symbol, description, segment, length, standard])
 		sql = "SELECT id FROM molecule WHERE accession = ?"
 		mid = self.cursor.execute(sql, [accession]).fetchone()['id']
 		return mid
 
-	def insert_element(self, molecule_id, type, accession, symbol, description, start, end, strand, sequence, parent_id="", parts=None):
-		sql = "INSERT INTO element (id, molecule_id, type, accession, symbol, description, start, end, strand, sequence, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
-		self.cursor.execute(sql, [None, molecule_id, type, accession, symbol, description, start, end, strand, sequence, parent_id])
+	def insert_element(self, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard=0, parent_id="", parts=None):
+		if symbol.strip() == "":
+			symbol = accession
+		if standard:
+			sql = "UPDATE element SET standard = ? WHERE molecule_id = ? AND standard != 0"
+			self.cursor.execute(sql, [0, molecule_id])
+		sql = "INSERT INTO element (id, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+		self.cursor.execute(sql, [None, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard, parent_id])
 		sql = "SELECT id FROM element WHERE accession = ?"
 		mid = self.cursor.execute(sql, [accession]).fetchone()['id']
 		if parts is not None:
@@ -695,16 +702,18 @@ class sonarDBManager():
 		return "SELECT sample.id FROM metadataView WHERE " + " AND ".join(conditions), valueList
 
 	def query_profile(self, *vars, reference_accession=None, molecule_accession=None, element_accession=None):
-		profile_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?(del:\*?[0-9]+(?:-[0-9]+)?\*?|[A-Z]+[0-9]+[A-Z]+)$')
-		snv_regex = re.compile(r'^([A-Z]+)([0-9]+)([A-Z]+)$')
+		iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AGR"), "Y": set("CTY"), "S": set("GCS"), "W": set("ATW"), "K": set("GTK"), "M": set("ACM"), "B": set("CGTB"), "D": set("AGTD"), "H": set("ACTH"), "V": set("ACGV"), "N": set("ACGTRYSWKMBDHVN") }
+		iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O"), "B": set("DNB"), "Z": set("EQZ"), "J": set("ILJ"), "Φ": set("VILFWYMΦ"), "Ω": set("FWYHΩ"), "Ψ": set("VILMΨ"), "π": set("PGASπ"), "ζ": set("STHNQEDKRζ"), "+": set("KRH+"), "-": set("DE-"), "X": set("ARNDCQEGHILKMFPSTWYVUOBZJΦΩΨπζ+-X") }
+		del_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$')
+		snv_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Z]+)$')
 
 		# set default element
 		default_element_id = self.get_annotation(reference_accession, molecule_accession, element_accession, ["\"element.id\""])["element.id"]
 
 		# set variants and generate sql
 		base_sql = "SELECT \"sample.id\" FROM variantView WHERE "
-		intercept_conditions = []
-		intercept_vals = []
+		intersect_conditions = []
+		intersect_vals = []
 		except_conditions = []
 		except_vals = []
 		for var in vars:
@@ -717,9 +726,21 @@ class sonarDBManager():
 			else:
 				negate = False
 
-			match = profile_regex.match(var)
-			if not match:
-				sys.exit("error: " + var + " is not a valid variant definition.")
+			## variant typing
+			if match := snv_regex.match(var):
+				snv = True
+			elif match := del_regex.match(var):
+				snv = False
+			else:
+				sys.exit("input error: " + var + " is not a valid variant definition.")
+
+			## set molecule
+			if match.group(1):
+				c.append("\"molecule.symbol\" = ?")
+				v.append(match.group(1)[:-1])
+			else:
+				c.append("\"molecule.standard\" = ?")
+				v.append(1)
 
 			## set element
 			if match.group(2):
@@ -727,64 +748,88 @@ class sonarDBManager():
 				v.append("protein")
 				c.append("\"element.symbol\" = ?")
 				v.append(match.group(2)[:-1])
+				code = iupac_aa_code
 			else:
-				c.append("\"element.id\" = ?")
-				v.append(default_element_id)
+				c.append("\"element.standard\" = ?")
+				v.append(1)
+				code = iupac_nt_code
 
-			## set variant:
-			### snv
-			if not match.group(3).startswith("del:"):
-				mut = snv_regex.match(match.group(3))
+			## snp and insert handling
+			if snv:
 				c.append("\"variant.start\" = ?")
+				v.append(int(match.group(4))-1)
 				c.append("\"variant.end\" = ?")
+				v.append(int(match.group(4)))
 				c.append("\"variant.ref\" = ?")
-				c.append("\"variant.alt\" = ?")
-				v.extend([int(mut.group(2))-1, int(mut.group(2)), mut.group(1), mut.group(3)])
+				v.append(match.group(3))
 
-			### del
+				### explicit alternate allele
+				if match.group(5).startswith("="):
+					c.append("\"variant.alt\" = ?")
+					v.append(match.group(5)[1:])
+
+				### potentially ambiguous alternate snp
+				elif len(match.group(5)) == 1:
+					l = len(code[match.group(5)])
+					if l == 1:
+						c.append("\"variant.alt\" = ?")
+						v.append(match.group(5))
+					else:
+						c.append("\"variant.alt\" IN (" + ", ".join(['?'] * l) + ")")
+						v.extend(code[match.group(5)])
+
+				### potentially ambiguous alternate insert
+				else:
+					a = ["".join(x) for x in itertools.product(*[code[x] for x in match.group(5)])]
+					l = len(a)
+					if l == 1:
+						c.append("\"variant.alt\" = ?")
+						v.extend(a)
+					else:
+						c.append("\"variant.alt\" IN (" + ", ".join(['?'] * l) + ")")
+						v.extend(a)
+
+			## deletion handling
 			else:
-				coords = match.group(3)[4:]
-				xop = "<=" if coords.startswith("*") else "="
-				yop = ">=" if coords.endswith("*") else "="
-				coords = [int(x) for x in coords.strip("*").split("-")]
-				x = coords[0]-1
-				y = coords[1] if len(coords) == 2 else coords[0]
-				c.append(["\"variant.start\" = ? AND variant.end = ?"])
-				v.extend([x, y])
+				s = match.group(3)
+				e = match.group(4)[1:]
 
-			# deletion handling
-			if match.group(2) == "del":
-				coords = elems[-1][3:].split("-")
-				start = int(coords[0].strip("*"))
-				if coords[0][0] == "*" and start > 0:
-					# TODO: ſrong has tobe with > <
-					c.append("\"variant.start\"= ?")
-					v.append(start-1)
-					c.append("\"variant.alt\" != ?")
-					v.append("")
-				if len(coords) == 2:
-					end = int(coords[1].strip("*"))
-					if coords[0][0] == "*" and start > 0:
-						pass
+				if s.startswith("="):
+					s = s[1:]
+					c.append("\"variant.start\" = ?")
+				else:
+					c.append("\"variant.start\" <= ?")
+
+				if e.startswith("="):
+					e = e[1:]
+					c.append("\"variant.end\" = ?")
+				else:
+					c.append("\"variant.end\" >= ?")
+				v.append(int(s) - 1)
+				v.append(int(e))
+
+				c.append("\"variant.alt\" = ?")
+				v.append(" ")
+
+			## assemble sub-sql
 			if negate:
 				except_conditions.append(base_sql + " AND ".join(c))
 				except_vals.extend(v)
 			else:
-				intercept_conditions.append(base_sql + " AND ".join(c))
-				intercept_vals.extend(v)
+				intersect_conditions.append(base_sql + " AND ".join(c))
+				intersect_vals.extend(v)
 
-		if not intercept_conditions and not except_conditions:
-			return None
-		if not intercept_conditions:
-			intercept_conditions = [base_sql + "1"]
+		# assemble final sql
+		if not intersect_conditions:
+			intersect_conditions = [base_sql + "1"]
 
-		sql = " INTERCEPT ".join(intercept_conditions)
+		sql = " INTERSECT ".join(intersect_conditions)
+
 		if except_conditions:
 			sql += " EXCEPT " + " EXCEPT ".join(except_conditions)
+		return sql, intersect_vals + except_vals
 
-		return sql, intercept_vals + except_vals
-
-	def match(self, profiles, metadata=None, reference_accession=None, molecule_accession=None, element_accession = None):
+	def match(self, *profiles, metadata=None, reference_accession=None, molecule_accession=None, element_accession = None):
 		#sqls for metadata-based filtering
 		msqls = []
 		mvals = []
@@ -798,8 +843,7 @@ class sonarDBManager():
 		psqls = []
 		pvals = []
 		for profile in profiles:
-			sql, vals = self.query_profile(profile, reference_accession=reference_accession)
-		print(sql)
+			sql, vals = self.query_profile(*profile, reference_accession=reference_accession)
 		return self.cursor.execute(sql, vals).fetchall()
 
 	# UPDATE DATA
