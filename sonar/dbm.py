@@ -157,12 +157,12 @@ class sonarDBManager():
 			sql = "SELECT * FROM property"
 			rows = self.cursor.execute(sql).fetchall()
 			self.__properties = {} if not rows else { x['name']: x for x in rows }
-			for pname in self.__properties:
-				if self.__properties[pname]['standard'] is not None:
-					if self.__properties[pname]['datatype'] == 'integer':
-						self.__properties[pname]['standard'] = int(self.__properties['standard'])
-				elif self.__properties[pname]['datatype'] == 'float':
-					self.__properties[pname]['standard'] = float(self.__properties['standard'])
+			#for pname in self.__properties:
+			#	if self.__properties[pname]['standard'] is not None:
+			#		if self.__properties[pname]['datatype'] == 'integer':
+			#			self.__properties[pname]['standard'] = int(self.__properties['standard'])
+			#		elif self.__properties[pname]['datatype'] == 'float':
+			#			self.__properties[pname]['standard'] = float(self.__properties['standard'])
 		return self.__properties
 
 	# SETUP
@@ -187,9 +187,17 @@ class sonarDBManager():
 
 	def add_property(self, name, datatype, querytype, description, standard):
 		if name in self.__illegal_properties:
-			sys.exit("property error: " + name + " is not allowed to be used as property name.")
+			sys.exit("error: " + name + " is not allowed to be used as property name.")
+		if name in self.properties:
+			sys.exit("error: a property named " + name + " already exists in the given database.")
 		sql = "INSERT INTO property (name, datatype, querytype, description, standard) VALUES(?, ?, ?, ?, ?);"
 		self.cursor.execute(sql, [name, datatype, querytype, description, standard])
+		self.__properties = False
+		pid = self.properties[name]['id']
+		sql = "INSERT INTO sample2property (property_id, value_integer, sample_id) SELECT ?, ?, id FROM sample WHERE 1"
+		vals = [pid, standard]
+		self.cursor.execute(sql, vals)
+		return pid
 
 	def add_translation_table(self, translation_table):
 		sql = "SELECT COUNT(*) FROM translation  WHERE id = ?;"

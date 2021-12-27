@@ -49,6 +49,18 @@ def parse_args():
 	parser_add.add_argument('--lab', help="define a common lab for all genomes", type=str, default=None)
 	parser_add.add_argument('--quiet', '-q', help="do not show any output", action="store_true")
 
+	# create the parser for the "newprop" command
+	parser_newprop = subparsers.add_parser('newprop', parents=[general_parser], help='add a new sample property to the database.')
+	parser_newprop.add_argument('--name', metavar="STR", help="unique name of the new property (only alpha-numeric characters and _-. allowed)", type=str, required=True)
+	parser_newprop.add_argument('--descr', metavar="STR", help="description of the new property", type=str, required=True)
+	parser_newprop.add_argument('--dtype', metavar="STR", help="data type of the new property", type=str, choices=['integer', 'float', 'text', 'blob', 'date'], required=True)
+	parser_newprop.add_argument('--qtype', metavar="STR", help="query type of the new property", type=str, choices=['numeric', 'float', 'date', 'string', 'zip'], required=True)
+	parser_newprop.add_argument('--default', metavar="VAR", help="default value of the new property", type=str, required=True)
+
+	# create the parser for the "delprop" command
+	parser_delprop = subparsers.add_parser('delprop', parents=[general_parser], help='delete property within the database.')
+	parser_delprop.add_argument('--name', '-n', metavar="STR", help="name of the property to delete", type=str, required=True)
+
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
 	parser_match.add_argument('--profile', '-p', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=[])
@@ -108,8 +120,6 @@ class sonar():
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 		self.debug = debug
-
-
 
 	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
 		updates = defaultdict(dict)
@@ -249,6 +259,11 @@ if __name__ == "__main__":
 	# match
 	if args.tool == "match":
 		snr.match(args.profile, count=args.count)
+
+	# newprop
+	if args.tool == "newprop":
+		with sonarDBManager(args.db, debug=args.debug) as dbm:
+			dbm.add_property(args.name, args.dtype, args.qtype, args.descr, args.default)
 
 	# update
 	if args.tool == "update":
