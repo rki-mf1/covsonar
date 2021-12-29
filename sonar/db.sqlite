@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS property (
 	datatype VARCHAR NOT NULL,
 	querytype VARCHAR NOT NULL,
 	description VARCHAR NOT NULL,
-	standard INTEGER NOT NULL
+	standard VARCHAR
 );
 
 CREATE TABLE IF NOT EXISTS sample2property (

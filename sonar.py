@@ -55,7 +55,7 @@ def parse_args():
 	parser_newprop.add_argument('--descr', metavar="STR", help="description of the new property", type=str, required=True)
 	parser_newprop.add_argument('--dtype', metavar="STR", help="data type of the new property", type=str, choices=['integer', 'float', 'text', 'blob', 'date'], required=True)
 	parser_newprop.add_argument('--qtype', metavar="STR", help="query type of the new property", type=str, choices=['numeric', 'float', 'date', 'string', 'zip'], required=True)
-	parser_newprop.add_argument('--default', metavar="VAR", help="default value of the new property", type=str, required=True)
+	parser_newprop.add_argument('--default', metavar="VAR", help="default value of the new property (none by default)", type=str, default=None)
 
 	# create the parser for the "delprop" command
 	parser_delprop = subparsers.add_parser('delprop', parents=[general_parser], help='delete property within the database.')
@@ -264,6 +264,23 @@ if __name__ == "__main__":
 	if args.tool == "newprop":
 		with sonarDBManager(args.db, debug=args.debug) as dbm:
 			dbm.add_property(args.name, args.dtype, args.qtype, args.descr, args.default)
+
+	# delprop
+	if args.tool == "delprop":
+		with sonarDBManager(args.db, debug=args.debug) as dbm:
+			if args.name not in dbm.properties:
+				sys.exit("input error: unknown property.")
+			a = dbm.count_property(args.name)
+			b = dbm.count_property(args.name, ignore_standard = True)
+			print("WARNING: There are", a, "samples with content for this property. Amongst those,", b, "samples do not share the default value of this property.")
+			decision = ""
+			while decision not in ("YES", "no"):
+				decision = input("Do you really want to delete this property? [YES/no]: ")
+			if decision == "YES":
+				dbm.delete_property(args.name)
+				print("property deleted.")
+			else:
+				print("property not deleted.")
 
 	# update
 	if args.tool == "update":

@@ -194,9 +194,10 @@ class sonarDBManager():
 		self.cursor.execute(sql, [name, datatype, querytype, description, standard])
 		self.__properties = False
 		pid = self.properties[name]['id']
-		sql = "INSERT INTO sample2property (property_id, value_integer, sample_id) SELECT ?, ?, id FROM sample WHERE 1"
-		vals = [pid, standard]
-		self.cursor.execute(sql, vals)
+		if not standard is None:
+			sql = "INSERT INTO sample2property (property_id, value_integer, sample_id) SELECT ?, ?, id FROM sample WHERE 1"
+			vals = [pid, standard]
+			self.cursor.execute(sql, vals)
 		return pid
 
 	def add_translation_table(self, translation_table):
@@ -234,9 +235,12 @@ class sonarDBManager():
 	def insert_sample(self, sample_name, seqhash):
 		self.insert_sequence(seqhash)
 		sql = "INSERT OR IGNORE INTO sample (name, seqhash) VALUES(?, ?);"
-		self.cursor.execute(sql, [sample_name, seqhash])
+		sid = self.cursor.execute(sql, [sample_name, seqhash]).fetchone()['id']
 		sql = "SELECT id FROM sample WHERE name = ?"
-		return self.cursor.execute(sql, [sample_name]).fetchone()['id']
+		for pname in self.properties:
+			if not self.properties[name]['standard'] is None:
+				self.insert_property(sid, pname, self.properties[name]['standard'])
+		return
 
 	def insert_alignment(self, seqhash, element_id):
 		sql = "INSERT OR IGNORE INTO alignment (id, seqhash, element_id) VALUES(?, ?, ?);"
@@ -288,6 +292,12 @@ class sonarDBManager():
 	def delete_sample(self, sample_name):
 		sql = "DELETE FROM sample WHERE name = ?;"
 		self.cursor.execute(sql, [sample_name])
+
+	def delete_property(self, property_name):
+		sql = "DELETE FROM sample2property WHERE property_id = ?;"
+		self.cursor.execute(sql, [self.properties[property_name]['id']])
+		sql = "DELETE FROM property WHERE name = ?;"
+		self.cursor.execute(sql, [property_name])
 
 	# SELECTING DATA
 
@@ -426,11 +436,15 @@ class sonarDBManager():
 		sql = "SELECT COUNT(DISTINCT seqhash) FROM sample2sequence;"
 		return self.cursor.execute(sql).fetchone()['COUNT(seqhash)']
 
-	def count_property(self, property_name, distinct=False, not_null=True):
+	def count_property(self, property_name, distinct=False, ignore_standard=False):
 		d = "DISTINCT " if distinct else ""
-		n = " WHERE " + self.properties[property_name] + " IS NOT NULL"
-		sql = "SELECT COUNT(" + d + self.properties[property_name] + ") as count FROM sample2property" + n + ";"
-		return self.cursor.execute(sql).fetchone()['count']
+		c = "WHERE property_id = ?"
+		v = [self.properties[property_name]['id']]
+		if ignore_standard and self.properties[property_name]['standard'] is not None:
+			c += " AND value_" + self.properties[property_name]['datatype'] + " != ?"
+			v.append(self.properties[property_name]['standard'])
+		sql = "SELECT COUNT(" + d + " value_" + self.properties[property_name]['datatype'] + ") as count FROM sample2property " + c + ";"
+		return self.cursor.execute(sql, v).fetchone()['count']
 
 	def get_properties(self, sample_name, property_name=None):
 		if property_name:
