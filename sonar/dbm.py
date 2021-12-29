@@ -195,7 +195,7 @@ class sonarDBManager():
 		self.__properties = False
 		pid = self.properties[name]['id']
 		if not standard is None:
-			sql = "INSERT INTO sample2property (property_id, value_integer, sample_id) SELECT ?, ?, id FROM sample WHERE 1"
+			sql = "INSERT INTO sample2property (property_id, value_" + self.properties[name]['datatype'] + ", sample_id) SELECT ?, ?, id FROM sample WHERE 1"
 			vals = [pid, standard]
 			self.cursor.execute(sql, vals)
 		return pid
