@@ -19,7 +19,11 @@ import re
 from tqdm import tqdm
 from multiprocessing import Pool
 
+class arg_namespace(object):
+    pass
+
 def parse_args():
+	user_namespace = arg_namespace()
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
 	subparsers = parser.add_subparsers(help='detect, store, and screen for mutations in SARS-CoV-2 genomic sequences')
 	subparsers.dest = 'tool'
@@ -112,7 +116,21 @@ def parse_args():
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 
-	return parser.parse_args()
+	args = parser.parse_known_args(namespace=user_namespace)
+
+	if user_namespace.tool == "match" and user_namespace.db:
+		with sonarDBManager(args[0].db, readonly = True, debug=args[0].debug) as dbm:
+			for prop in dbm.properties.values():
+				if prop['datatype'] == "integer":
+					t = int
+				elif prop['datatype'] == "float":
+					t = float
+				else:
+					t = str
+				parser_match.add_argument('--' + prop['name'], type=t, nargs = '*')
+
+	#return parser.parse_args()
+	return parser.parse_args(namespace=user_namespace)
 
 class sonar():
 	def __init__(self, db, gff=None, debug=False):
