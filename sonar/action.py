@@ -19,6 +19,8 @@ import itertools
 from contextlib import ExitStack
 from sonar import sonarDBManager, sonarAligner
 import csv
+from tabulate import tabulate
+from textwrap import fill
 
 # CLASS
 class sonarActions(object):
@@ -265,7 +267,41 @@ class sonarActions(object):
 				print(rows)
 
 				self.rows_to_csv(rows, na="*** no match ***", tsv=True)
-
+	# show db infos
+	def show_props(self):
+		with sonarDBManager(self.db, debug=self.debug) as dbm:
+			cols = ["name", "argument", "description", "data type", "query type", "default value"]
+			rows = []
+			if not dbm.properties:
+				print("the database does not conatin any sample property.")
+				exit()
+			for prop in sorted(dbm.properties.keys()):
+				rows.append([])
+				dt = dbm.properties[prop]['datatype'] if dbm.properties[prop]['datatype'] != "float" else "floating point"
+				rows[-1].append(prop)
+				rows[-1].append("--" + prop)
+				rows[-1].append(fill(dbm.properties[prop]['description'], width=25))
+				rows[-1].append(dt)
+				rows[-1].append(dbm.properties[prop]['querytype'])
+				rows[-1].append(dbm.properties[prop]['standard'])
+			print(tabulate(rows, headers=cols, tablefmt='fancy_grid'))
+			print()
+			print("DATE FORMAT")
+			print("dates must comply with the following format: YYYY-MM-DD")
+			print()
+			print("OPERATORS")
+			print("integer, floating point and date data types support the following operators prefixed directly to the respective value without spaces:")
+			print("  > larger than (e.g. >1)")
+			print("  < smaller than (e.g. <1)")
+			print("  >= larger than or equal to (e.g. >=1)")
+			print("  <= smaller than or equal to (e.g. <=1)")
+			print("  != different than (e.g. !=1)")
+			print()
+			print("RANGES")
+			print("integer, floating point and date data types support ranges defined by two values directly connected by a colon (:) with no space between them:")
+			print("  e.g. 1:10 (between 1 and 10)")
+			print("  e.g. 2021-01-01:2021-12-31 (between 1st Jan and 31st Dec of 2021)")
+			print()
 	# output
 	def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
 		if not rows:

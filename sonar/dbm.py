@@ -186,8 +186,8 @@ class sonarDBManager():
 		self.cursor.execute(sql, [translation_table, codon, aa])
 
 	def add_property(self, name, datatype, querytype, description, standard):
-		if name in self.__illegal_properties:
-			sys.exit("error: " + name + " is not allowed to be used as property name.")
+		if not re.match("^[a-zA-Z0-9_]+$"):
+			sys.exit("error: invalid property name (property names can contain only letters, numbers and underscores)")
 		if name in self.properties:
 			sys.exit("error: a property named " + name + " already exists in the given database.")
 		sql = "INSERT INTO property (name, datatype, querytype, description, standard) VALUES(?, ?, ?, ?, ?);"

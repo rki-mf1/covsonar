@@ -55,10 +55,10 @@ def parse_args():
 
 	# create the parser for the "newprop" command
 	parser_newprop = subparsers.add_parser('newprop', parents=[general_parser], help='add a new sample property to the database.')
-	parser_newprop.add_argument('--name', metavar="STR", help="unique name of the new property (only alpha-numeric characters and _-. allowed)", type=str, required=True)
+	parser_newprop.add_argument('--name', metavar="STR", help="unique name of the new property (only alphanumeric characters and _ as only special character)", type=str, required=True)
 	parser_newprop.add_argument('--descr', metavar="STR", help="description of the new property", type=str, required=True)
-	parser_newprop.add_argument('--dtype', metavar="STR", help="data type of the new property", type=str, choices=['integer', 'float', 'text', 'blob', 'date'], required=True)
-	parser_newprop.add_argument('--qtype', metavar="STR", help="query type of the new property", type=str, choices=['numeric', 'float', 'date', 'string', 'zip'], required=True)
+	parser_newprop.add_argument('--dtype', metavar="STR", help="data type of the new property", type=str, choices=['integer', 'float', 'text', 'date'], required=True)
+	parser_newprop.add_argument('--qtype', metavar="STR", help="query type of the new property", type=str, choices=['numeric', 'float', 'date', 'text', 'zip'], required=True)
 	parser_newprop.add_argument('--default', metavar="VAR", help="default value of the new property (none by default)", type=str, default=None)
 
 	# create the parser for the "delprop" command
@@ -110,6 +110,9 @@ def parse_args():
 	parser_info= subparsers.add_parser('info', help='show info')
 	parser_info.add_argument('--db', metavar="DB_DIR", help="sonar database directory (optional)", type=str, default=None)
 
+	# create the parser for the "props" command
+	parser_props= subparsers.add_parser('props', parents=[general_parser], help='show database specific sample properties')
+
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
 
@@ -118,7 +121,7 @@ def parse_args():
 
 	args = parser.parse_known_args(namespace=user_namespace)
 
-	if user_namespace.tool == "match" and user_namespace.db:
+	if user_namespace.tool == "match" and user_namespace.hasattr(db):
 		with sonarDBManager(args[0].db, readonly = True, debug=args[0].debug) as dbm:
 			for prop in dbm.properties.values():
 				if prop['datatype'] == "integer":
@@ -300,6 +303,9 @@ if __name__ == "__main__":
 			else:
 				print("property not deleted.")
 
+	# delprop
+	if args.tool == "props":
+		snr.show_props()
 	# update
 	if args.tool == "update":
 		fields={}
