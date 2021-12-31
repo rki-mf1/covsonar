@@ -53,8 +53,8 @@ def parse_args():
 	parser_add.add_argument('--lab', help="define a common lab for all genomes", type=str, default=None)
 	parser_add.add_argument('--quiet', '-q', help="do not show any output", action="store_true")
 
-	# create the parser for the "newprop" command
-	parser_newprop = subparsers.add_parser('newprop', parents=[general_parser], help='add a new sample property to the database.')
+	# create the parser for the "addprop" command
+	parser_newprop = subparsers.add_parser('addprop', parents=[general_parser], help='add a new sample property to the database.')
 	parser_newprop.add_argument('--name', metavar="STR", help="unique name of the new property (only alphanumeric characters and _ as only special character)", type=str, required=True)
 	parser_newprop.add_argument('--descr', metavar="STR", help="description of the new property", type=str, required=True)
 	parser_newprop.add_argument('--dtype', metavar="STR", help="data type of the new property", type=str, choices=['integer', 'float', 'text', 'date'], required=True)
@@ -282,7 +282,7 @@ if __name__ == "__main__":
 		snr.match(args.profile, count=args.count)
 
 	# newprop
-	if args.tool == "newprop":
+	if args.tool == "addprop":
 		with sonarDBManager(args.db, debug=args.debug) as dbm:
 			dbm.add_property(args.name, args.dtype, args.qtype, args.descr, args.default)
 

@@ -186,7 +186,7 @@ class sonarDBManager():
 		self.cursor.execute(sql, [translation_table, codon, aa])
 
 	def add_property(self, name, datatype, querytype, description, standard):
-		if not re.match("^[a-zA-Z0-9_]+$"):
+		if not re.match("^[a-zA-Z0-9_]+$", name):
 			sys.exit("error: invalid property name (property names can contain only letters, numbers and underscores)")
 		if name in self.properties:
 			sys.exit("error: a property named " + name + " already exists in the given database.")
@@ -235,11 +235,12 @@ class sonarDBManager():
 	def insert_sample(self, sample_name, seqhash):
 		self.insert_sequence(seqhash)
 		sql = "INSERT OR IGNORE INTO sample (name, seqhash) VALUES(?, ?);"
-		sid = self.cursor.execute(sql, [sample_name, seqhash]).fetchone()['id']
+		sid = self.cursor.execute(sql, [sample_name, seqhash])
 		sql = "SELECT id FROM sample WHERE name = ?"
+		sid = self.cursor.execute(sql, [sample_name]).fetchone()['id']
 		for pname in self.properties:
-			if not self.properties[name]['standard'] is None:
-				self.insert_property(sid, pname, self.properties[name]['standard'])
+			if not self.properties[pname]['standard'] is None:
+				self.insert_property(sid, pname, self.properties[pname]['standard'])
 		return
 
 	def insert_alignment(self, seqhash, element_id):
