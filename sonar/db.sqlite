@@ -205,12 +205,12 @@ SELECT
 	property.querytype as "propery.querytype",
 	property.datatype as "property.datatype",
 	property.standard as "property.standard",
-	sample2property.value_integer as "sample2property.value_integer",
-	sample2property.value_float as "sample2property.value_float",
-	sample2property.value_text as "sample2property.value_text",
-	sample2property.value_varchar as "sample2property.value_varchar",
-	sample2property.value_blob as "sample2property.value_blob",
-	sample2property.value_date as "sample2property.value_date"
+	sample2property.value_integer as "value_integer",
+	sample2property.value_float as "value_float",
+	sample2property.value_text as "value_text",
+	sample2property.value_varchar as "value_varchar",
+	sample2property.value_blob as "value_blob",
+	sample2property.value_date as "value_date"
 FROM
 	sample
 LEFT JOIN sample2property ON sample.id = sample2property.sample_id
@@ -260,34 +260,6 @@ LEFT JOIN element ON alignment.element_id = element.id
 LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
 
-CREATE VIEW IF NOT EXISTS variantViewOld
-AS
-SELECT
-	sample.id as "sample.id",
-	sample.name as "sample.name",
-	sample.seqhash as "sample.seqhash",
-	reference.standard as "reference.accession",
-	molecule.accession as "molecule.accession",
-	molecule.symbol as "molecule.symbol",
-	element.accession as "element.accession",
-	element.type as "element.type",
-	alignment.element_id as "element.id",
-	alignment2variant.alignment_id as "a2v.a_id",
-	variant.id as "variant.id",
-	variant.ref as "variant.ref",
-	variant.alt as "variant.alt",
-	variant.start as "variant.start",
-	variant.end as "variant.end",
-	variant.parent_id as "variant.parent_id"
-FROM
-	sample
-LEFT JOIN alignment ON sample.seqhash = alignment.seqhash
-LEFT JOIN element ON alignment.element_id = element.id
-LEFT JOIN molecule ON element.molecule_id = molecule.id
-LEFT JOIN reference ON molecule.reference_id = reference.id
-LEFT JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
-LEFT JOIN variant ON alignment2variant.variant_id = variant.id;
-
 CREATE VIEW IF NOT EXISTS variantView
 AS
 SELECT
@@ -325,21 +297,6 @@ FROM variant
 -- TRIGGER
 --
 
-CREATE TRIGGER property_bu_trigger
-BEFORE UPDATE ON property
-BEGIN
-    SELECT RAISE(FAIL, "properties cannot be updated.");
-END;
-
-CREATE TRIGGER property_bi_trigger
-BEFORE INSERT ON property
-BEGIN
-    SELECT CASE WHEN
-        (SELECT COUNT(*) FROM sample) > 0
-    THEN
-        RAISE(FAIL, "properties can be only added to empty databases.")
-    END;
-END;
 
 --
 -- PRAGMA

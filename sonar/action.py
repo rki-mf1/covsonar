@@ -144,9 +144,9 @@ class sonarActions(object):
 		if default_setup:
 			with sonarDBManager(fname, debug=debug) as dbm:
 				### adding pre-defined sample properties
-				dbm.add_property("accession", "text", "text", "sample accession", "")
-				dbm.add_property("imported", "date", "date", "date sample has been imported to the database", "")
-				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly", "")
+				dbm.add_property("accession", "text", "text", "sample accession")
+				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
+				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
 
 				### adding built-in reference (unsegmented genome)
 				records = [x for x in sonarActions.iter_genbank(sonarActions.get_module_base("ref.gb"))]
@@ -258,9 +258,9 @@ class sonarActions(object):
 		return str(seq).strip().upper().replace("U", "T")
 
 	# matching
-	def match(self, profiles, count=None):
+	def match(self, profiles=[], propdict={}, count=None):
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			rows = dbm.match(*profiles)
+			rows = dbm.match(*profiles, properties=propdict)
 			if count:
 				print(len(rows))
 			else:

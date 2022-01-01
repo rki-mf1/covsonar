@@ -118,10 +118,8 @@ def parse_args():
 
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
-
 	args = parser.parse_known_args(namespace=user_namespace)
-
-	if user_namespace.tool == "match" and user_namespace.hasattr(db):
+	if user_namespace.tool == "match" and hasattr(args[0], 'db'):
 		with sonarDBManager(args[0].db, readonly = True, debug=args[0].debug) as dbm:
 			for prop in dbm.properties.values():
 				if prop['datatype'] == "integer":
@@ -130,7 +128,7 @@ def parse_args():
 					t = float
 				else:
 					t = str
-				parser_match.add_argument('--' + prop['name'], type=t, nargs = '*')
+				parser_match.add_argument('--' + prop['name'], type=t, nargs = '+', default=argparse.SUPPRESS)
 
 	#return parser.parse_args()
 	return parser.parse_args(namespace=user_namespace)
@@ -279,7 +277,12 @@ if __name__ == "__main__":
 
 	# match
 	if args.tool == "match":
-		snr.match(args.profile, count=args.count)
+		with sonarDBManager(args.db, readonly=True) as dbm:
+			props = {}
+			for pname in dbm.properties:
+				if hasattr(args, pname):
+					props[pname] = getattr(args, pname)
+		snr.match(args.profile, props, count=args.count)
 
 	# newprop
 	if args.tool == "addprop":

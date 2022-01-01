@@ -185,7 +185,7 @@ class sonarDBManager():
 		sql = "INSERT OR IGNORE INTO translation (id, codon, aa) VALUES(?, ?, ?);"
 		self.cursor.execute(sql, [translation_table, codon, aa])
 
-	def add_property(self, name, datatype, querytype, description, standard):
+	def add_property(self, name, datatype, querytype, description, standard=None):
 		if not re.match("^[a-zA-Z0-9_]+$", name):
 			sys.exit("error: invalid property name (property names can contain only letters, numbers and underscores)")
 		if name in self.properties:
@@ -548,8 +548,13 @@ class sonarDBManager():
 		errmsg =  "query error: numeric value or range expected for field " + field + "(got: "
 		data = defaultdict(set)
 
+		intersect_sqls = []
+		intersect_vals = []
+		except_sqls = []
+
 		for val in vals:
 			val = str(val).strip()
+
 			# single value
 			if not ":" in val:
 				match = op1.match(val)
@@ -617,8 +622,10 @@ class sonarDBManager():
 		defaultop = "="
 		op1 = re.compile(r'^(\^*)((?:>|>=|<|<=|!=|=)?)([0-9]{4}-[0-9]{2}-[0-9]{2})$')
 		op2 = re.compile(r'^(\^*)([0-9]{4}-[0-9]{2}-[0-9]{2}):([0-9]{4}-[0-9]{2}-[0-9]{2})$')
-		errmsg =  "query error: date or date range expected for field " + field + "(got: "
+		errmsg =  "query error: date or date range expected for field " + field + " (got: "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		for val in vals:
 			val = str(val).strip()
@@ -697,32 +704,36 @@ class sonarDBManager():
 	def query_metadata(self, name, *vals):
 		conditions = []
 		valueList = []
+		targetfield = "value_" + self.properties[name]['datatype']
 
 		# query dates
 		if self.properties[name]['querytype'] == "date":
-			a,b = self.query_dates(name, vals)
+			a, b = self.query_dates(targetfield, *vals)
 			conditions.append(a)
-			valueList.append(b)
+			valueList.extend(b)
 
 		# query numeric
 		elif self.properties[name]['querytype'] == "numeric":
-			a,b = self.query_numeric(name, vals)
+			a,b = self.query_numeric(targetfield, vals)
 			conditions.append(a)
-			valueList.append(b)
+			valueList.extend(b)
 
 		# query text
 		elif self.properties[name]['querytype'] == "string":
-			a,b = self.query_string(name, vals)
+			a,b = self.query_string(targetfield, vals)
 			conditions.append(a)
-			valueList.append(b)
+			valueList.extend(b)
 
 		# query zip
 		elif self.properties[name]['querytype'] == "zip":
-			a,b = self.query_zip(name, vals)
+			a,b = self.query_zip(targetfield, vals)
 			conditions.append(a)
-			valueList.append(b)
+			valueList.extend(b)
 
-		return "SELECT sample.id FROM metadataView WHERE " + " AND ".join(conditions), valueList
+		else:
+			sys.exit("error: unknown query type.")
+
+		return "SELECT \"sample.id\" FROM propertyView WHERE " + " AND ".join(conditions), valueList
 
 	def query_profile(self, *vars, reference_accession=None, molecule_accession=None, element_accession=None):
 		iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AGR"), "Y": set("CTY"), "S": set("GCS"), "W": set("ATW"), "K": set("GTK"), "M": set("ACM"), "B": set("CGTB"), "D": set("AGTD"), "H": set("ACTH"), "V": set("ACGV"), "N": set("ACGTRYSWKMBDHVN") }
@@ -735,9 +746,9 @@ class sonarDBManager():
 
 		# set variants and generate sql
 		base_sql = "SELECT \"sample.id\" FROM variantView WHERE "
-		intersect_conditions = []
+		intersect_sqls = []
 		intersect_vals = []
-		except_conditions = []
+		except_sqls = []
 		except_vals = []
 		for var in vars:
 			c = []
@@ -836,38 +847,60 @@ class sonarDBManager():
 
 			## assemble sub-sql
 			if negate:
-				except_conditions.append(base_sql + " AND ".join(c))
+				except_sqls.append(base_sql + " AND ".join(c))
 				except_vals.extend(v)
 			else:
-				intersect_conditions.append(base_sql + " AND ".join(c))
+				intersect_sqls.append(base_sql + " AND ".join(c))
 				intersect_vals.extend(v)
 
 		# assemble final sql
-		if not intersect_conditions:
-			intersect_conditions = [base_sql + "1"]
+		if not intersect_sqls:
+			intersect_sqls = [base_sql + "1"]
 
-		sql = " INTERSECT ".join(intersect_conditions)
+		sql = " INTERSECT ".join(intersect_sqls)
 
-		if except_conditions:
-			sql += " EXCEPT " + " EXCEPT ".join(except_conditions)
+		if except_sqls:
+			sql += " EXCEPT " + " EXCEPT ".join(except_sqls)
+
 		return sql, intersect_vals + except_vals
 
-	def match(self, *profiles, metadata=None, reference_accession=None, molecule_accession=None, element_accession = None):
-		#sqls for metadata-based filtering
-		msqls = []
-		mvals = []
-		if metadata:
-			for mname, vals in metadata.items():
-				msql, mval = self.query_metadata(mname, *vals)
-				msqls.append(msql)
-				mvals.extend(mval)
+	def match(self, *profiles, properties=None, reference_accession=None, molecule_accession=None, element_accession = None):
+		#collecting sqls for metadata-based filtering
+		property_sqls = []
+		property_vals = []
+		if properties:
+			for pname, vals in properties.items():
+				sql, val = self.query_metadata(pname, *vals)
+				property_sqls.append(sql)
+				property_vals.extend(val)
 
-		#sqls for genomic profile based filtering
-		psqls = []
-		pvals = []
+		property_sqls = " INTERSECT ".join(property_sqls)
+		#collecting sqls for genomic profile based filtering
+		profile_sqls = []
+		profile_vals = []
 		for profile in profiles:
-			sql, vals = self.query_profile(*profile, reference_accession=reference_accession)
-		return self.cursor.execute(sql, vals).fetchall()
+			sql, val = self.query_profile(*profile, reference_accession=reference_accession)
+			profile_sqls.append(sql)
+			profile_vals.extend(val)
+
+		if len(profiles) == 1:
+			profile_sqls = profile_sqls[0]
+		elif len(profiles) > 1:
+			profile_sqls = " UNION ".join(["SELECT * FROM (" + x + ")" for x in profile_sqls])
+		else:
+			profile_sqls = ""
+
+		# assembling final compound query
+		if property_sqls and profile_sqls:
+			if len(profiles) > 1:
+				sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
+			else:
+				sql = property_sqls + " INTERSECT " + profile_sqls
+		else:
+			sql = property_sqls + profile_sqls
+
+		print(sql)
+		return self.cursor.execute(sql, property_vals + profile_vals).fetchall()
 
 	# UPDATE DATA
 
