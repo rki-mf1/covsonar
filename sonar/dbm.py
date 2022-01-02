@@ -741,9 +741,6 @@ class sonarDBManager():
 		del_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$')
 		snv_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Z]+)$')
 
-		# set default element
-		default_element_id = self.get_annotation(reference_accession, molecule_accession, element_accession, ["\"element.id\""])["element.id"]
-
 		# set variants and generate sql
 		base_sql = "SELECT \"sample.id\" FROM variantView WHERE "
 		intersect_sqls = []
