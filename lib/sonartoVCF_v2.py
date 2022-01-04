@@ -108,7 +108,7 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
     # iterate over each group
     final_df = pd.DataFrame()
     final_df.index = np.arange(1, 29904)
-    final_df['#CHROM'] = 'NC_045512.2'
+    final_df['#CHROM'] = refdescr.split()[0].replace(">", "")
     final_df['POS'] = np.arange(1, 29904)
     final_df['ID'] = '.'
     final_df['REF'] = '.'
@@ -175,7 +175,7 @@ def parallelize_dataframe(df, tmp_dirname, num_cores,refdescr, func):
 	# finish all tasks
     pool.close()
     pool.join()
-    print("Tmp result: ", full_paht_list)
+    #print("Tmp result: ", full_paht_list)
     return full_paht_list
 
 def export2VCF(
@@ -187,6 +187,7 @@ def export2VCF(
     refdescr="No ref is provided"
     ):
     print('----- You are using sonartoVCF_V2 --------')
+    print('WARNING: the function is still experimental/not fully implemented.')
     print('Prepare export2VCF workspace for',num_cores,'cpu')
     with ExitStack() as stack:
         dbm = stack.enter_context(sonarDBManager(db_path))
@@ -222,12 +223,12 @@ def export2VCF(
             # vcf_path=os.path.join(tmp_dirname,)
             print('Return:', len(rows), ' records')
             # create fasta_id
-            chrom_id = refdescr.split()[0].replace(">", "")
-            rows['CHROM'] = chrom_id
-            rows['QUAL'] = '.'
-            rows['FILTER'] = '.'
-            rows['INFO'] = '.'
-            rows['FORMAT'] = 'GT'
+  
+            #rows['CHROM'] = chrom_id
+            #rows['QUAL'] = '.'
+            #rows['FILTER'] = '.'
+            #rows['INFO'] = '.'
+            #rows['FORMAT'] = 'GT'
             # POS or start position: The reference position, with the 1st base is position 1 not 0 , but in covsonar use 0 as the 1st position
             # so we should + 1
             # http://samtools.github.io/hts-specs/VCFv4.2.pdf

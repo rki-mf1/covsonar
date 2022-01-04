@@ -11,6 +11,7 @@ import gzip
 import lzma
 from lib import sonardb
 from lib import sonartoVCF as sonartoVCF
+from lib import sonartoVCF_v2 as sonartoVCFV2
 from Bio import SeqIO
 from tempfile import mkstemp
 from collections import defaultdict
@@ -91,6 +92,7 @@ def parse_args():
 	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
 	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
 	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
+	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
 	# create the parser for the "update" command
 	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
 	parser_update_input = parser_update.add_mutually_exclusive_group()
@@ -343,10 +345,11 @@ class sonar():
 	def restore(self, acc):
 		return self.db.restore_genome_using_dnavars(acc)
 
-	def var2vcf(self, acc, date, output, cpu):
-
-		sonartoVCF.export2VCF(self.dbfile,acc, date, output, cpu,self.db.refdescr)
-		return 
+	def var2vcf(self, acc, date, output, cpu, betaV2):
+		if betaV2:
+			return	sonartoVCFV2.export2VCF(self.dbfile,acc, date, output, cpu,self.db.refdescr)
+		else:
+			return	sonartoVCF.export2VCF(self.dbfile,acc, date, output, cpu,self.db.refdescr)
 
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
@@ -543,7 +546,7 @@ if __name__ == "__main__":
 				for line in handle:
 					args.acc.add(line.strip())
 		
-		snr.var2vcf(args.acc, args.date, args.output, args.cpus)
+		snr.var2vcf(args.acc, args.date, args.output, args.cpus, args.betaV2)
 		end = time.time()
 		hours, rem = divmod(end-start, 3600)
 		minutes, seconds = divmod(rem, 60)

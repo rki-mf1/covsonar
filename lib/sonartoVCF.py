@@ -126,6 +126,7 @@ def export2VCF(
     num_cores,
     refdescr="No ref is provided"
     ):
+    print('----- You are using sonartoVCF_V1 --------')
     print('Prepare export2VCF workspace for',num_cores,'cpu')
     with ExitStack() as stack:
         dbm = stack.enter_context(sonarDBManager(db_path))
