@@ -154,13 +154,12 @@ def export2VCF(
         print('Start Bigquery...')
         rows = pd.read_sql(sql,
                    dbm.connection,params=where_vals)
-      
+        print('Return:', len(rows), ' records')
         track_vcf = []
         count = 0
         if not rows.empty:
             tmp_dirname = mkdtemp( prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
-            print('Return:', len(rows), ' records')
             # create fasta_id
             chrom_id = refdescr.split()[0].replace(">", "")
             rows['CHROM'] = chrom_id
@@ -190,7 +189,7 @@ def export2VCF(
             if os.path.isdir(tmp_dirname):
                 shutil.rmtree(tmp_dirname)
 
-    print("Finish! compress final result (gz):")
+            print("Finish! compress final result (gz):")
                 
 def divide_merge_vcf(list_track_vcf, global_output, num_cores):
     chunk=500

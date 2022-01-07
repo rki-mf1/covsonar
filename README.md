@@ -273,11 +273,14 @@ covSonar can export accession records in a VCF format using the `var2vcf` comman
 path/to/covsonar/sonar.py var2vcf --db mydb -o merge.vcf
 # Just like the option in the match command, we can use  --file, --acc and --date to enable specific accession export.
 path/to/covsonar/sonar.py var2vcf --db mydb -f acc.10.txt -o merge.vcf
-# To speed up the query, we can use --cpus tag to aid us.
+# To speed up the query, we can use --cpus tag to aid a query performance.
 path/to/covsonar/sonar.py var2vcf --db mydb --date 2021-08-01:2021-08-10 -o merge.vcf --cpus 20
-```
 
-:warning:**Note:** The current performance of this feature still does not perform well when trying to export many accessions (for example, export more than 20,000 accessions). However, we are constantly working on improving the performance. :monkey: 
+# Another solution, we can use --betaV2 tag (x3-5 times faster), 
+# The current version is under development, so if you found any bug please report it to us.
+path/to/covsonar/sonar.py var2vcf --db mydb --date 2021-08-01:2021-08-10 -o merge.vcf --cpus 20 --betaV2
+```
+:warning:**Note:** The current performance of this feature still does not perform well (e.g., memory usage and runtime) when trying to export many accessions. However, we are constantly working on improving the performance. :monkey: 
 
 ## 4 How to contribute
 
