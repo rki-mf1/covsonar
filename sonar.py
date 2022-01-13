@@ -10,6 +10,8 @@ import argparse
 import gzip
 import lzma
 from lib import sonardb
+from lib import sonartoVCF as sonartoVCF
+from lib import sonartoVCF_v2 as sonartoVCFV2
 from Bio import SeqIO
 from tempfile import mkstemp
 from collections import defaultdict
@@ -53,6 +55,8 @@ def parse_args():
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
 	parser_match.add_argument('--include', '-i', metavar="STR", help="match genomes sharing the given mutation profile", type=str, action='append', nargs="+", default=[])
 	parser_match.add_argument('--exclude', '-e', metavar="STR", help="match genomes not containing the mutation profile", type=str, action='append', nargs="+", default=[])
+	parser_match.add_argument('--with-sublineage',  help="recursively get all sublineages from a given lineage (--lineage) (only child) ",action="store_true")
+	# parser_match.add_argument('--recursion',  help="recursively get all sublineages of a given lineage (--lineage). this will work only if '--with-sublineage' is used",action="store_true")
 	parser_match.add_argument('--lineage', metavar="STR", help="match genomes of the given pangolin lineage(s) only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
@@ -82,6 +86,13 @@ def parse_args():
 	parser_restore.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be restored", type=str, default=[], nargs = "+")
 	parser_restore.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be restored (one accession per line)", type=str, default=None)
 
+	#create the parser for the "Var2Vcf" command
+	parser_var2vcf = subparsers.add_parser('var2vcf', parents=[general_parser], help='export variants from the database to vcf format.')
+	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
+	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
+	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
+	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
+	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
 	# create the parser for the "update" command
 	parser_update = subparsers.add_parser('update', parents=[general_parser], help='add or update meta information.')
 	parser_update_input = parser_update.add_mutually_exclusive_group()
@@ -274,8 +285,8 @@ class sonar():
 			g_after = dbm.count_genomes()
 		print(str(g_before-g_after) + " genomic entrie(s) deleted.")
 
-	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
+	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, with_sublineage, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
 			print(rows)
 		else:
@@ -333,6 +344,12 @@ class sonar():
 
 	def restore(self, acc):
 		return self.db.restore_genome_using_dnavars(acc)
+
+	def var2vcf(self, acc, date, output, cpu, betaV2):
+		if betaV2:
+			return	sonartoVCFV2.export2VCF(self.dbfile,acc, date, output, cpu,self.db.refdescr)
+		else:
+			return	sonartoVCF.export2VCF(self.dbfile,acc, date, output, cpu,self.db.refdescr)
 
 	def view(self, acc):
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
@@ -480,7 +497,7 @@ if __name__ == "__main__":
 		if args.material:
 			args.material = [x.upper() for x in args.material]
 
-		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
+		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, with_sublineage=args.with_sublineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
 
 	# update
 	if args.tool == "update":
@@ -509,6 +526,31 @@ if __name__ == "__main__":
 			sys.exit("input error: nothing to restore.")
 		for acc in filter(None, args.acc):
 			print("\n".join(snr.restore(acc)))
+
+	# Var2Vcf (export variants to  VCF)
+	if args.tool == "var2vcf":
+		import time
+		start = time.time()
+
+		if args.date:
+			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
+			for d in args.date:
+				if not regex.match(d):
+					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
+
+		args.acc = set([x.strip() for x in args.acc])
+		if args.file:
+			if not os.path.isfile(args.file):
+				sys.exit("input error: file " + args.file + " does not exist.")
+			with snr.open_file(args.file, compressed='auto') as handle:
+				for line in handle:
+					args.acc.add(line.strip())
+		
+		snr.var2vcf(args.acc, args.date, args.output, args.cpus, args.betaV2)
+		end = time.time()
+		hours, rem = divmod(end-start, 3600)
+		minutes, seconds = divmod(rem, 60)
+		print("Runtime (H:M:S): {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
 
 	# view
 	if args.tool == "view":
