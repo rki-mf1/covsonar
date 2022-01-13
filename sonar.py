@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 import os
 import sys
 import csv
@@ -61,6 +61,7 @@ def parse_args():
 	parser_match.add_argument('--acc', metavar="STR", help="match specific genomes defined by acession(s) only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--zip', metavar="INT", help="only match genomes of a given region(s) defined by zip code(s)", type=str,  nargs="+", default=[])
 	parser_match.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
+	parser_match.add_argument('--submission_date', help="only match genomes at a certain submission date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
 	parser_match.add_argument('--lab', metavar="STR", help="match genomes of the given lab only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--source', metavar="STR", help="match genomes of the given data source only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--collection', metavar="STR", help="match genomes of the given data collection only", type=str, nargs="+", default=[])
@@ -193,7 +194,6 @@ class sonar():
 							continue
 						seqhash = self.db.hash(seq)
 						genome_data = dbm.get_genomes(acc)
-
 						if updates:
 							to_update.add(acc)
 
@@ -285,14 +285,14 @@ class sonar():
 			g_after = dbm.count_genomes()
 		print(str(g_before-g_after) + " genomic entrie(s) deleted.")
 
-	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, with_sublineage, zips, dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
+	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, with_sublineage, zips, dates, submission_dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, submission_dates=submission_dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
 			print(rows)
 		else:
 			self.rows_to_csv(rows, na="*** no match ***", tsv=tsv)
 
-	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
+	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, submission_dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
 		updates = defaultdict(dict)
 		if pangolin:
 			with self.open_file(fname, compressed=compressed, encoding='utf-8-sig') as handle:
@@ -311,6 +311,8 @@ class sonar():
 						updates[acc]['zip'] = line[zipCol]
 					if dateCol and line[dateCol]:
 						updates[acc]['date'] = line[dateCol]
+					if submission_dateCol and line[submission_dateCol]:
+						updates[acc]['submission_date'] = line[submission_dateCol]
 					if gisaidCol and line[gisaidCol]:
 						updates[acc]['gisaid'] = line[gisaidCol]
 					if enaCol and line[enaCol]:
@@ -376,7 +378,7 @@ class sonar():
 			print("earliest sampling date:    ", dbm.get_earliest_date())
 			print("latest sampling date:      ", dbm.get_latest_date())
 			print("metadata:          ")
-			fields = sorted(['lab', 'source', 'collection', 'technology', 'platform', 'chemistry', 'software', 'software_version', 'material', 'ct', 'gisaid', 'ena', 'lineage', 'zip', 'date'])
+			fields = sorted(['lab', 'source', 'collection', 'technology', 'platform', 'chemistry', 'software', 'software_version', 'material', 'ct', 'gisaid', 'ena', 'lineage', 'zip', 'date', 'submission_date'])
 			maxlen = max([len(x) for x in fields])
 			for field in fields:
 				if g == 0:
@@ -407,7 +409,7 @@ class sonar():
 		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol", "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
+	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "submission_date": "submission_dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol", "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
@@ -497,7 +499,7 @@ if __name__ == "__main__":
 		if args.material:
 			args.material = [x.upper() for x in args.material]
 
-		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, with_sublineage=args.with_sublineage, zips=args.zip, dates=args.date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
+		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, with_sublineage=args.with_sublineage, zips=args.zip, dates=args.date, submission_dates=args.submission_date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
 
 	# update
 	if args.tool == "update":
