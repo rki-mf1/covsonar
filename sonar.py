@@ -4,20 +4,23 @@
 
 VERSION = "1.1.3"
 import os
+from posixpath import split
 import sys
 import csv
 import argparse
 import gzip
 import lzma
-from lib import sonardb
+from lib import sonardb, Lineages_UPDATER
 from lib import sonartoVCF as sonartoVCF
 from lib import sonartoVCF_v2 as sonartoVCFV2
 from Bio import SeqIO
-from tempfile import mkstemp
+from tempfile import mkstemp, mkdtemp
 from collections import defaultdict
 import re
 from tqdm import tqdm
 from multiprocessing import Pool
+import shutil
+
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -109,6 +112,9 @@ def parse_args():
 
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
+
+	#Update lineage information command
+	parser_update_anno = subparsers.add_parser('update-lineage-info', help='Update lineage information (e.g., lib/linage.all.tsv).')
 
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
@@ -429,6 +435,15 @@ if __name__ == "__main__":
 		debug = True
 	else:
 		debug = False
+	# update-lineage-info
+	if args.tool == "update-lineage-info":
+		tmp_dirname = mkdtemp( prefix=".tmp_")
+		alias_key, lineage = Lineages_UPDATER.download_source(tmp_dirname)
+		Lineages_UPDATER.process_lineage(alias_key,lineage,'lib/lineage.all.tsv')
+		if os.path.isdir(tmp_dirname):
+			shutil.rmtree(tmp_dirname)
+		sys.exit('Complete!')
+
 
 	if not args.db is None and args.tool != "add" and not os.path.isfile(args.db):
 		sys.exit("input error: database does not exist.")
@@ -469,6 +484,8 @@ if __name__ == "__main__":
 		if args.date:
 			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
 			for d in args.date:
+				if "^" in d[0]:
+					d = d.split("^")[1]
 				if not regex.match(d):
 					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
 		if args.no_frameshifts:
@@ -569,3 +586,4 @@ if __name__ == "__main__":
 	# optimize
 	if args.tool == "optimize":
 		sonardb.sonarDBManager.optimize(args.db)
+

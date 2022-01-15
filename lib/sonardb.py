@@ -1650,13 +1650,12 @@ class sonarDBManager():
 		if include_dates:
 			where_clause.append(self.get_metadata_date_condition("date", *include_dates))
 		if exclude_dates:
-			where_clause.extend(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
-
+			where_clause.append(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
 		## submission_date
 		if include_submission_dates:
 			where_clause.append(self.get_metadata_date_condition("submission_date", *include_submission_dates))
 		if exclude_submission_dates:
-			where_clause.extend(self.get_metadata_date_condition("submission_date", *exclude_submission_dates, negate=True))
+			where_clause.append(self.get_metadata_date_condition("submission_date", *exclude_submission_dates, negate=True))
 
 		## profiles
 		if include_profiles:
