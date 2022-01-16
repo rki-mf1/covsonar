@@ -220,7 +220,11 @@ If we want to query all sublineages, covSonar offers `--with-sublineage` tag alo
 # This query will return result from ['B.1.617.2', 'AY.1', 'AY.2', ..., , 'AY.129', 'AY.130']
 path/to/covsonar/sonar.py match -i S:N501Y --lineage  B.1.617.2 --with-sublineage --db mydb > out.csv
 ```
-
+**Note:** covSonar offers lineage-update function. Run `update-lineage-info` flag, it will download the latest version of lineages from https://github.com/cov-lineages/pango-designation/ and install to `lib/lineage.all.tsv`
+```sh
+# example command
+path/to/covsonar/sonar.py update-lineage-info
+```
 ### 3.4 Restore genome sequences from the database
 
 Genome sequences can be restored from the database based on their accessions.
