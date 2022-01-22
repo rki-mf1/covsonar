@@ -32,7 +32,7 @@ import pandas as pd
 
 
 # COMPATIBILITY
-SUPPORTED_DB_VERSION = 3
+SUPPORTED_DB_VERSION = 4
 
 class sonarTimeout():
 	"""
@@ -1301,8 +1301,39 @@ class sonarDBManager():
 	def check_db_compatibility(self):
 		dbver = self.get_db_version()
 		if dbver != SUPPORTED_DB_VERSION:
-			sys.exit("compatibility error: the given database is not compatible with this version of sonar (database version: " + str(dbver) + "; supported database version: " + str(SUPPORTED_DB_VERSION) +")")
+			sys.exit("Compatibility error: the given database is not compatible with this version of sonar (Current database version: " + str(dbver) + "; Supported database version: " + str(SUPPORTED_DB_VERSION) +") \nPlease run 'sonar.py  db-upgrade' to upgrade database")
+	
+	@staticmethod
+	def upgrade_db(dbfile):
+		try:
+			with sqlite3.connect(dbfile) as con:
+				cur = con.cursor()
+				current_version= cur.execute('pragma user_version').fetchone()[0]
 
+			print('Current version:', current_version, ' Upgrade to:', SUPPORTED_DB_VERSION)
+			uri = "file:" + urlquote(dbfile)
+			print('Perform the Upgrade:',uri)
+			while(current_version < SUPPORTED_DB_VERSION):
+				next_version = current_version + 1
+				with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "migrate/"+str(next_version)+".sql"), 'r') as handle:
+					sql = handle.read()
+				with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
+					con.executescript(sql)
+				
+				current_version = next_version
+
+		except sqlite3.Error as er:
+			con.executescript('ROLLBACK')
+			raise er
+		finally:
+			print('Database now version:', current_version)
+			if(current_version==SUPPORTED_DB_VERSION):
+				print("Success: Database upgrade was successfully completed")
+			else:
+				print("Error: Upgrade was not completed")
+
+
+		
 	# INSERTING DATA
 
 	def insert_genome(self, acc, descr, seqhash):
@@ -2811,7 +2842,7 @@ class sonarDB(object):
 		# adding conditions of profiles to exclude to where clause
 		if exclude_profiles:
 			exclude_profiles = [ self.make_profile_explicit(x) for x in exclude_profiles ]
-
+		# print(include_profiles)
 		# adding accession, lineage, zips, and dates based conditions
 		include_acc = [x for x in accessions if not x.startswith("^")]
 		exclude_acc = [x[1:] for x in accessions if x.startswith("^")]

@@ -113,6 +113,9 @@ def parse_args():
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
 
+		#create the parser for the "optimize" command
+	parser_opt = subparsers.add_parser('db-upgrade', parents=[general_parser], help='Upgrade the database to the latest version.')
+
 	#Update lineage information command
 	parser_update_anno = subparsers.add_parser('update-lineage-info', help='Update lineage information (e.g., lib/linage.all.tsv).')
 
@@ -451,8 +454,13 @@ if __name__ == "__main__":
 	snr = sonar(args.db, debug=debug)
 
 	if not args.db is None:
-		with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
-			dbm.check_db_compatibility()
+		# if Upgrade  
+		if args.tool == "db-upgrade":
+			input("Warning: Backup db file before upgrading, Press Enter to continue...")
+			sonardb.sonarDBManager.upgrade_db(args.db)
+		else:
+			with sonardb.sonarDBManager(args.db, readonly=True) as dbm:
+				dbm.check_db_compatibility()
 
 	# add
 	if args.tool == "add":
@@ -582,8 +590,6 @@ if __name__ == "__main__":
 			print()
 			snr.show_db_info()
 
-
 	# optimize
 	if args.tool == "optimize":
 		sonardb.sonarDBManager.optimize(args.db)
-
