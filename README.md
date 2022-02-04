@@ -5,7 +5,7 @@
 
 covSonar is a database-driven system for handling genomic sequences of SARS-CoV-2 and screening genomic profiles.
 
-<img src="https://img.shields.io/badge/covSonar-1.1.2-pink" />
+<img src="https://img.shields.io/badge/covSonar-1.1.3-pink" />
 
 ## 1. Prerequisites
 
@@ -48,6 +48,8 @@ In covSonar there are several tools that can be called via subcommands.
 | restore    | to restore genome sequence(s) from the database                     |
 | info       | show detailed informations about the used sonarversion and database |
 | optimize   | optimize the given database                                         |
+| db-upgrade | upgrade the database to the latest version.                         |
+| update-lineage-info   |  update lineage information (e.g., lib/linage.all.tsv).  |
 
 Each tool provides a help page that can be accessed with the `-h` option.
 
@@ -122,6 +124,12 @@ path/to/covsonar/sonar.py update --pangolin pangolin.csv --db mydb
 path/to/covsonar/sonar.py update --csv custom.csv --fields accession=acc zip=zip_codes date=sampling --db mydb
 ```
 
+*More add-on feild to support custom scenario 
+
+| expression                   | description                                                                                                |
+|------------------------------|------------------------------------------------------------------------------------------------------------|
+| submission_date=_colname_    | This one can be used when the sample is submitted for processing or prcoessing date after sampling date.   | 
+
 
 ### 3.3 Query genome sequences based on profiles 
 
@@ -143,6 +151,7 @@ To filter genomes based on metadata specific options can be used (see table belo
 | --lineage           | one or more pangolin lineages (e.g. B.1.1.7)                          |      |
 | --zip               | one or more zip codes (e.g. 10627)                                    | zip codes are dynamically extended to the right side, e.g. 033 matches to all zip codes starting with 033|
 | --date              | one or more dates or date ranges (e.g. 2021-01-01)                    | single dates are formatted as YYYY-MM-DD while date ranges can be defined by YYYY-MM-DD:YY-MM-DD (from:to) |
+| --submission_date   | one or more dates or date ranges (e.g. 2021-01-01)                    | single dates are formatted as YYYY-MM-DD while date ranges can be defined by YYYY-MM-DD:YY-MM-DD (from:to) |
 | --lab               | one or more labs (e.g. L1)                                            |      |
 | --source            | one or more data sources (e.g. DESH)                                  |      |
 | --collection        | one or more data collections (e.g. RANDOM)                            |      |
@@ -220,7 +229,11 @@ If we want to query all sublineages, covSonar offers `--with-sublineage` tag alo
 # This query will return result from ['B.1.617.2', 'AY.1', 'AY.2', ..., , 'AY.129', 'AY.130']
 path/to/covsonar/sonar.py match -i S:N501Y --lineage  B.1.617.2 --with-sublineage --db mydb > out.csv
 ```
-
+**Note:** covSonar offers lineage-update function. Run `update-lineage-info` flag, it will download the latest version of lineages from https://github.com/cov-lineages/pango-designation/ and install in `lib/lineage.all.tsv`
+```sh
+# example command
+path/to/covsonar/sonar.py update-lineage-info
+```
 ### 3.4 Restore genome sequences from the database
 
 Genome sequences can be restored from the database based on their accessions.
@@ -314,5 +327,32 @@ export SQLITE_TMPDIR="."
 ```
 
 After executing this command, optimizing your database should work.
+
+**Q:** covSonar returns the error;
+
+```bash
+Compatibility error: the given database is not compatible with this version of sonar (Current database version: XXX; Supported database version: XXX)
+Please run 'sonar.py  db-upgrade' to upgrade database
+```
+
+**A:** This happens, when you use the newest version of covSonar with old database version.
+
+Please use our database upgrade assistant to solve the problem. 
+```bash 
+# RUN 
+python sonar.py db-upgrade --db mydb.db
+
+# Output
+
+Warning: Backup db file before upgrading, Press Enter to continue...
+
+## press Enter
+Current version: 3  Upgrade to: 4
+Perform the Upgrade: file: mydb.db
+Database now version: 4
+Success: Database upgrade was successfully completed
+
+```
+:warning: Warning: Backup the db file before upgrade.
 
 

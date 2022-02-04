@@ -32,7 +32,7 @@ import pandas as pd
 
 
 # COMPATIBILITY
-SUPPORTED_DB_VERSION = 3
+SUPPORTED_DB_VERSION = 4
 
 class sonarTimeout():
 	"""
@@ -1301,8 +1301,39 @@ class sonarDBManager():
 	def check_db_compatibility(self):
 		dbver = self.get_db_version()
 		if dbver != SUPPORTED_DB_VERSION:
-			sys.exit("compatibility error: the given database is not compatible with this version of sonar (database version: " + str(dbver) + "; supported database version: " + str(SUPPORTED_DB_VERSION) +")")
+			sys.exit("Compatibility error: the given database is not compatible with this version of sonar (Current database version: " + str(dbver) + "; Supported database version: " + str(SUPPORTED_DB_VERSION) +") \nPlease run 'sonar.py  db-upgrade' to upgrade database")
+	
+	@staticmethod
+	def upgrade_db(dbfile):
+		try:
+			with sqlite3.connect(dbfile) as con:
+				cur = con.cursor()
+				current_version= cur.execute('pragma user_version').fetchone()[0]
 
+			print('Current version:', current_version, ' Upgrade to:', SUPPORTED_DB_VERSION)
+			uri = "file:" + urlquote(dbfile)
+			print('Perform the Upgrade:',uri)
+			while(current_version < SUPPORTED_DB_VERSION):
+				next_version = current_version + 1
+				with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "migrate/"+str(next_version)+".sql"), 'r') as handle:
+					sql = handle.read()
+				with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
+					con.executescript(sql)
+				
+				current_version = next_version
+
+		except sqlite3.Error as er:
+			con.executescript('ROLLBACK')
+			raise er
+		finally:
+			print('Database now version:', current_version)
+			if(current_version==SUPPORTED_DB_VERSION):
+				print("Success: Database upgrade was successfully completed")
+			else:
+				print("Error: Upgrade was not completed")
+
+
+		
 	# INSERTING DATA
 
 	def insert_genome(self, acc, descr, seqhash):
@@ -1499,7 +1530,7 @@ class sonarDBManager():
 				x, y = date.split(":")
 				clause.append("(" + field + op + "BETWEEN '" + x + "' AND '" + y + "')")
 			else:
-				clause.append(field + op2 + date)
+				clause.append(field + op2 + "'" + date+ "'")
 		if not negate and len(clause) > 1:
 			return "(" + logic.join(clause) + ")"
 		return logic.join(clause)
@@ -1515,6 +1546,8 @@ class sonarDBManager():
 			  exclude_zip=[],
 			  include_dates=[],
 			  exclude_dates=[],
+			  include_submission_dates=[],
+			  exclude_submission_dates=[],
 			  include_lab=[],
 			  exclude_lab=[],
 			  include_source=[],
@@ -1648,7 +1681,13 @@ class sonarDBManager():
 		if include_dates:
 			where_clause.append(self.get_metadata_date_condition("date", *include_dates))
 		if exclude_dates:
-			where_clause.extend(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
+			where_clause.append(self.get_metadata_date_condition("date", *exclude_dates, negate=True))
+		## submission_date
+		if include_submission_dates:
+			where_clause.append(self.get_metadata_date_condition("submission_date", *include_submission_dates))
+		if exclude_submission_dates:
+			where_clause.append(self.get_metadata_date_condition("submission_date", *exclude_submission_dates, negate=True))
+
 		## profiles
 		if include_profiles:
 			profile_clause = []
@@ -1712,7 +1751,7 @@ class sonarDBManager():
 
 	# UPDATE DATA
 
-	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, gisaid = None, ena = None, collection = None, source = None, lab = None, technology = None, platform = None, chemistry = None, software = None, version = None, material = None, ct = None):
+	def update_genome(self, acc, description = None, lineage = None, zip = None, date = None, submission_date= None, gisaid = None, ena = None, collection = None, source = None, lab = None, technology = None, platform = None, chemistry = None, software = None, version = None, material = None, ct = None):
 		expr = []
 		vals = []
 		if description is not None:
@@ -1730,6 +1769,9 @@ class sonarDBManager():
 		if date is not None:
 			expr.append("date")
 			vals.append(date)
+		if submission_date is not None:
+			expr.append("submission_date")
+			vals.append(submission_date)
 		if ena is not None:
 			expr.append("ena")
 			vals.append(ena)
@@ -2282,22 +2324,32 @@ class sonarDB(object):
 			define a sonarDBManager object to use for database transaction
 		"""
 		with ExitStack() as stack:
-			if dbm is None:
-				dbm = stack.enter_context(sonarDBManager(self.db))
+			try:
+				if dbm is None:
+					dbm = stack.enter_context(sonarDBManager(self.db))
 
-			dbm.insert_genome(acc, descr, seqhash)
+				dbm.insert_genome(acc, descr, seqhash)
 
-			if not dnadiff is None:
-				dbm.insert_sequence(seqhash)
-				dbm.insert_profile(seqhash, dna_profile, prot_profile, fs_profile)
-				for ref, alt, s, e, _, __ in dnadiff:
-					dbm.insert_dna_var(seqhash, ref, alt, s, e)
+				if not dnadiff is None:
+					dbm.insert_sequence(seqhash)
+					dbm.insert_profile(seqhash, dna_profile, prot_profile, fs_profile)
+					for ref, alt, s, e, _, __ in dnadiff:
+						dbm.insert_dna_var(seqhash, ref, alt, s, e)
 
-				for ref, alt, s, e, protein, locus in aadiff:
-					dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
+					for ref, alt, s, e, protein, locus in aadiff:
+						dbm.insert_prot_var(seqhash, protein, locus, ref, alt, s, e)
 
-			if seq:
-				self.be_paranoid(acc, seq, auto_delete=True, dbm=dbm)
+				if seq:
+					self.be_paranoid(acc, seq, auto_delete=True, dbm=dbm)
+			except sqlite3.IntegrityError as er:
+				print("\nError while processing ID: '{}' \n".format(acc))
+				raise  er
+			except sqlite3.Error as er:
+				print("\nError: occurred while trying to store ID: %s \n", acc)
+				raise  er
+				
+				
+			
 
 	# NOMENCLATURE
 
@@ -2650,6 +2702,7 @@ class sonarDB(object):
 		with_sublineage=False,
 		zips=[],
 		dates=[],
+		submission_dates=[],
 		labs=[],
 		sources=[],
 		collections=[],
@@ -2698,6 +2751,10 @@ class sonarDB(object):
 			zip codes are matched. zip codes are negated when starting with ^.
 		dates : list [ [] ]
 			define list of dates (YYYY-MM-DD) or date ranges (YYYY-MM-DD:YYYY-MM-DD).
+			Only genomes linked to one of the given dates or date ranges are
+			matched.
+		submission_dates : list [ [] ]
+			define list of submission dates (YYYY-MM-DD) or submission ranges (YYYY-MM-DD:YYYY-MM-DD).
 			Only genomes linked to one of the given dates or date ranges are
 			matched.
 		sources : list [ [] ]
@@ -2785,7 +2842,7 @@ class sonarDB(object):
 		# adding conditions of profiles to exclude to where clause
 		if exclude_profiles:
 			exclude_profiles = [ self.make_profile_explicit(x) for x in exclude_profiles ]
-
+		# print(include_profiles)
 		# adding accession, lineage, zips, and dates based conditions
 		include_acc = [x for x in accessions if not x.startswith("^")]
 		exclude_acc = [x[1:] for x in accessions if x.startswith("^")]
@@ -2798,6 +2855,9 @@ class sonarDB(object):
 
 		include_dates = [x for x in dates if not str(x).startswith("^")]
 		exclude_dates = [x[1:] for x in dates if str(x).startswith("^")]
+
+		include_submission_dates = [x for x in submission_dates if not str(x).startswith("^")]
+		exclude_submission_dates = [x[1:] for x in submission_dates if str(x).startswith("^")]
 
 		include_labs = [x for x in labs if not str(x).startswith("^")]
 		exclude_labs = [x[1:] for x in labs if str(x).startswith("^")]
@@ -2906,6 +2966,8 @@ class sonarDB(object):
 					  exclude_zip,
 					  include_dates,
 					  exclude_dates,
+					  include_submission_dates,
+					  exclude_submission_dates,
 					  include_labs,
 					  exclude_labs,
 					  include_source,

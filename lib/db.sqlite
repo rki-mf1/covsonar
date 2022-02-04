@@ -1,4 +1,4 @@
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;
 PRAGMA foreign_keys = OFF;
 PRAGMA analysis_limit=400;
 PRAGMA optimize;
@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS genome (
 	lineage VARCHAR(40),
 	zip TEXT,
 	date TEXT,
+	submission_date TEXT,
 	gisaid VARCHAR(100),
 	ena VARCHAR(100),
 	source VARCHAR(100) DEFAULT '',
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS genome (
 CREATE INDEX idx_meta_lineage ON genome(lineage);
 CREATE INDEX idx_meta_zip ON genome(zip);
 CREATE INDEX idx_meta_date ON genome(date);
+CREATE INDEX idx_meta_submission_date ON genome(submission_date);
 CREATE INDEX idx_meta_gisaid ON genome(gisaid);
 CREATE INDEX idx_meta_ena ON genome(ena);
 CREATE INDEX idx_meta_source ON genome(source);
@@ -109,6 +111,7 @@ SELECT
 	ena,
 	zip,
 	date,
+	submission_date,
 	lineage,
 	genome.seqhash,
 	dna_profile,
@@ -138,6 +141,7 @@ SELECT
 	ena,
 	zip,
 	date,
+	submission_date,
 	lineage,
 	genome.seqhash,
 	start,
@@ -169,6 +173,7 @@ SELECT
 	ena,
 	zip,
 	date,
+	submission_date,
 	lineage,
 	genome.seqhash,
 	protein,
