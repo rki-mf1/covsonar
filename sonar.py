@@ -222,7 +222,9 @@ class sonar():
 							if not os.path.isfile(fasta):
 								unvalid_letters =  sorted(self.db.check_iupac_nt_code(seq))
 								if unvalid_letters:
-									sys.exit("input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")
+									print("[Skip] input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")
+									continue
+									# sys.exit("input error: " + acc + " contains non-IUPAC characters (found: " + ", ".join(unvalid_letters) + ")")		
 								cache.add_seq(seqhash, seq)
 								to_process.append([fasta, algn, info, seqhash, timeout])
 							elif SeqIO.read(fasta, "fasta").seq != seq:
