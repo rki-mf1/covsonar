@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.0"
+VERSION = "2.0.0"
 import os
 import sys
 import csv
@@ -141,6 +141,35 @@ class sonar():
 		self.debug = debug
 
 	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
+		'''
+		This function takes a file name and a list of column names and returns a dictionary of dictionaries.
+		The outer dictionary is keyed by the accession number and the inner dictionary is keyed by the
+		column name
+		
+		:param fname: the name of the file containing the metadata
+		:param accCol: the column in the metadata file that contains the accession number
+		:param lineageCol: the column in the metadata file that contains the lineage
+		:param zipCol: the column in the metadata file that contains the zip code
+		:param dateCol: the column in the metadata file that contains the date of sampling
+		:param gisaidCol: the column in the metadata file that contains the GISAID accession number
+		:param enaCol: the column in the metadata file that contains the ENA accession
+		:param labCol: the column in the metadata file that contains the lab of origin
+		:param sourceCol: the column in the metadata file that contains the source of the sequence (e.g.
+		"human", "environmental", "animal")
+		:param collectionCol: the column in the metadata file that contains the collection name
+		:param technologyCol: the name of the column in the metadata file that contains the sequencing
+		technology used to generate the reads
+		:param platformCol: the column in the metadata file that contains the platform
+		:param chemistryCol: the column in the metadata file that contains the chemistry used
+		:param softwareCol: the name of the column containing the software used to generate the fasta file
+		:param versionCol: the column in the metadata file that contains the version number
+		:param materialCol: the column in the metadata file that contains the material type (e.g. cell,
+		tissue, etc.)
+		:param ctCol: the column in the metadata file that contains the ct value
+		:param sep: the delimiter used in the metadata file, defaults to , (optional)
+		:param pangolin: if True, the file is a pangolin metadata file, defaults to False (optional)
+		:param compressed: If True, the file is compressed with gzip, defaults to False (optional)
+		'''
 		updates = defaultdict(dict)
 		if pangolin:
 			with self.open_file(fname, compressed=compressed, encoding='utf-8-sig') as handle:
@@ -191,13 +220,33 @@ class sonar():
 				dbm.update_genome(acc, **update)
 
 	def restore(self, acc):
+		'''
+		It takes a genome accession number and returns a genome object.
+		
+		:param acc: the accession number of the genome to be restored
+		:return: A list of dictionaries. Each dictionary is a genome.
+		'''
 		return self.db.restore_genome_using_dnavars(acc)
 
 	def view(self, acc):
+		'''
+		Self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
+		
+		This function is the heart of the program. It is called by the view() function.
+		It takes a single argument, acc, which is the accession number of the sequence
+		of interest. It returns a list of rows, which is a list of lists. Each list
+		within the list is a row of data
+		
+		:param acc: the accession number of the sequence to be viewed
+		'''
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
 
 	def show_system_info(self):
+		'''
+		Prints out the version of the database, the name of the reference genome, the length of the
+		reference genome, the names of the annotated proteins, and the translation table used
+		'''
 		print("sonarDB version:       ", self.db.get_version())
 		print("reference genome:      ", self.db.refdescr)
 		print("reference length:      ", str(len(self.db.refseq)) + "bp")
@@ -231,6 +280,15 @@ class sonar():
 				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
 	def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
+		'''
+		The rows_to_csv function takes a list of dictionaries and writes them to a file in CSV format
+		
+		:param rows: the list of dictionaries to write to the file
+		:param file: The file to write to. If None, the output is written to sys.stdout
+		:param na: the value to print if there are no rows, defaults to *** no data *** (optional)
+		:param tsv: If True, the output will be written in tab-separated format, defaults to False
+		(optional)
+		'''
 		if len(rows) == 0:
 			print(na, file=sys.stderr)
 		else:

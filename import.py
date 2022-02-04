@@ -12,7 +12,7 @@ from mpire import WorkerPool
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="import.py", description="import sequences from fasta file to a sonar database")
-	parser.add_argument('fasta', help="fasta file", type=str, nargs="+")
+	parser.add_argument('--fasta', help="fasta file", type=str, nargs="+")
 	parser.add_argument('--db', metavar="FILE", help="sonar database", type=str, required=True)
 	parser.add_argument('--dir', metavar="DIR", help="cache directory", type=str, default=None)
 	parser.add_argument('--threads', metavar="int", help="number of cpus to use (default: 1)", type=int, default=1)
@@ -38,4 +38,6 @@ if __name__ == "__main__":
 	l = len(cache._samplefiles)
 	with WorkerPool(n_jobs=args.threads, start_method='fork') as pool:
 		results = pool.map(aligner.process_cached_sample, cache._samplefiles, iterable_len=l, n_splits=args.threads, progress_bar=True)
+
 	cache.import_samples()
+

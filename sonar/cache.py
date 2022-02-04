@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
+from importlib.resources import path
 import os
 import re
 import sys
@@ -14,6 +15,7 @@ import yaml
 from Bio import SeqIO
 import difflib as dl
 from math import ceil
+from tempfile import mkdtemp
 
 class sonarCache():
 	"""
@@ -308,6 +310,7 @@ class sonarCache():
 		refseqs = {}
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
 			for sample_data in self.iter_samples():
+				print(sample_data)
 				# nucleotide level import
 				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 				if sample_data['algnid'] is None:
@@ -318,6 +321,11 @@ class sonarCache():
 								break
 							vardat = line.strip("\r\n").split("\t")
 							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
+							### add AA position here 
+							print(vars)
+
+							###
+
 						if line != "//":
 							sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
 				# paranoia test
