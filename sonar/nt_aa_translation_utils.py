@@ -14,9 +14,9 @@ import warnings
 import math
 
 
-## All global variable can be changed or replaced their value from DB
+## All global variable can be changed or replaced their value from DB ##
 
-# We hardcode the gene positions   
+# We hardcode the gene position, we have to change to getting from DB  
 D_GENEPOS = {'ORF1a': [('NC_045512.2', 266, 13483)],
              'ORF1a_trunc': [('NC_045512.2', 266, 13468)],
              'ORF1b': [('NC_045512.2', 13468, 21555)],
@@ -289,7 +289,7 @@ class Mutation:
 
 
 
-def translate_nt_to_aa(nt_mutation_pattern, gene="S", ref_path=None, gff_path=None):
+def translate_nt_to_aa(nt_mutation_pattern, gene="S", ref_path=None, gff_path=None): # <-- call me
     """
     Translates an nt substitution pattern (genomic position) into the corresponding AA substitution pattern.
 

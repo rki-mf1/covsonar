@@ -322,11 +322,11 @@ class sonarDBManager():
 
 	def get_molecule_ids(self, reference_accession=None):
 		if reference_accession:
-			 condition = "reference.accession = ?"
-			 val = reference_accession
+			condition = "reference.accession = ?"
+			val = reference_accession
 		else:
-			 condition = "reference.standard = ?"
-			 val = 1
+			condition = "reference.standard = ?"
+			val = 1
 		sql = "SELECT molecule.accession, molecule.id FROM referenceView WHERE " + condition
 		return {x['molecule.accession']: x[molecule.id] for x in self.cursor.execute(sql, val).fetchall() if x is not None }
 
@@ -343,11 +343,11 @@ class sonarDBManager():
 		elif "\"molecule.accession\"" not in fields:
 			fields = list(fields)+ ["\"molecule.accession\""]
 		if reference_accession:
-			 condition = "\"reference.accession\" = ?"
-			 vals = [reference_accession]
+			condition = "\"reference.accession\" = ?"
+			vals = [reference_accession]
 		else:
-			 condition = "\"reference.standard\" = ?"
-			 vals = [1]
+			condition = "\"reference.standard\" = ?"
+			vals = [1]
 		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + condition + ";"
 		row = self.cursor.execute(sql, vals).fetchall()
 		if row:
@@ -370,23 +370,23 @@ class sonarDBManager():
 		conditions = []
 		vals = []
 		if reference_accession:
-			 conditions.append("\"reference.accession\" = ?")
-			 vals.append(reference_accession)
+			conditions.append("\"reference.accession\" = ?")
+			vals.append(reference_accession)
 		else:
-			 conditions.append("\"reference.standard\" = ?")
-			 vals.append(1)
+			conditions.append("\"reference.standard\" = ?")
+			vals.append(1)
 		if molecule_accession:
-			 conditions.append("\"molecule.accession\" = ?")
-			 vals.append(molecule_accession)
+			conditions.append("\"molecule.accession\" = ?")
+			vals.append(molecule_accession)
 		else:
-			 conditions.append("\"molecule.standard\" = ?")
-			 vals.append(1)
+			conditions.append("\"molecule.standard\" = ?")
+			vals.append(1)
 		if element_accession:
-			 conditions.append("\"element.accession\" = ?")
-			 vals.append(element_accession)
+			conditions.append("\"element.accession\" = ?")
+			vals.append(element_accession)
 		else:
-			 conditions.append("\"element.type\" = ?")
-			 vals.append('source')
+			conditions.append("\"element.type\" = ?")
+			vals.append('source')
 		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + " AND ".join(conditions)
 		return self.cursor.execute(sql, vals).fetchone()
 

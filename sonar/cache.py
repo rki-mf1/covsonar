@@ -16,6 +16,8 @@ from Bio import SeqIO
 import difflib as dl
 from math import ceil
 from tempfile import mkdtemp
+# from nt_aa_translation_utils import translate_nt_to_aa
+
 
 class sonarCache():
 	"""
@@ -124,8 +126,10 @@ class sonarCache():
 			'algn_dir': self.algn_dir,
 			'var_dir': self.var_dir
 		}
+		
 		with open(self.smk_config, 'w') as handle:
 		    yaml.dump(data, handle)
+
 
 	def get_seq_fname(self, seqhash):
 		fn = self.slugify(seqhash)
@@ -322,7 +326,8 @@ class sonarCache():
 							vardat = line.strip("\r\n").split("\t")
 							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
 							### add AA position here 
-							print(vars)
+							print(vardat[0] + vardat[1] + vardat[3])
+							#translate_nt_to_aa
 
 							###
 
