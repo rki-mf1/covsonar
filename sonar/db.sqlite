@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sample (
 	id INTEGER PRIMARY KEY,
 	name VARCHAR NOT NULL UNIQUE,
 	seqhash VARCHAR NOT NULL,
+	datahash VARCHAR NOT NULL,
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_sample_name ON sample(name);
@@ -116,6 +117,7 @@ CREATE TABLE IF NOT EXISTS elempart (
 	start INTEGER NOT NULL,
 	end INTEGER NOT NULL,
 	strand INTEGER NOT NULL,
+	base FLOAT NOT NULL,
 	segment INTEGER NOT NULL,
 	PRIMARY KEY(element_id, segment),
 	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE

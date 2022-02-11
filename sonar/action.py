@@ -144,7 +144,6 @@ class sonarActions(object):
 		if default_setup:
 			with sonarDBManager(fname, debug=debug) as dbm:
 				### adding pre-defined sample properties
-				dbm.add_property("accession", "text", "text", "sample accession")
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
 
@@ -179,6 +178,16 @@ class sonarActions(object):
 
 	## genbank handling handling
 	@staticmethod
+	def process_segments(feat_location_parts, cds = False):
+		base = 0
+		div = 1 if not cds else 3
+		segments = []
+		for i, segment in enumerate(feat_location_parts, 1):
+			segments.append([int(segment.start), int(segment.end), segment.strand, base,i])
+			base += round((segment.end-segment.start-1)/div, 1)
+		return segments
+
+	@staticmethod
 	def iter_genbank(fname):
 		gb_data = {}
 		for gb_record in SeqIO.parse(fname, "genbank"):
@@ -209,7 +218,7 @@ class sonarActions(object):
 				"strand": "",
 				"sequence": sonarActions.harmonize(feat.extract(gb_record.seq)),
 				"description": "",
-				"parts": [[int(x.start), int(x.end), x.strand, i] for i, x in enumerate(feat.location.parts, 1)]
+				"parts": sonarActions.process_segments(feat.location.parts)
 			}
 			gb_data['length'] = len(gb_data['source']['sequence'])
 			if "segment" in feat.qualifiers:
@@ -226,8 +235,10 @@ class sonarActions(object):
 						"strand": feat.strand,
 						"sequence": sonarActions.harmonize(feat.extract(gb_data['source']['sequence'])),
 						"description": "",
-						"parts": [[int(x.start), int(x.end), x.strand, i] for i, x in enumerate(feat.location.parts, 1)]
+						"parts": sonarActions.process_segments(feat.location.parts)
 					})
+
+
 				## adding cds annotation
 				elif feat.type == "CDS":
 					gb_data['cds'].append({
@@ -239,7 +250,7 @@ class sonarActions(object):
 						"gene": feat.qualifiers['gene'][0],
 						"sequence": feat.qualifiers['translation'][0],
 						"description": feat.qualifiers['product'][0],
-						"parts": [[int(x.start), int(x.end), x.strand, i] for i, x in enumerate(feat.location.parts, 1)]
+						"parts": sonarActions.process_segments(feat.location.parts, True)
 					})
 			yield gb_data
 

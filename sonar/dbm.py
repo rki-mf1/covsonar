@@ -274,7 +274,7 @@ class sonarDBManager():
 		mid = self.cursor.execute(sql, [accession]).fetchone()['id']
 		if parts is not None:
 			for part in parts:
-				sql = "INSERT OR IGNORE INTO elempart (element_id, start, end, strand, segment) VALUES(?, ?, ?, ?, ?);"
+				sql = "INSERT OR IGNORE INTO elempart (element_id, start, end, strand, base, segment) VALUES(?, ?, ?, ?, ?, ?);"
 				self.cursor.execute(sql, [mid] + part)
 		return mid
 
