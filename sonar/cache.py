@@ -16,8 +16,8 @@ from Bio import SeqIO
 import difflib as dl
 from math import ceil
 from tempfile import mkdtemp
-# from nt_aa_translation_utils import translate_nt_to_aa
 
+import pandas as pd
 
 class sonarCache():
 	"""
@@ -304,7 +304,7 @@ class sonarCache():
 					data['varfile'] = self.get_var_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 				else:
 					data['seqfile'] = None
-					data['reffile'] = None
+					data['reffile'] = None 
 					data['algnfile'] = None
 					data['varfile'] = None
 				del(data['sequence'])
@@ -313,6 +313,11 @@ class sonarCache():
 	def import_samples(self):
 		refseqs = {}
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
+
+			###  prepare Gene range (element part) into dataframe.
+			element_df = pd.DataFrame.from_records(dbm.get_element_by_ids(all=True))
+			print(element_df)
+
 			for sample_data in self.iter_samples():
 				print(sample_data)
 				# nucleotide level import
@@ -324,10 +329,17 @@ class sonarCache():
 							if line == "//":
 								break
 							vardat = line.strip("\r\n").split("\t")
+							ref=vardat[0]
+							alt=vardat[3]
+							start=vardat[1]
+							end=vardat[2]
+
 							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
-							### add AA position here 
-							print(vardat[0] + vardat[1] + vardat[3])
+							### add AA position here
+							nt_pattern= ref+start+alt 
+							#print(ref+start+alt)
 							#translate_nt_to_aa
+							# convert_to_AA(ref,start,end,alt,element_df)
 
 							###
 

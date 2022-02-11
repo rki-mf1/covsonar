@@ -430,6 +430,31 @@ def get_codon(pos, refseq):
     return refseq[(pos-1):(pos+2)]
 
 
+def translate_nt_seq_aa_seq(nt_sequence):
+    """
+    Translates nt sequence to aa sequence.
+
+    Parameter:
+    ----------
+    nt_sequence : str
+        sequence of nucleotides (note, must be divisible by 3)
+
+    Return
+    ------
+    aa_sequence : str
+        sequence of amino acids
+
+    @JakubBartoszewicz @MelaniaNowicka
+    """
+
+    if len(nt_sequence) % 3 != 0:
+        raise ValueError("Nt sequence length not divisible by 3.")
+    codon_list = wrap(nt_sequence, 3)
+    aa_sequence = "".join([get_aa_dict()[codon] for codon in codon_list])
+
+    return aa_sequence
+
+
 # //////////// //////////// position_converter.py ////////////
 
 def aa2na_gene(aa):
@@ -517,3 +542,159 @@ def na2aa_msa_gene(na_str):
         return ".".join([str(na2aa_gene(na_ref)), str(na2aa_gene(na_insert))])
     else:
         return str(na2aa_gene(int(na_str_split[0])))
+
+
+def aa2na_gene(aa):
+    """
+    Convert amino acid position to gene position.
+
+    Args:
+        aa: int, amino acid position
+
+    Returns:
+        (int, int), output gene na position (codon start, codon end)
+    """
+    factor = (aa - 1)*3
+    return 1+factor, 1+factor+2
+
+
+def aa2na_genome(aa, gene="S"):
+    # input aa
+    # output whole genome na positon (codon start, codon end)
+    factor = (aa - 1)*3
+    gene_regions = get_gene_pos()[gene]
+    gene_start = gene_regions[-1][1]
+    gene_length = gene_regions[-1][2] - gene_start + 1
+    if aa > (gene_length / 3):
+        raise ValueError(f"error AA position {aa} is behind the end of the gene {gene}.")
+    return gene_start+factor, gene_start+factor+2
+
+
+def na2aa_gene(na):
+    # input gene na position
+    # output aa
+    return math.floor((na-1)/3)+1
+
+
+def na2aa_genome(na, gene="S"):
+    # input whole genome position
+    # output aa
+    gene_regions = get_gene_pos()[gene]
+    gene_start = gene_regions[-1][1]
+    gene_stop = gene_regions[-1][2]
+    if na < gene_start or na > gene_stop:
+        raise ValueError(f"Position of NT {na} outside gene {gene}.")
+    return math.floor((na-gene_start)/3)+1
+
+
+def na_gene_to_genome(na, gene="S"):
+    # input spike na position
+    # output whole genome na positon
+    gene_start = get_gene_pos()[gene][-1][1]
+    gene_length = get_gene_pos()[gene][-1][2] - gene_start + 1
+    if na < 1 or na > gene_length:
+        raise ValueError(f"Gene position must be in range {1}-{gene_length} for gene {gene}.")
+    return na - 1 + gene_start
+
+
+def na_genome_to_gene(na, gene="S"):
+    # input whole genome na positon
+    # output gene na position
+    gene_regions = get_gene_pos()[gene]
+    gene_start = gene_regions[-1][1]
+    gene_stop = gene_regions[-1][2]
+    if na < 1 or na > gene_stop:
+        raise ValueError(f"Whole-genome position must be in range {gene_start}-{gene_stop} for gene {gene}.")
+    return na + 1 - gene_start
+
+
+def na_genome_to_codon_coordinates(na, gene="S"):
+    # input whole genome na positon
+    # output: (position of the first nucleotide of the codon, position of input nucleotide relative to codon start)
+    nt_gene_position = na_genome_to_gene(na, gene)
+    # get the position of the nucleotide variant within a codon (based on its position in the gene). 0-indexed
+    nt_position_in_codon = (nt_gene_position - 1) % 3
+    # get the position of the first nucleotide of this codon
+    # based on the variant's genomic position and its position within the codon. 1-indexed
+    codon_start = na - nt_position_in_codon
+    return codon_start, nt_position_in_codon
+
+
+def na2aa_msa_gene(na_str):
+    # input na position in msa
+    # output aa position in msa
+    na_str_split = na_str.split(".")
+    if len(na_str_split) > 1:
+        na_ref, na_insert = int(na_str_split[0]), int(na_str_split[1])
+        return ".".join([str(na2aa_gene(na_ref)), str(na2aa_gene(na_insert))])
+    else:
+        return str(na2aa_gene(int(na_str_split[0])))
+
+
+#####################################################
+def get_GeneName_inRange(number):
+    for key, val in D_GENEPOS.items():
+        if int(val[0][1]) <= number and number <= int(val[0][2]):
+            res = key
+    return res
+
+
+def convert_to_AA(ref,start,end,alt,element_df): 
+    nt_mutation = ref+str(start)+alt
+    
+    p = re.compile(r"([A-Z]+)([0-9]+)([A-Z\-/]*)") # "R214REPE" "R256E"
+    re_out = p.findall(nt_mutation)
+    print(re_out)
+    if len(re_out) != 1:
+        raise ValueError(f"Unrecognized mutation pattern: {nt_mutation}.")
+    _pattern=re_out[0]
+    _ref = _pattern[0]
+    _pos = _pattern[1]
+    _alt = _pattern[2]
+    
+    
+    if _alt == '': # deletion 
+
+
+        _elem_AA_SEQ = element_df[element_df['symbol'] == get_GeneName_inRange(start) & 
+        element_df['type'] =='cds'].sequence[0]
+        print(_elem_AA_SEQ)
+
+        start_aa = na2aa_genome(start,gene=get_GeneName_inRange(start))
+        end_aa = na2aa_genome(end,gene=get_GeneName_inRange(end))
+        print(start_aa,end_aa)
+        ## start_aa need to plus one to get the real poistion in 1-base 
+        ref_aa = ''# _elem_AA_SEQ[68:70]
+        alt_aa = ''
+        ## system
+        
+        #del_size = end-start
+        #new_del_pat= 'del:'+str(start)+':'+str(del_size)
+        #print(new_del_pat)
+        #mutation_obj = translate_nt_to_aa(new_del_pat, gene=get_GeneName_inRange(start))
+        #print(mutation_obj)
+
+    elif len(_pattern) == 3:
+        if len(_ref) < len(_alt): # insertion
+            start_aa = na2aa_genome(start,gene=get_GeneName_inRange(start))
+            
+        else: # SNP
+            # nt_mutation = ref+str(start+1)+alt
+            
+            ## Find aa_ref aa_alt aa_start_pos
+            aa_mutation = translate_nt_to_aa(nt_mutation, gene=get_GeneName_inRange(start)).aa_mutation_pattern
+            print(aa_mutation)
+            aa_re_out = p.findall(aa_mutation)
+            print(aa_re_out)
+            if len(aa_re_out) != 1:
+                raise ValueError(f"Unrecognized mutation pattern: {aa_pattern}.")
+            #aa_pattern=aa_re_out[0]
+            ## Find aa_end_pos
+            aa_end_pos = na2aa_genome(end,gene=get_GeneName_inRange(end))
+            
+            aa_ref = aa_re_out[0][0]
+            aa_start_pos = aa_re_out[0][1]
+            aa_alt = aa_re_out[0][2]
+            return aa_ref, aa_start_pos, aa_end_pos, aa_alt, 'SNP'
+    else:
+        raise ValueError(f"Unrecognized mutation pattern: {nt_mutation}.")

@@ -10,7 +10,7 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from collections import OrderedDict, defaultdict
 from urllib.parse import quote as urlquote
 import itertools
-
+import pandas as pd
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
 
@@ -362,6 +362,22 @@ class sonarDBManager():
 		if not row:
 			return []
 		return row
+
+	def get_element_by_ids(self, _id=[], all=False):
+		
+		if all:
+			sql = "SELECT * FROM element"
+		else:
+			if(len(_id) == 1):
+				sql = "SELECT * FROM element WHERE id = ?"
+			else:
+				sql = 'SELECT * FROM element WHERE id IN (%s)' % ','.join('?'*len(_id))
+
+		row = self.cursor.execute(sql, _id).fetchall()
+		if not row:
+			return []
+		return row
+
 
 	def get_source(self, molecule_id):
 		return self.get_elements(molecule_id, 'source')[0]
