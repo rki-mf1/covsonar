@@ -272,7 +272,7 @@ if __name__ == "__main__":
 	# setup
 	if args.tool == "setup":
 		sonarActions.setup_db(args.db, debug=args.debug)
-		exit()
+		exit(0)
 
 	snr = sonarActions(args.db, debug=args.debug)
 	with sonarDBManager(args.db, readonly=True) as dbm:
@@ -359,4 +359,5 @@ if __name__ == "__main__":
 	if args.tool == "dev":
 		print("***dev mode***")
 		with sonarDBManager(args.db, debug=args.debug) as dbm:
-			print(dbm.get_annotation())
+			for feature in dbm.get_annotation():
+				print(())

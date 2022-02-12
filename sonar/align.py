@@ -8,6 +8,7 @@ import re
 import sys
 import pickle
 import subprocess
+import pandas as pd
 from Bio.Emboss.Applications import StretcherCommandline
 
 
@@ -46,7 +47,11 @@ class sonarAligner(object):
 			if line == "//":
 				return
 		alignment = self.align(data['seq_file'], data['ref_file'])
-		vars = "\n".join(["\t".join(x) for x in self.extract_vars(*alignment)])
+		nuc_vars = [x for x in self.extract_vars(*alignment)]
+		if nuc_vars:
+			self.lift_vars(nuc_vars, data['lift_file'])
+			exit()
+		vars = "\n".join(["\t".join(x) for x in nuc_vars] + ["\t".join(x) for x in aa_vars] )
 		try:
 			with open(data['var_file'], "w") as handle:
 				handle.write(vars + "\n//")
@@ -88,3 +93,13 @@ class sonarAligner(object):
 			else:
 				yield ref_seq[i], str(i-offset), str(i-offset+1), qry_seq[i]
 			i += 1
+
+	def lift_vars(self, nuc_vars, lift_file):
+		df = pd.read_pickle(lift_file)
+		for nuc_var in nuc_vars:
+			for i in range(int(nuc_var[1]), int(nuc_var[2])):
+				alt = "-" if nuc_var[3] == " " else nuc_var[3]
+				df.loc[df['nucPos1'] == i, 'alt1'] = alt
+				df.loc[df['nucPos2'] == i, 'alt2'] = alt
+				df.loc[df['nucPos3'] == i, 'alt3'] = alt
+		print(df.loc[(df["ref1"] != df["alt1"]) | (df["ref2"] != df["alt2"]) | (df["ref3"] != df["alt3"])])

@@ -171,7 +171,7 @@ class sonarActions(object):
 
 					#### cds handling
 					for elem in record['cds']:
-						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], "", elem['sequence'], 0, gene_ids[elem['gene']], elem['parts'])
+						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], elem['strand'], elem['sequence'], 0, gene_ids[elem['gene']], elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(cid, translation_table=1):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (cds)")
 	# DATA IMPORT

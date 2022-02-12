@@ -15,6 +15,7 @@ from Bio import SeqIO
 import difflib as dl
 from math import ceil
 from tempfile import mkdtemp
+import pandas as pd
 
 class sonarCache():
 	"""
@@ -54,6 +55,7 @@ class sonarCache():
 		os.makedirs(self.sample_dir, exist_ok=True)
 		self._samplefiles = set()
 		self._refs = set()
+		self._lifts = set()
 
 	def __enter__(self):
 		return self
@@ -133,6 +135,9 @@ class sonarCache():
 	def get_ref_fname(self, refid):
 		return os.path.join(self.ref_dir, str(refid) + ".seq")
 
+	def get_cds_fname(self, refid):
+		return os.path.join(self.ref_dir, str(refid) + ".lift")
+
 	def get_algn_fname(self, seqhash):
 		fn = self.slugify(seqhash)
 		return os.path.join(self.algn_dir, fn[:2], fn + ".algn")
@@ -145,7 +150,7 @@ class sonarCache():
 		fn = self.slugify(hashlib.sha1(sample_name.encode('utf-8')).hexdigest())
 		return os.path.join(self.sample_dir, fn[:2], fn + ".sample")
 
-	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, algnid, seqfile, reffile, algnfile, varfile, properties):
+	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, algnid, seqfile, reffile, liftfile, algnfile, varfile, properties):
 		data = {
 			"name": name,
 			"sampleid": sampleid,
@@ -156,6 +161,7 @@ class sonarCache():
 			"seqhash": seqhash,
 			"seq_file": seqfile,
 			"ref_file": reffile,
+			"lift_file": liftfile,
 			"algn_file": algnfile,
 			"var_file": varfile
 			}
@@ -194,9 +200,40 @@ class sonarCache():
 	def cache_reference(self, refid, sequence):
 		fname = self.get_ref_fname(refid)
 		if refid not in self._refs:
-			self._refs.add(refid)
 			with open(fname, "w") as handle:
 				handle.write(sequence)
+			self._refs.add(refid)
+		return fname
+
+	def cache_lift(self, refid, refmol_acc, sequence):
+		fname = self.get_cds_fname(refid)
+		rows = []
+		if refmol_acc not in self._lifts:
+			cols = ["nucPos1", "nucPos2", "nucPos3", "ref1", "ref2", "ref3", "alt1", "alt2", "alt3", "symbol", "aaPos", "aa"]
+			for cds in self.iter_cds(refmol_acc):
+				symbol = cds["symbol"]
+				seq = cds["sequence"]+"*"
+				codon = 0
+				i = 0
+				coords = []
+				for rng in cds['ranges']:
+					coords.extend(list(rng))
+				while len(coords)%3 != 0:
+					coords.append("")
+				l = len(coords)
+				while len(seq) < l/3:
+					seq += "-"
+				while len(sequence) < l:
+					sequence += "-"
+				for i, coord in enumerate([coords[x:x+3] for x in range(0, len(coords), 3)]):
+					codon = [sequence[coord[0]], sequence[coord[1]], sequence[coord[2]]]
+					rows.append(coord + codon + codon + [symbol, i, seq[i].strip()])
+				df = pd.DataFrame.from_records(rows, columns=cols, coerce_float=False)
+				df = df.reindex(df.columns.tolist(), axis = 1)
+				df.to_pickle(fname)
+				if self.debug:
+					df.to_csv(fname+".csv")
+			self._lifts.add(refmol_acc)
 		return fname
 
 	@staticmethod
@@ -249,6 +286,30 @@ class sonarCache():
 		except:
 			return None
 
+	def iter_cds(self, refmol_acc):
+		cds = {}
+		prev_elem = None
+		with sonarDBManager(self.db, debug=self.debug) as dbm:
+			for row in dbm.get_annotation(molecule_accession=refmol_acc, element_type="cds"):
+				if prev_elem is None:
+					prev_elem = row["element.id"]
+				elif row["element.id"] != prev_elem:
+					yield cds
+					cds = {}
+					prev_elem = row["element.id"]
+				if cds == {}:
+					cds = {
+						"id": row["element.id"],
+						"accession":row["element.accession"],
+						"symbol": row["element.symbol"],
+						"sequence": row["element.sequence"],
+						"ranges": [range(row["elempart.start"], row["elempart.end"], row["elempart.strand"])]
+					}
+				else:
+					cds["ranges"].append(range(row["elempart.start"], row["elempart.end"], row["elempart.strand"]))
+		if cds:
+			yield cds
+
 	def get_refseq_id(self, refmol_acc):
 		try:
 			return self.sources[refmol_acc]['id']
@@ -295,12 +356,14 @@ class sonarCache():
 				if data['algnid'] is None:
 					data['seqfile'] = self.cache_sequence(data['seqhash'], data['sequence'])
 					data['reffile'] = self.cache_reference(refseq_id, self.get_refseq(data['refmol']))
+					data['liftfile'] = self.cache_lift(refseq_id, data['refmol'], self.get_refseq(data['refmol']))
 					data['algnfile'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 					data['varfile'] = self.get_var_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 				else:
 					data['seqfile'] = None
 					data['reffile'] = None
 					data['algnfile'] = None
+					data['liftfile'] = None
 					data['varfile'] = None
 				del(data['sequence'])
 				self.cache_sample(**data)

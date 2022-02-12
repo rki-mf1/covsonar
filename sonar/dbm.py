@@ -366,7 +366,7 @@ class sonarDBManager():
 	def get_source(self, molecule_id):
 		return self.get_elements(molecule_id, 'source')[0]
 
-	def get_annotation(self, reference_accession=None, molecule_accession=None, element_accession=None, fields=['*']):
+	def get_annotation(self, reference_accession=None, molecule_accession=None, element_accession=None, element_type=None, fields=['*']):
 		conditions = []
 		vals = []
 		if reference_accession:
@@ -384,11 +384,14 @@ class sonarDBManager():
 		if element_accession:
 			 conditions.append("\"element.accession\" = ?")
 			 vals.append(element_accession)
-		else:
+		elif not element_type:
 			 conditions.append("\"element.type\" = ?")
 			 vals.append('source')
-		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + " AND ".join(conditions)
-		return self.cursor.execute(sql, vals).fetchone()
+		if element_type:
+			 conditions.append("\"element.type\" = ?")
+			 vals.append(element_type)
+		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + " AND ".join(conditions) + " ORDER BY \"reference.id\" ASC, \"molecule.id\" ASC, \"element.id\" ASC, \"element.segment\" ASC"
+		return self.cursor.execute(sql, vals).fetchall()
 
 	def get_alignment_data(self, sample_id, element_id, *fields, limit=1):
 		if not fields:
