@@ -234,9 +234,9 @@ class sonarDBManager():
 
 	def insert_sample(self, sample_name, seqhash):
 		self.insert_sequence(seqhash)
-		sql = "INSERT OR IGNORE INTO sample (name, seqhash) VALUES(?, ?);"
-		sid = self.cursor.execute(sql, [sample_name, seqhash])
-		sql = "SELECT id FROM sample WHERE name = ?"
+		sql = "INSERT OR IGNORE INTO sample (name, seqhash, datahash) VALUES(?, ?, ?);"
+		self.cursor.execute(sql, [sample_name, seqhash, ""])
+		sql = "SELECT id FROM sample WHERE name = ?;"
 		sid = self.cursor.execute(sql, [sample_name]).fetchone()['id']
 		for pname in self.properties:
 			if not self.properties[pname]['standard'] is None:

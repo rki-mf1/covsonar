@@ -14,6 +14,7 @@ import yaml
 from Bio import SeqIO
 import difflib as dl
 from math import ceil
+from tempfile import mkdtemp
 
 class sonarCache():
 	"""

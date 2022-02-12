@@ -8,7 +8,6 @@ import re
 import sys
 import pickle
 import subprocess
-import tempfile
 from Bio.Emboss.Applications import StretcherCommandline
 
 
@@ -21,7 +20,6 @@ class sonarAligner(object):
 
 	def __init__(self):
 		pass
-
 
 	def align(self, qry, ref, gapopen= 16, gapextend = 4):
 		"""
