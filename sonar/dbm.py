@@ -247,8 +247,7 @@ class sonarDBManager():
 		sql = "INSERT OR IGNORE INTO alignment (id, seqhash, element_id) VALUES(?, ?, ?);"
 		self.cursor.execute(sql, [None, seqhash, element_id])
 		sql = "SELECT id FROM alignment WHERE element_id = ? AND seqhash = ?;"
-		aid = self.cursor.execute(sql, [element_id, seqhash]).fetchone()['id']
-		return aid
+		return self.cursor.execute(sql, [element_id, seqhash]).fetchone()['id']
 
 	def insert_molecule(self, reference_id, type, accession, symbol, description, segment, length, standard=0):
 		if symbol.strip() == "":
@@ -278,11 +277,11 @@ class sonarDBManager():
 				self.cursor.execute(sql, [mid] + part)
 		return mid
 
-	def insert_variant(self, alignment_id, ref, alt, start, end, parent_id=""):
-		vid = self.get_variant_id(ref, alt, start, end, parent_id)
+	def insert_variant(self, alignment_id, element_id, ref, alt, start, end, parent_id=""):
+		vid = self.get_variant_id(ref, element_id, alt, start, end, parent_id)
 		if not vid:
-			sql = "INSERT OR IGNORE INTO variant (id, start, end, ref, alt, parent_id) VALUES(?, ?, ?, ?, ?, ?);"
-			self.cursor.execute(sql, [None, start, end, ref, alt, parent_id])
+			sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?);"
+			self.cursor.execute(sql, [None, element_id, start, end, ref, alt, parent_id])
 			vid = self.cursor.lastrowid
 		sql = "INSERT OR IGNORE INTO alignment2variant (alignment_id, variant_id) VALUES(?, ?);"
 		self.cursor.execute(sql, [alignment_id, vid])
@@ -406,9 +405,9 @@ class sonarDBManager():
 			return row['id']
 		return None
 
-	def get_variant_id(self, ref, alt, start, end, parent_id):
-		sql = "SELECT id FROM variant WHERE start = ? AND end = ? AND ref = ? AND alt = ? AND parent_id = ?;"
-		row = self.cursor.execute(sql, [start, end, ref, alt, parent_id]).fetchone()
+	def get_variant_id(self, ref, element_id, alt, start, end, parent_id):
+		sql = "SELECT id FROM variant WHERE element_id = ? AND start = ? AND end = ? AND ref = ? AND alt = ? AND parent_id = ?;"
+		row = self.cursor.execute(sql, [element_id, start, end, ref, alt, parent_id]).fetchone()
 		return None if row is None else row['id']
 
 	def iter_dna_variants(self, sample_name, *element_ids):
@@ -467,6 +466,10 @@ class sonarDBManager():
 	def get_seqhash(self, sample_name):
 		sql = "SELECT \"sample.seqhash\" FROM sequenceView WHERE sample.name = ?"
 		return [ x[sample.hash] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
+
+	def get_translation_dict(self, translation_id):
+		sql = "SELECT codon, aa FROM translation WHERE id = ?"
+		return { x['codon']: x['aa'] for x in self.cursor.execute(sql, [translation_id]).fetchall() }
 
 	def get_earliest_import(self):
 		sql = "SELECT MIN(imported) as import FROM genome WHERE import IS NOT NULL;"

@@ -30,7 +30,7 @@ class sonarCache():
 		self.ignore_errors = ignore_errors
 
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			self.refmols = dbm.get_molecule_data("\"molecule.accession\"", "\"molecule.id\"", "\"molecule.standard\"" , reference_accession=self.refacc)
+			self.refmols = dbm.get_molecule_data("\"molecule.accession\"", "\"molecule.id\"", "\"molecule.standard\"" , "\"translation.id\"", reference_accession=self.refacc)
 			self.default_refmol_acc = [x for x in self.refmols if self.refmols[x]['molecule.standard'] == 1 ][0]
 			self.default_refmol_id = [x for x in self.refmols if self.refmols[x]['molecule.id'] == 1 ][0]
 			self.sources = {x['molecule.accession']: dbm.get_source(x['molecule.id']) for x in self.refmols.values()}
@@ -56,6 +56,7 @@ class sonarCache():
 		self._samplefiles = set()
 		self._refs = set()
 		self._lifts = set()
+		self._tt = set()
 
 	def __enter__(self):
 		return self
@@ -135,8 +136,11 @@ class sonarCache():
 	def get_ref_fname(self, refid):
 		return os.path.join(self.ref_dir, str(refid) + ".seq")
 
-	def get_cds_fname(self, refid):
+	def get_lift_fname(self, refid):
 		return os.path.join(self.ref_dir, str(refid) + ".lift")
+
+	def get_tt_fname(self, refid):
+		return os.path.join(self.ref_dir, str(refid) + ".tt")
 
 	def get_algn_fname(self, seqhash):
 		fn = self.slugify(seqhash)
@@ -150,20 +154,23 @@ class sonarCache():
 		fn = self.slugify(hashlib.sha1(sample_name.encode('utf-8')).hexdigest())
 		return os.path.join(self.sample_dir, fn[:2], fn + ".sample")
 
-	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, algnid, seqfile, reffile, liftfile, algnfile, varfile, properties):
+	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, sourceid,translation_id, algnid, seqfile, reffile, ttfile, algnfile, varfile, liftfile, properties):
 		data = {
 			"name": name,
 			"sampleid": sampleid,
 			"refmol": refmol,
 			"refmolid": refmolid,
+			"sourceid": sourceid,
+			"translationid": translation_id,
 			"algnid": algnid,
 			"header": header,
 			"seqhash": seqhash,
 			"seq_file": seqfile,
 			"ref_file": reffile,
-			"lift_file": liftfile,
+			"tt_file": ttfile,
 			"algn_file": algnfile,
-			"var_file": varfile
+			"var_file": varfile,
+			"lift_file": liftfile
 			}
 		fname = self.get_sample_fname(name)
 		if os.path.isfile(fname):
@@ -205,12 +212,20 @@ class sonarCache():
 			self._refs.add(refid)
 		return fname
 
+	def cache_translation_table(self, translation_id, dbm):
+		fname = self.get_tt_fname(translation_id)
+		if translation_id not in self._tt:
+			self.write_pickle(fname, dbm.get_translation_dict(translation_id))
+			self._tt.add(translation_id)
+		return fname
+
 	def cache_lift(self, refid, refmol_acc, sequence):
-		fname = self.get_cds_fname(refid)
+		fname = self.get_lift_fname(refid)
 		rows = []
 		if refmol_acc not in self._lifts:
-			cols = ["nucPos1", "nucPos2", "nucPos3", "ref1", "ref2", "ref3", "alt1", "alt2", "alt3", "symbol", "aaPos", "aa"]
+			cols = ["elemid", "nucPos1", "nucPos2", "nucPos3", "ref1", "ref2", "ref3", "alt1", "alt2", "alt3", "symbol", "aaPos", "aa"]
 			for cds in self.iter_cds(refmol_acc):
+				elemid = cds["id"]
 				symbol = cds["symbol"]
 				seq = cds["sequence"]+"*"
 				codon = 0
@@ -227,7 +242,7 @@ class sonarCache():
 					sequence += "-"
 				for i, coord in enumerate([coords[x:x+3] for x in range(0, len(coords), 3)]):
 					codon = [sequence[coord[0]], sequence[coord[1]], sequence[coord[2]]]
-					rows.append(coord + codon + codon + [symbol, i, seq[i].strip()])
+					rows.append([elemid] + coord + codon + codon + [symbol, i, seq[i].strip()])
 				df = pd.DataFrame.from_records(rows, columns=cols, coerce_float=False)
 				df = df.reindex(df.columns.tolist(), axis = 1)
 				df.to_pickle(fname)
@@ -268,6 +283,7 @@ class sonarCache():
 						   'sequence': seq,
 						   'refmol': refmol,
 						   'refmolid': refmolid,
+						   'translation_id': self.refmols[refmol]['translation.id'],
 						   'properties': self.get_properties(record.description)
 						   }
 
@@ -332,6 +348,7 @@ class sonarCache():
 			for data in self.iter_fasta(*fnames):
 				# check sample
 				data['sampleid'] = dbm.get_sample_id(data['name'])
+				data['sourceid'] = dbm.get_source(data['refmolid'])['id']
 
 				# check properties
 				if data['sampleid'] is None:
@@ -356,14 +373,16 @@ class sonarCache():
 				if data['algnid'] is None:
 					data['seqfile'] = self.cache_sequence(data['seqhash'], data['sequence'])
 					data['reffile'] = self.cache_reference(refseq_id, self.get_refseq(data['refmol']))
+					data['ttfile'] = self.cache_translation_table(data['translation_id'], dbm)
 					data['liftfile'] = self.cache_lift(refseq_id, data['refmol'], self.get_refseq(data['refmol']))
 					data['algnfile'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 					data['varfile'] = self.get_var_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 				else:
 					data['seqfile'] = None
 					data['reffile'] = None
-					data['algnfile'] = None
+					data['ttfile'] = None
 					data['liftfile'] = None
+					data['algnfile'] = None
 					data['varfile'] = None
 				del(data['sequence'])
 				self.cache_sample(**data)
@@ -381,7 +400,7 @@ class sonarCache():
 							if line == "//":
 								break
 							vardat = line.strip("\r\n").split("\t")
-							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
+							dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2])
 						if line != "//":
 							sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
 				# paranoia test

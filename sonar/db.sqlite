@@ -129,13 +129,15 @@ CREATE TABLE IF NOT EXISTS elempart (
 
 CREATE TABLE IF NOT EXISTS variant (
 	id INTEGER PRIMARY KEY,
+	element_id INTEGER NOT NULL,
 	ref VARCHAR NOT NULL,
 	alt VARCHAR NOT NULL,
 	start INTEGER NOT NULL,
 	end INTEGER NOT NULL,
-	parent_id INTEGER
+	parent_id INTEGER,
+	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_variant_lookup ON variant(start, end, ref, alt, parent_id);
+CREATE INDEX IF NOT EXISTS idx_variant_lookup ON variant(element_id, start, end, ref, alt, parent_id);
 CREATE INDEX IF NOT EXISTS idx_variant_parent_id ON variant(parent_id);
 
 CREATE TABLE IF NOT EXISTS alignment (
@@ -291,7 +293,7 @@ FROM variant
   JOIN alignment ON alignment.id = alignment2variant.alignment_id
   JOIN sequence ON sequence.seqhash = alignment.seqhash
   JOIN sample ON sample.seqhash = sequence.seqhash
-  JOIN element ON element.id = alignment.element_id
+  JOIN element ON element.id = variant.element_id
   JOIN molecule ON molecule.id = element.molecule_id
   JOIN reference ON reference.id = molecule.reference_id;
 
