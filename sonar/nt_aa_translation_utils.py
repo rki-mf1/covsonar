@@ -663,7 +663,7 @@ def convert_to_AA(ref,start,end,alt,element_df):
         start_aa = na2aa_genome(start,gene=get_GeneName_inRange(start))
         end_aa = na2aa_genome(end,gene=get_GeneName_inRange(end))
         print(start_aa,end_aa)
-        ## start_aa need to plus one to get the real poistion in 1-base 
+        ## start_aa need to plus one to get the real poistion in 1-base system
         ref_aa = ''# _elem_AA_SEQ[68:70]
         alt_aa = ''
         ## system
