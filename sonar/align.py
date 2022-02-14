@@ -8,7 +8,7 @@ import re
 import sys
 import pickle
 import subprocess
-import tempfile
+import pandas as pd
 from Bio.Emboss.Applications import StretcherCommandline
 
 
@@ -21,7 +21,6 @@ class sonarAligner(object):
 
 	def __init__(self):
 		pass
-
 
 	def align(self, qry, ref, gapopen= 16, gapextend = 4):
 		"""
@@ -40,6 +39,8 @@ class sonarAligner(object):
 		"""
 		with open(fname, 'rb') as handle:
 			data = pickle.load(handle, encoding="bytes")
+
+		sourceid = str(data['sourceid'])
 		if os.path.isfile(data['var_file']):
 			line = ""
 			with open(data['var_file'], "r") as handle:
@@ -48,7 +49,12 @@ class sonarAligner(object):
 			if line == "//":
 				return
 		alignment = self.align(data['seq_file'], data['ref_file'])
-		vars = "\n".join(["\t".join(x) for x in self.extract_vars(*alignment)])
+		nuc_vars = [x for x in self.extract_vars(*alignment)]
+		vars = "\n".join(["\t".join(x) + "\t" + sourceid for x in nuc_vars])
+		if nuc_vars:
+			aa_vars = "\n".join(["\t".join(x) for x in self.lift_vars(nuc_vars, data['lift_file'], data['tt_file'])])
+			if aa_vars:
+				vars += "\n" + aa_vars
 		try:
 			with open(data['var_file'], "w") as handle:
 				handle.write(vars + "\n//")
@@ -90,3 +96,42 @@ class sonarAligner(object):
 			else:
 				yield ref_seq[i], str(i-offset), str(i-offset+1), qry_seq[i]
 			i += 1
+
+	def translate(self, seq, tt):
+		aa = []
+		while len(seq)%3 != 0:
+			seq = seq[:len(seq)-1]
+		for codon in [seq[i:i+3] for i in range(0, len(seq), 3)]:
+			aa.append(tt[codon])
+		return "".join(aa)
+
+	def lift_vars(self, nuc_vars, lift_file, tt_file):
+		df = pd.read_pickle(lift_file)
+
+		with open(tt_file, 'rb') as handle:
+			tt = pickle.load(handle, encoding="bytes")
+		for nuc_var in nuc_vars:
+			for i in range(int(nuc_var[1]), int(nuc_var[2])):
+				alt = "-" if nuc_var[3] == " " else nuc_var[3]
+				df.loc[df['nucPos1'] == i, 'alt1'] = alt
+				df.loc[df['nucPos2'] == i, 'alt2'] = alt
+				df.loc[df['nucPos3'] == i, 'alt3'] = alt
+
+		df = df.loc[(df["ref1"] != df["alt1"]) | (df["ref2"] != df["alt2"]) | (df["ref3"] != df["alt3"])]
+		df["altAa"] = df.apply(lambda x: self.translate(x["alt1"]+x["alt1"]+x["alt1"], tt), axis=1)
+		df = df.loc[df["aa"] != df["altAa"]]
+		# snps or inserts
+		for index, row in df.loc[(df["altAa"] != "-") & (df["altAa"] != "")].iterrows():
+			yield row["aa"], str(row["aaPos"]), str(row["aaPos"]+1), row['altAa'], str(row["elemid"])
+		# deletions
+		prev_row = None
+		for index, row in df.loc[(df["altAa"] == "-") | (df["altAa"] == "")].sort_values(['elemid', 'aaPos']).iterrows():
+			if prev_row is None:
+				prev_row = row
+			elif prev_row["elemid"] == row["elemid"] and abs(prev_row["aaPos"]-row['aaPos'])==1:
+				prev_row["aa"] += row['aa']
+			else:
+				yield prev_row["aa"], str(prev_row["aaPos"]), str(prev_row["aaPos"]+len(prev_row["aa"])), prev_row['altAa'], str(prev_row["elemid"])
+				prev_row = row
+		if not prev_row is None:
+			yield prev_row["aa"], str(prev_row["aaPos"]), str(prev_row["aaPos"]+len(prev_row["aa"])), prev_row['altAa'], str(prev_row["elemid"])

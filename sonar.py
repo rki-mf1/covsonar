@@ -116,6 +116,9 @@ def parse_args():
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('optimize', parents=[general_parser], help='optimizes the database.')
 
+	#create the parser for the "dev" command
+	parser_dev = subparsers.add_parser('dev', parents=[general_parser])
+
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 	args = parser.parse_known_args(namespace=user_namespace)
@@ -327,7 +330,7 @@ if __name__ == "__main__":
 	# setup
 	if args.tool == "setup":
 		sonarActions.setup_db(args.db, debug=args.debug)
-		exit()
+		exit(0)
 
 	snr = sonarActions(args.db, debug=args.debug)
 	with sonarDBManager(args.db, readonly=True) as dbm:
@@ -406,7 +409,13 @@ if __name__ == "__main__":
 			print()
 			snr.show_db_info()
 
-
 	# optimize
 	if args.tool == "optimize":
 		sonardb.sonarDBManager.optimize(args.db)
+
+	# optimize
+	if args.tool == "dev":
+		print("***dev mode***")
+		with sonarDBManager(args.db, debug=args.debug) as dbm:
+			for feature in dbm.get_annotation():
+				print(())

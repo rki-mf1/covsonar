@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-from importlib.resources import path
 import os
 import re
 import sys
@@ -127,10 +126,8 @@ class sonarCache():
 			'algn_dir': self.algn_dir,
 			'var_dir': self.var_dir
 		}
-		
 		with open(self.smk_config, 'w') as handle:
 		    yaml.dump(data, handle)
-
 
 	def get_seq_fname(self, seqhash):
 		fn = self.slugify(seqhash)
@@ -393,13 +390,7 @@ class sonarCache():
 	def import_samples(self):
 		refseqs = {}
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
-
-			###  prepare Gene range (element part) into dataframe.
-			element_df = pd.DataFrame.from_records(dbm.get_element_by_ids(all=True))
-			print(element_df)
-
 			for sample_data in self.iter_samples():
-				print(sample_data)
 				# nucleotide level import
 				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 				if sample_data['algnid'] is None:

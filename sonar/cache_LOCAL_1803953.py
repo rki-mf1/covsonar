@@ -16,6 +16,7 @@ from Bio import SeqIO
 import difflib as dl
 from math import ceil
 from tempfile import mkdtemp
+
 import pandas as pd
 
 class sonarCache():
@@ -31,7 +32,7 @@ class sonarCache():
 		self.ignore_errors = ignore_errors
 
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			self.refmols = dbm.get_molecule_data("\"molecule.accession\"", "\"molecule.id\"", "\"molecule.standard\"" , "\"translation.id\"", reference_accession=self.refacc)
+			self.refmols = dbm.get_molecule_data("\"molecule.accession\"", "\"molecule.id\"", "\"molecule.standard\"" , reference_accession=self.refacc)
 			self.default_refmol_acc = [x for x in self.refmols if self.refmols[x]['molecule.standard'] == 1 ][0]
 			self.default_refmol_id = [x for x in self.refmols if self.refmols[x]['molecule.id'] == 1 ][0]
 			self.sources = {x['molecule.accession']: dbm.get_source(x['molecule.id']) for x in self.refmols.values()}
@@ -56,8 +57,6 @@ class sonarCache():
 		os.makedirs(self.sample_dir, exist_ok=True)
 		self._samplefiles = set()
 		self._refs = set()
-		self._lifts = set()
-		self._tt = set()
 
 	def __enter__(self):
 		return self
@@ -139,12 +138,6 @@ class sonarCache():
 	def get_ref_fname(self, refid):
 		return os.path.join(self.ref_dir, str(refid) + ".seq")
 
-	def get_lift_fname(self, refid):
-		return os.path.join(self.ref_dir, str(refid) + ".lift")
-
-	def get_tt_fname(self, refid):
-		return os.path.join(self.ref_dir, str(refid) + ".tt")
-
 	def get_algn_fname(self, seqhash):
 		fn = self.slugify(seqhash)
 		return os.path.join(self.algn_dir, fn[:2], fn + ".algn")
@@ -157,23 +150,19 @@ class sonarCache():
 		fn = self.slugify(hashlib.sha1(sample_name.encode('utf-8')).hexdigest())
 		return os.path.join(self.sample_dir, fn[:2], fn + ".sample")
 
-	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, sourceid,translation_id, algnid, seqfile, reffile, ttfile, algnfile, varfile, liftfile, properties):
+	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, algnid, seqfile, reffile, algnfile, varfile, properties):
 		data = {
 			"name": name,
 			"sampleid": sampleid,
 			"refmol": refmol,
 			"refmolid": refmolid,
-			"sourceid": sourceid,
-			"translationid": translation_id,
 			"algnid": algnid,
 			"header": header,
 			"seqhash": seqhash,
 			"seq_file": seqfile,
 			"ref_file": reffile,
-			"tt_file": ttfile,
 			"algn_file": algnfile,
-			"var_file": varfile,
-			"lift_file": liftfile
+			"var_file": varfile
 			}
 		fname = self.get_sample_fname(name)
 		if os.path.isfile(fname):
@@ -210,48 +199,9 @@ class sonarCache():
 	def cache_reference(self, refid, sequence):
 		fname = self.get_ref_fname(refid)
 		if refid not in self._refs:
+			self._refs.add(refid)
 			with open(fname, "w") as handle:
 				handle.write(sequence)
-			self._refs.add(refid)
-		return fname
-
-	def cache_translation_table(self, translation_id, dbm):
-		fname = self.get_tt_fname(translation_id)
-		if translation_id not in self._tt:
-			self.write_pickle(fname, dbm.get_translation_dict(translation_id))
-			self._tt.add(translation_id)
-		return fname
-
-	def cache_lift(self, refid, refmol_acc, sequence):
-		fname = self.get_lift_fname(refid)
-		rows = []
-		if refmol_acc not in self._lifts:
-			cols = ["elemid", "nucPos1", "nucPos2", "nucPos3", "ref1", "ref2", "ref3", "alt1", "alt2", "alt3", "symbol", "aaPos", "aa"]
-			for cds in self.iter_cds(refmol_acc):
-				elemid = cds["id"]
-				symbol = cds["symbol"]
-				seq = cds["sequence"]+"*"
-				codon = 0
-				i = 0
-				coords = []
-				for rng in cds['ranges']:
-					coords.extend(list(rng))
-				while len(coords)%3 != 0:
-					coords.append("")
-				l = len(coords)
-				while len(seq) < l/3:
-					seq += "-"
-				while len(sequence) < l:
-					sequence += "-"
-				for i, coord in enumerate([coords[x:x+3] for x in range(0, len(coords), 3)]):
-					codon = [sequence[coord[0]], sequence[coord[1]], sequence[coord[2]]]
-					rows.append([elemid] + coord + codon + codon + [symbol, i, seq[i].strip()])
-				df = pd.DataFrame.from_records(rows, columns=cols, coerce_float=False)
-				df = df.reindex(df.columns.tolist(), axis = 1)
-				df.to_pickle(fname)
-				if self.debug:
-					df.to_csv(fname+".csv")
-			self._lifts.add(refmol_acc)
 		return fname
 
 	@staticmethod
@@ -286,7 +236,6 @@ class sonarCache():
 						   'sequence': seq,
 						   'refmol': refmol,
 						   'refmolid': refmolid,
-						   'translation_id': self.refmols[refmol]['translation.id'],
 						   'properties': self.get_properties(record.description)
 						   }
 
@@ -304,30 +253,6 @@ class sonarCache():
 			return self.sources[refmol_acc]['sequence']
 		except:
 			return None
-
-	def iter_cds(self, refmol_acc):
-		cds = {}
-		prev_elem = None
-		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			for row in dbm.get_annotation(molecule_accession=refmol_acc, element_type="cds"):
-				if prev_elem is None:
-					prev_elem = row["element.id"]
-				elif row["element.id"] != prev_elem:
-					yield cds
-					cds = {}
-					prev_elem = row["element.id"]
-				if cds == {}:
-					cds = {
-						"id": row["element.id"],
-						"accession":row["element.accession"],
-						"symbol": row["element.symbol"],
-						"sequence": row["element.sequence"],
-						"ranges": [range(row["elempart.start"], row["elempart.end"], row["elempart.strand"])]
-					}
-				else:
-					cds["ranges"].append(range(row["elempart.start"], row["elempart.end"], row["elempart.strand"]))
-		if cds:
-			yield cds
 
 	def get_refseq_id(self, refmol_acc):
 		try:
@@ -351,7 +276,6 @@ class sonarCache():
 			for data in self.iter_fasta(*fnames):
 				# check sample
 				data['sampleid'] = dbm.get_sample_id(data['name'])
-				data['sourceid'] = dbm.get_source(data['refmolid'])['id']
 
 				# check properties
 				if data['sampleid'] is None:
@@ -376,15 +300,11 @@ class sonarCache():
 				if data['algnid'] is None:
 					data['seqfile'] = self.cache_sequence(data['seqhash'], data['sequence'])
 					data['reffile'] = self.cache_reference(refseq_id, self.get_refseq(data['refmol']))
-					data['ttfile'] = self.cache_translation_table(data['translation_id'], dbm)
-					data['liftfile'] = self.cache_lift(refseq_id, data['refmol'], self.get_refseq(data['refmol']))
 					data['algnfile'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 					data['varfile'] = self.get_var_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 				else:
 					data['seqfile'] = None
-					data['reffile'] = None
-					data['ttfile'] = None
-					data['liftfile'] = None
+					data['reffile'] = None 
 					data['algnfile'] = None
 					data['varfile'] = None
 				del(data['sequence'])
@@ -409,7 +329,20 @@ class sonarCache():
 							if line == "//":
 								break
 							vardat = line.strip("\r\n").split("\t")
-							dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2])
+							ref=vardat[0]
+							alt=vardat[3]
+							start=vardat[1]
+							end=vardat[2]
+
+							dbm.insert_variant(algnid, vardat[0], vardat[3], vardat[1], vardat[2])
+							### add AA position here
+							nt_pattern= ref+start+alt 
+							#print(ref+start+alt)
+							#translate_nt_to_aa
+							# convert_to_AA(ref,start,end,alt,element_df)
+
+							###
+
 						if line != "//":
 							sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
 				# paranoia test
