@@ -35,8 +35,11 @@ class sonarAligner(object):
 		return qry, ref
 
 	def process_cached_sample(self, fname):
-		"""
-		"""
+		'''
+		This function takes a sample file and processes it.
+		create var file with NT and AA mutations
+		'''
+
 		with open(fname, 'rb') as handle:
 			data = pickle.load(handle, encoding="bytes")
 
@@ -49,11 +52,14 @@ class sonarAligner(object):
 			if line == "//":
 				return
 		alignment = self.align(data['seq_file'], data['ref_file'])
+		# create NT mutation
 		nuc_vars = [x for x in self.extract_vars(*alignment)]
 		vars = "\n".join(["\t".join(x) + "\t" + sourceid for x in nuc_vars])
 		if nuc_vars:
+			# create AA mutation
 			aa_vars = "\n".join(["\t".join(x) for x in self.lift_vars(nuc_vars, data['lift_file'], data['tt_file'])])
 			if aa_vars:
+				# concatinate to the same file of NT variants
 				vars += "\n" + aa_vars
 		try:
 			with open(data['var_file'], "w") as handle:
@@ -107,7 +113,6 @@ class sonarAligner(object):
 
 	def lift_vars(self, nuc_vars, lift_file, tt_file):
 		df = pd.read_pickle(lift_file)
-
 		with open(tt_file, 'rb') as handle:
 			tt = pickle.load(handle, encoding="bytes")
 		for nuc_var in nuc_vars:

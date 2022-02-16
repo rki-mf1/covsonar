@@ -158,6 +158,10 @@ class sonarCache():
 		return os.path.join(self.sample_dir, fn[:2], fn + ".sample")
 
 	def cache_sample(self, name, sampleid, seqhash, header, refmol, refmolid, sourceid,translation_id, algnid, seqfile, reffile, ttfile, algnfile, varfile, liftfile, properties):
+		'''
+		The function takes in a bunch of arguments and returns a filename.
+		:return: A list of dictionaries. Each dictionary contains the information for a single sample.
+		'''
 		data = {
 			"name": name,
 			"sampleid": sampleid,
@@ -175,7 +179,7 @@ class sonarCache():
 			"var_file": varfile,
 			"lift_file": liftfile
 			}
-		fname = self.get_sample_fname(name)
+		fname = self.get_sample_fname(name) # full path
 		if os.path.isfile(fname):
 			if self.sample_collision(fname, data):
 				sys.exit("sample data collision: data differs for sample " + name + " (" + header + ").")
@@ -216,13 +220,32 @@ class sonarCache():
 		return fname
 
 	def cache_translation_table(self, translation_id, dbm):
-		fname = self.get_tt_fname(translation_id)
+		'''
+		If the translation table
+		is not in the cache, it is retrieved from the database and written to a file
+		
+		:param translation_id: The id of the translation table
+		:param dbm: the database manager
+		:return: A file name.
+		'''
+		fname = self.get_tt_fname(translation_id) # write under /cache/ref/
 		if translation_id not in self._tt:
 			self.write_pickle(fname, dbm.get_translation_dict(translation_id))
 			self._tt.add(translation_id)
 		return fname
 
 	def cache_lift(self, refid, refmol_acc, sequence):
+		'''
+		The function takes in a reference id, a reference molecule accession number,
+		and a reference sequence. It then checks to see if the reference molecule accession number is in the set of molecules that
+		have been cached. If it is not, it iterates through all of the coding sequences for that molecule and creates a
+		dataframe for each one. 
+. 
+		It then saves the dataframe to a pickle file and adds the reference molecule accession number to
+		the set of molecules that have been cached. 
+		It then returns the name of the pickle file
+	
+		'''
 		fname = self.get_lift_fname(refid)
 		rows = []
 		if refmol_acc not in self._lifts:
@@ -270,19 +293,22 @@ class sonarCache():
 			sys.exit("input error: " + fname + " cannot be opened.")
 
 	def iter_fasta(self, *fnames):
+		'''
+		This function iterates over the fasta files and returns a dictionary for each record
+		'''
 		for fname in fnames:
 			with self.open_file(fname) as handle:
 				for record in SeqIO.parse(handle, "fasta"):
 					refmol = self.get_refmol(record.description)
 					if not refmol:
-						sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(fasta_header) + ").")
+						sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(record.description) + ").")
 					refmolid = self.refmols[refmol]['molecule.id']
 					seq = sonarActions.harmonize(record.seq)
 					seqhash = sonarActions.hash(seq)
 					yield {
 						   'name': record.id,
 						   'header': record.description,
-						   'seqhash': sonarActions.hash(seq),
+						   'seqhash': seqhash,
 						   'sequence': seq,
 						   'refmol': refmol,
 						   'refmolid': refmolid,
@@ -348,7 +374,9 @@ class sonarCache():
 
 	def add_fasta(self, *fnames):
 		with sonarDBManager(self.db, debug=False) as dbm:
+	
 			for data in self.iter_fasta(*fnames):
+			
 				# check sample
 				data['sampleid'] = dbm.get_sample_id(data['name'])
 				data['sourceid'] = dbm.get_source(data['refmolid'])['id']
@@ -360,7 +388,7 @@ class sonarCache():
 					self.log(data['name'] + " skipped as it exists in the database and updating is disabled")
 					continue
 				else:
-					stored_properties = dbm.get_properties(sample_name)
+					stored_properties = dbm.get_properties(data['name'])
 					data['properties'] = { x: data['properties'][x] for x in data['properties'].items() if stored_properties[x] != y }
 
 				# check reference
@@ -374,6 +402,7 @@ class sonarCache():
 				# check alignment
 				data['algnid'] = dbm.get_alignment_id(data['seqhash'], refseq_id)
 				if data['algnid'] is None:
+					# create new files if they dont exist
 					data['seqfile'] = self.cache_sequence(data['seqhash'], data['sequence'])
 					data['reffile'] = self.cache_reference(refseq_id, self.get_refseq(data['refmol']))
 					data['ttfile'] = self.cache_translation_table(data['translation_id'], dbm)
@@ -387,7 +416,8 @@ class sonarCache():
 					data['liftfile'] = None
 					data['algnfile'] = None
 					data['varfile'] = None
-				del(data['sequence'])
+				del(data['sequence']) # no need to store in dict. because we already write it into cache file.
+				# print(data)
 				self.cache_sample(**data)
 
 	def import_samples(self):
@@ -395,11 +425,10 @@ class sonarCache():
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
 
 			###  prepare Gene range (element part) into dataframe.
-			element_df = pd.DataFrame.from_records(dbm.get_element_by_ids(all=True))
-			print(element_df)
+			# element_df = pd.DataFrame.from_records(dbm.get_element_by_ids(all=True))
+			# print(element_df)
 
 			for sample_data in self.iter_samples():
-				print(sample_data)
 				# nucleotide level import
 				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 				if sample_data['algnid'] is None:
