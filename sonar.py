@@ -18,6 +18,7 @@ from collections import defaultdict
 import re
 from tqdm import tqdm
 from multiprocessing import Pool
+import time
 
 class arg_namespace(object):
     pass
@@ -132,6 +133,14 @@ def parse_args():
 				else:
 					t = str
 				parser_match.add_argument('--' + prop['name'], type=t, nargs = '+', default=argparse.SUPPRESS)
+
+	#create the parser for the "Var2Vcf" command
+	parser_var2vcf = subparsers.add_parser('var2vcf', parents=[general_parser], help='export variants from the database to vcf format.')
+	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
+	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
+	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
+	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
+	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
 
 	#return parser.parse_args()
 	return parser.parse_args(namespace=user_namespace)
@@ -326,16 +335,31 @@ def process_update_expressions(expr):
 
 if __name__ == "__main__":
 	args = parse_args()
+	if hasattr(args, 'debug') and args.debug:
+		debug = True
+	else:
+		debug = False
 
 	# setup
 	if args.tool == "setup":
-		sonarActions.setup_db(args.db, debug=args.debug)
+		sonarActions.setup_db(args.db, debug=debug)
 		exit(0)
 
-	snr = sonarActions(args.db, debug=args.debug)
+	snr = sonarActions(args.db, debug=debug)
+
+	# info
+	if args.tool == "info":
+		snr.show_system_info()
+		if args.db:
+			print()
+			snr.show_db_info()
+		exit(0)
+	
+	if not args.db is None and not os.path.isfile(args.db):
+		sys.exit("input error: database does not exist.")
+
 	with sonarDBManager(args.db, readonly=True) as dbm:
 		dbm.check_db_compatibility()
-
 	# match
 	if args.tool == "match":
 		with sonarDBManager(args.db, readonly=True) as dbm:
@@ -347,12 +371,12 @@ if __name__ == "__main__":
 
 	# newprop
 	if args.tool == "addprop":
-		with sonarDBManager(args.db, debug=args.debug) as dbm:
+		with sonarDBManager(args.db, debug=debug) as dbm:
 			dbm.add_property(args.name, args.dtype, args.qtype, args.descr, args.default)
 
 	# delprop
 	if args.tool == "delprop":
-		with sonarDBManager(args.db, debug=args.debug) as dbm:
+		with sonarDBManager(args.db, debug=debug) as dbm:
 			if args.name not in dbm.properties:
 				sys.exit("input error: unknown property.")
 			a = dbm.count_property(args.name)
@@ -390,7 +414,7 @@ if __name__ == "__main__":
 		if args.file:
 			if not os.path.isfile(args.file):
 				sys.exit("input error: file " + args.file + " does not exist.")
-			with snr.open_file(fname, compressed=args.file,) as handle:
+			with snr.open_file(args.file, compressed="auto") as handle:
 				for line in handle:
 					args.acc.add(line.strip())
 		if len(args.acc) == 0:
@@ -402,20 +426,39 @@ if __name__ == "__main__":
 	if args.tool == "view":
 		snr.view(args.acc)
 
-	# info
-	if args.tool == "info":
-		snr.show_system_info()
-		if args.db:
-			print()
-			snr.show_db_info()
-
 	# optimize
 	if args.tool == "optimize":
-		sonardb.sonarDBManager.optimize(args.db)
+		sonarDBManager.optimize(args.db)
+
+	# Var2Vcf (export variants to  VCF)
+	if args.tool == "var2vcf":
+		start = time.time()
+		if args.date:
+			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
+			for d in args.date:
+				if not regex.match(d):
+					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
+
+		args.acc = set([x.strip() for x in args.acc])
+		if args.file:
+			if not os.path.isfile(args.file):
+				sys.exit("input error: file " + args.file + " does not exist.")
+			with snr.open_file(args.file, compressed='auto') as handle:
+				for line in handle:
+					args.acc.add(line.strip())
+		
+		snr.var2vcf(args.acc, args.date, args.output, args.cpus, args.betaV2)
+		end = time.time()
+		hours, rem = divmod(end-start, 3600)
+		minutes, seconds = divmod(rem, 60)
+		print("Runtime (H:M:S): {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+
 
 	# optimize
 	if args.tool == "dev":
 		print("***dev mode***")
-		with sonarDBManager(args.db, debug=args.debug) as dbm:
+		with sonarDBManager(args.db, debug=debug) as dbm:
 			for feature in dbm.get_annotation():
 				print(())
+				
+	

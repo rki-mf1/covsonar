@@ -17,10 +17,11 @@ from tqdm import tqdm
 import tempfile
 import itertools
 from contextlib import ExitStack
-from sonar import sonarDBManager, sonarAligner
+from sonar import sonarDBManager, sonarAligner, sonartoVCF, sonartoVCF_v2
 import csv
 from tabulate import tabulate
 from textwrap import fill
+from tempfile import mkstemp, mkdtemp
 
 # CLASS
 class sonarActions(object):
@@ -106,7 +107,7 @@ class sonarActions(object):
 		without ambiguities
 	"""
 	def __init__(self, dbfile, translation_table = 1, debug=False):
-		self.db = os.path.abspath(dbfile)
+		self.db = os.path.abspath(dbfile)  if dbfile else mkstemp()[1]
 		self.debug = debug
 		self.__moduledir = self.get_module_base()
 		self.reffna = os.path.join(self.__moduledir, "ref.fna")
@@ -278,6 +279,7 @@ class sonarActions(object):
 				print(rows)
 
 				self.rows_to_csv(rows, na="*** no match ***", tsv=True)
+	
 	# show db infos
 	def show_props(self):
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
@@ -313,6 +315,27 @@ class sonarActions(object):
 			print("  e.g. 1:10 (between 1 and 10)")
 			print("  e.g. 2021-01-01:2021-12-31 (between 1st Jan and 31st Dec of 2021)")
 			print()
+	
+	def show_system_info(self):
+		print("show_system_info")
+		#print("sonarDB version:       ", self.db.get_version())
+		#print("reference genome:      ", self.db.refdescr)
+		#print("reference length:      ", str(len(self.db.refseq)) + "bp")
+		#print("annotated proteins:    ", ", ".join(self.db.refgffObj.symbols))
+		#print("used translation table:", self.db.translation_table)
+
+	def show_db_info(self):
+		with sonarDBManager(self.db, readonly=True) as dbm:
+			print("database path:             ", dbm.dbfile)
+			print("database version:          ", dbm.get_db_version())
+			print("database size:             ", dbm.get_db_size())
+			print("unique sequences:          ", dbm.count_sequences())
+			print("earliest genome import:    ", dbm.get_earliest_import())
+			print("latest genome import:      ", dbm.get_latest_import())
+			print("earliest sampling date:    ", dbm.get_earliest_date())
+			print("latest sampling date:      ", dbm.get_latest_date())
+		
+	
 	# output
 	def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
 		if not rows:
@@ -323,3 +346,11 @@ class sonarActions(object):
 			writer = csv.DictWriter(file, rows[0].keys(), delimiter=sep, lineterminator=os.linesep)
 			writer.writeheader()
 			writer.writerows(rows)
+
+	# Call SonarToVCF
+
+	def var2vcf(self, acc, date, output, cpu, betaV2):
+		if betaV2:
+			return	sonartoVCF_v2.export2VCF(self.db,acc, date, output, cpu)
+		else:
+			return	sonartoVCF.export2VCF(self.db,acc, date, output, cpu)
