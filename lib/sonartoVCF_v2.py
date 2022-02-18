@@ -16,12 +16,11 @@ import math
 from tqdm import tqdm
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 import traceback
+import gzip
 
-#num_partitions = 20 # number of partitions to split dataframe
-#num_cores = 20 # number of cores on your machine
 
 def create_fix_vcf_header(ref):
-    header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV1.1.2\n##reference="+ref
+    header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV1.1.3\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
     info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">\n'
@@ -325,9 +324,29 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
         if(merge_type =='v'):
             bgzip(tmp_output)
             tabix_index(tmp_output)  
-
-    shutil.copy( tmp_output + '.gz', global_output+ '.gz')
+    tmp_output = clean_stranger_things(tmp_output+ '.gz', tmp_dirname)
+    shutil.copy(tmp_output, global_output+ '.gz')
     
     print('Clean workspace ...')
     if os.path.isdir(tmp_dirname):
         shutil.rmtree(tmp_dirname)   
+
+def clean_stranger_things(path_to_vcfgz, tmp_dirname):
+    print('Clean strange things in vcf ...')
+    output_path_file = os.path.join(tmp_dirname,'vcf.final.gz' )
+    with gzip.open(path_to_vcfgz, 'rt') as f: 
+        with gzip.open(output_path_file, 'wt') as output_file: 
+            for line in f:
+                if line.startswith('#'):
+                    if 'bcftools_mergeCommand' in line:
+                        continue
+                    else:
+                        output_file.write(line)
+                else:
+                    rows = line.split('\t')
+                    ### fix duplicate 
+                    ID = rows[2]
+                    rows[2]= ";".join(set(ID.split(';')))
+                    
+                    output_file.write("\t".join(rows))
+    return output_path_file
