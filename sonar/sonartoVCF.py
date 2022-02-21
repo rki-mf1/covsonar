@@ -16,13 +16,13 @@ import math
 from tqdm import tqdm
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 from multiprocessing import Pool
-
+import gzip
 #num_partitions = 20 # number of partitions to split dataframe
 #num_cores = 20 # number of cores on your machine
 
 
 def create_fix_vcf_header(ref,sample_id):
-    header = "##fileformat=VCFv4.2\n##poweredby=CovSonarV1.1.3\n##reference="+ref
+    header = "##fileformat=VCFv4.2\n##poweredby=CovSonarV2\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
     info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">'
@@ -142,11 +142,12 @@ def export2VCF(
                                 *include_dates))
 
         #print(where_clause)
-        fields = 'accession, start, end, alt, ref '
+        fields = ' "sample.name" as accession, "element.accession" as ref_name , "variant.start" as start, "variant.end" as end, "variant.alt" as alt, "variant.ref" as ref '
         if where_clause:
-            sql =  "SELECT " + fields + " FROM dna_view WHERE " + " AND ".join(where_clause) + ";"
+            sql =  'SELECT ' + fields + ' FROM variantView WHERE "element.type"="source" ' + ' AND '.join(where_clause) + ';'
         else:
-            sql = "SELECT " + fields + " FROM dna_view;"
+            sql = 'SELECT ' + fields + ' FROM variantView  WHERE "element.type"="source"  ;'
+
 
 
         ##############################
@@ -160,8 +161,8 @@ def export2VCF(
             tmp_dirname = mkdtemp( prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
             # create fasta_id
-            chrom_id = refdescr.split()[0].replace(">", "")
-            rows['CHROM'] = chrom_id
+            refdescr = ','.join(rows['ref_name'].unique().tolist())
+            rows['CHROM'] = refdescr
             rows['QUAL'] = '.'
             rows['FILTER'] = '.'
             rows['INFO'] = 'AC=1;AN=1'
@@ -253,7 +254,8 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
             bgzip(tmp_output)
             tabix_index(tmp_output)  
 
-    shutil.copy( tmp_output + '.gz', global_output+ '.gz')
+    tmp_output = clean_stranger_things(tmp_output+ '.gz', tmp_dirname)
+    shutil.copy(tmp_output, global_output+ '.gz')
     
     print('Clean workspace ...')
     if os.path.isdir(tmp_dirname):
@@ -265,3 +267,22 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
     #elif  not second_create_ and   third_create_:
     #    os.rename(global_output + '.3.gz', global_output+ '.gz')
         
+def clean_stranger_things(path_to_vcfgz, tmp_dirname):
+    print('Clean strange things in vcf ...')
+    output_path_file = os.path.join(tmp_dirname,'vcf.final.gz' )
+    with gzip.open(path_to_vcfgz, 'rt') as f: 
+        with gzip.open(output_path_file, 'wt') as output_file: 
+            for line in f:
+                if line.startswith('#'):
+                    if 'bcftools_mergeCommand' in line:
+                        continue
+                    else:
+                        output_file.write(line)
+                else:
+                    rows = line.split('\t')
+                    ### fix duplicate 
+                    ID = rows[2]
+                    rows[2]= ";".join(set(ID.split(';')))
+                    
+                    output_file.write("\t".join(rows))
+    return output_path_file

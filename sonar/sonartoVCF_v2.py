@@ -16,17 +16,17 @@ import math
 from tqdm import tqdm
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 import traceback
-
+import gzip
 from multiprocessing import Pool
 #num_partitions = 20 # number of partitions to split dataframe
 #num_cores = 20 # number of cores on your machine
 
 def create_fix_vcf_header(ref):
-    header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV1.1.3\n##reference="+ref
+    header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV2\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
     info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">\n'
-    note =  "##Note='Currently ignore INDEL'\n"
+    note =  "##Note='Currently ignore DELs'\n"
     # column = "\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+sample_id+"\n"
     return header+format+info+note
 
@@ -79,6 +79,7 @@ def bcftool_index(filename):
 
 
 def calculate_AC_AN(final_df):
+    # print(final_df.iloc[:,[7,6,12]])
     # calculate AC AN
     # order-preserving index between POS and INFO AC
     # e.g. a.POS;b.POS a.AC,b.AC
@@ -94,8 +95,14 @@ def calculate_AC_AN(final_df):
             else:
                 _AC = counts[idx]
                 AN = AN +_AC
-                AC = str(_AC) if not AC else AC+','+str(_AC)
-        # print('AN='+str(AN)+';AC='+AC)
+                if(not AC):
+                    AC = str(_AC) 
+                else:
+                    if(_AC == 0):
+                       print(_AC)             
+                    AC = AC+','+str(_AC)
+
+        #print('AN='+str(AN)+';AC='+AC)
         final_df.at[row.POS, 'INFO'] = 'AN='+str(AN)+';AC='+AC
     return final_df
 
@@ -106,8 +113,8 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
     # print(process_id+" Start")
     # iterate over each group
     final_df = pd.DataFrame()
-    final_df.index = np.arange(1, 29904)
-    final_df['#CHROM'] = refdescr.split()[0].replace(">", "")
+    final_df.index = np.arange(1, 29904)   
+    final_df['#CHROM'] = '.'
     final_df['POS'] = np.arange(1, 29904)
     final_df['ID'] = '.'
     final_df['REF'] = '.'
@@ -123,24 +130,26 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
         # print("Create VCF file:",full_path)
         f.write(create_fix_vcf_header(refdescr))
         for group_name, df_ in tqdm(rows_grouped, mininterval=0.5):
-            final_df[group_name] = "."
+            final_df[group_name] = "." # initail empty value of GT value
             for row in df_.itertuples():
                 try:
                     if( getattr(row, 'start') < 1 or getattr(row, 'start') > 29903):
+                        print('found something is wrong')
                         continue
                     selected_final_row = final_df.loc[getattr(row, 'start')]
                     index_start_postion = getattr(row, 'start')
                     id = getattr(row, 'ref')+str(getattr(row, 'start'))+getattr(row, 'alt')
 
                     if(selected_final_row.ID=='.'):
+                        final_df.at[index_start_postion,'#CHROM'] =  getattr(row, 'ref_name')
                         final_df.at[index_start_postion, 'ID'] = id
-                        final_df.at[index_start_postion, group_name] = 1
+                        final_df.at[index_start_postion, group_name] = 1   # assign GT value
                         final_df.at[index_start_postion, 'REF'] = getattr(row, 'ref')
                         final_df.at[index_start_postion, 'ALT'] = getattr(row, 'alt')
                     else: # update 
                         # check ref and alt 
                         if(selected_final_row.ID==id): # only one ID exists
-                            final_df.at[index_start_postion, group_name] = 1
+                            final_df.at[index_start_postion, group_name] = 1 # assign GT value
                         else:
                             splited_final_id_list = selected_final_row.ID.split(";")
                             totel_len = len(splited_final_id_list)
@@ -212,11 +221,12 @@ def export2VCF(
                                 *include_dates))
 
         #print(where_clause)
-        fields = 'accession, start, end, alt, ref '
+        # in the future, we need to fix this query to be able to accept other refID. 
+        fields = ' "sample.name" as accession, "element.accession" as ref_name , "variant.start" as start, "variant.end" as end, "variant.alt" as alt, "variant.ref" as ref '
         if where_clause:
-            sql =  "SELECT " + fields + " FROM dna_view WHERE " + " AND ".join(where_clause) + ";"
+            sql =  'SELECT ' + fields + ' FROM variantView WHERE "element.type"="source" ' + ' AND '.join(where_clause) + ';'
         else:
-            sql = "SELECT " + fields + " FROM dna_view;"
+            sql = 'SELECT ' + fields + ' FROM variantView  WHERE "element.type"="source"  ;'
 
         # print("query: " + sql)
         # print("vals: ", where_vals)
@@ -225,6 +235,7 @@ def export2VCF(
         rows = pd.read_sql(sql,
                    dbm.connection,params=where_vals)
         print('Return:', len(rows), ' records')
+        print(rows.columns)
         track_vcf = []
         count = 0
         if not rows.empty:
@@ -243,11 +254,18 @@ def export2VCF(
             # http://samtools.github.io/hts-specs/VCFv4.2.pdf
             rows['start'] = rows['start'] + 1
             rows['end'] = rows['end']+1
-            rows['alt'] = rows['alt'].replace('', np.nan) # remove Deletion
+            
+            rows['alt'] = rows['alt'].replace(' ', '')
+            rows = rows[rows['alt'] != '']  # remove Deletion
+
+            # rows['alt'] = rows['alt'].replace(' ', np.nan) # remove Deletion
+            # rows = rows.dropna(axis=0, subset=['alt'])
             # rows['start'] = rows['start'].replace('', np.nan) # remove Insertion
-            rows = rows.dropna(axis=0, subset=['alt'])
+            refdescr = ','.join(rows['ref_name'].unique().tolist())
+            print('Ref description :', refdescr)
             rows_grouped = rows.groupby('accession')
             print('With :', len(rows_grouped), ' accessions')
+
             # split data and write each ACC into individual VCF file.
             print('Start Divide and Conquer ...')
             track_vcf = parallelize_dataframe(rows_grouped, tmp_dirname, num_cores, refdescr, create_vcf)
@@ -335,16 +353,31 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
             bgzip(tmp_output)
             tabix_index(tmp_output)  
 
-
-
-    shutil.copy( tmp_output + '.gz', global_output+ '.gz')
+    tmp_output = clean_stranger_things(tmp_output+ '.gz', tmp_dirname)
+    shutil.copy(tmp_output, global_output+ '.gz')
     
     print('Clean workspace ...')
     if os.path.isdir(tmp_dirname):
         shutil.rmtree(tmp_dirname)   
 
 
-def deduplicate_stranger_thing(path_to_vcf):
-    print('Clean the stranger thing...')
 
-    pass
+def clean_stranger_things(path_to_vcfgz, tmp_dirname):
+    print('Clean strange things in vcf ...')
+    output_path_file = os.path.join(tmp_dirname,'vcf.final.gz' )
+    with gzip.open(path_to_vcfgz, 'rt') as f: 
+        with gzip.open(output_path_file, 'wt') as output_file: 
+            for line in f:
+                if line.startswith('#'):
+                    if 'bcftools_mergeCommand' in line:
+                        continue
+                    else:
+                        output_file.write(line)
+                else:
+                    rows = line.split('\t')
+                    ### fix duplicate 
+                    ID = rows[2]
+                    rows[2]= ";".join(set(ID.split(';')))
+                    
+                    output_file.write("\t".join(rows))
+    return output_path_file

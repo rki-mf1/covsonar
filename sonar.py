@@ -25,7 +25,7 @@ class arg_namespace(object):
 
 def parse_args():
 	user_namespace = arg_namespace()
-	parser = argparse.ArgumentParser(prog="sonar.py", description="")
+	parser = argparse.ArgumentParser(prog="sonar.py", description="---> covSonar V2 \U0001f600")
 	subparsers = parser.add_subparsers(help='detect, store, and screen for mutations in SARS-CoV-2 genomic sequences')
 	subparsers.dest = 'tool'
 	subparsers.required = True
@@ -120,6 +120,14 @@ def parse_args():
 	#create the parser for the "dev" command
 	parser_dev = subparsers.add_parser('dev', parents=[general_parser])
 
+	#create the parser for the "Var2Vcf" command
+	parser_var2vcf = subparsers.add_parser('var2vcf', parents=[general_parser], help='export variants from the database to vcf format.')
+	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
+	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
+	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
+	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
+	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
+
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 	args = parser.parse_known_args(namespace=user_namespace)
@@ -133,14 +141,6 @@ def parse_args():
 				else:
 					t = str
 				parser_match.add_argument('--' + prop['name'], type=t, nargs = '+', default=argparse.SUPPRESS)
-
-	#create the parser for the "Var2Vcf" command
-	parser_var2vcf = subparsers.add_parser('var2vcf', parents=[general_parser], help='export variants from the database to vcf format.')
-	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
-	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
-	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
-	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
-	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
 
 	#return parser.parse_args()
 	return parser.parse_args(namespace=user_namespace)
