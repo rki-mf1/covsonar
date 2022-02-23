@@ -12,13 +12,15 @@ import lzma
 import sonar
 from sonar.action import sonarActions
 from sonar.dbm import sonarDBManager
+from sonar.Lineages_UPDATER import download_source, process_lineage
 from Bio import SeqIO
-from tempfile import mkstemp
+from tempfile import mkstemp, mkdtemp
 from collections import defaultdict
 import re
 from tqdm import tqdm
 from multiprocessing import Pool
 import time
+import shutil
 
 class arg_namespace(object):
     pass
@@ -127,6 +129,12 @@ def parse_args():
 	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
 	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
 	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
+
+	#create the parser for the "optimize" command
+	parser_opt = subparsers.add_parser('db-upgrade', parents=[general_parser], help='Upgrade the database to the latest version.')
+
+	#Update lineage information command
+	parser_update_anno = subparsers.add_parser('update-lineage-info', help='Update lineage information (e.g., lib/linage.all.tsv).')
 
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
@@ -345,6 +353,19 @@ if __name__ == "__main__":
 		sonarActions.setup_db(args.db, debug=debug)
 		exit(0)
 
+	# update-lineage-info
+	if args.tool == "update-lineage-info":
+		tmp_dirname = mkdtemp(prefix=".tmp_")
+		alias_key, lineage = download_source(tmp_dirname)
+		process_lineage(alias_key,lineage,'lib/lineage.all.tsv')
+		if os.path.isdir(tmp_dirname):
+			shutil.rmtree(tmp_dirname)
+		sys.exit('Complete!')
+
+
+	if not args.db is None and not os.path.isfile(args.db):
+		sys.exit("input error: database does not exist.")
+
 	snr = sonarActions(args.db, debug=debug)
 
 	# info
@@ -354,12 +375,16 @@ if __name__ == "__main__":
 			print()
 			snr.show_db_info()
 		exit(0)
-	
-	if not args.db is None and not os.path.isfile(args.db):
-		sys.exit("input error: database does not exist.")
 
-	with sonarDBManager(args.db, readonly=True) as dbm:
-		dbm.check_db_compatibility()
+	# if Upgrade  
+	if args.tool == "db-upgrade":
+		input("Warning: Backup db file before upgrading, Press Enter to continue...")
+		sonarDBManager.upgrade_db(args.db)
+	else:
+		with sonarDBManager(args.db, readonly=True) as dbm:
+			dbm.check_db_compatibility()
+
+
 	# match
 	if args.tool == "match":
 		with sonarDBManager(args.db, readonly=True) as dbm:

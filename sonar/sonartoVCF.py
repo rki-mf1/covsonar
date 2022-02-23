@@ -14,21 +14,20 @@ from multiprocessing import Pool
 import warnings
 import math
 from tqdm import tqdm
-warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
-from multiprocessing import Pool
 import gzip
-#num_partitions = 20 # number of partitions to split dataframe
-#num_cores = 20 # number of cores on your machine
 
+warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 
 def create_fix_vcf_header(ref,sample_id):
     header = "##fileformat=VCFv4.2\n##poweredby=CovSonarV2\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
-    info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">'
+    info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">\n'
+    note =  "##Note_1='Currently we ignore DEL of the SARS-CoV-2 seqeunce'\n"
+    column = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+sample_id+"\n"
+    return header+format+info+note+column
 
-    column = "\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+sample_id+"\n"
-    return header+format+info+column
+from multiprocessing import Pool
 
 
 def bgzip(filename):
@@ -86,14 +85,18 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr,_pos):
         #print("Create VCF file:",group_name)
         vcf_filename =group_name+'.vcf'
         full_path = os.path.join(tmp_dirname,vcf_filename)
+
         with open(full_path, 'w') as f:
             f.write(create_fix_vcf_header(refdescr,group_name))
             df_group = df_group.sort_values(by='start', ascending=True)
             # replace null to .
-            df_group['alt'] = df_group['alt'].replace('', np.nan)
+            #df_group['ref'] = df_group['ref'].replace('', '.') # for insertion
+            df_group['alt'] = df_group['alt'].replace(' ', '') # for deletion
+            #df_group['alt'] = df_group['alt'].replace('', np.nan)
             df_group = df_group.dropna(axis=0, subset=['alt']) # remove Deletion
             for index, row in df_group.iterrows():
                 id = row['ref']+str(row['start'])+row['alt']
+
                 f.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(row['CHROM'], row['start'], id, 
                                         row['ref'], row['alt'],row['QUAL'],row['FILTER'],
                                         row['INFO'],row['FORMAT'],"1"))
@@ -161,8 +164,8 @@ def export2VCF(
             tmp_dirname = mkdtemp( prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
             # create fasta_id
-            refdescr = ','.join(rows['ref_name'].unique().tolist())
-            rows['CHROM'] = refdescr
+            chrom_id = refdescr.split()[0].replace(">", "")
+            rows['CHROM'] = chrom_id
             rows['QUAL'] = '.'
             rows['FILTER'] = '.'
             rows['INFO'] = 'AC=1;AN=1'
@@ -253,7 +256,6 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
         if(merge_type =='v'):
             bgzip(tmp_output)
             tabix_index(tmp_output)  
-
     tmp_output = clean_stranger_things(tmp_output+ '.gz', tmp_dirname)
     shutil.copy(tmp_output, global_output+ '.gz')
     
@@ -266,7 +268,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
     #    os.rename( global_output + '.2.gz', global_output+ '.gz')
     #elif  not second_create_ and   third_create_:
     #    os.rename(global_output + '.3.gz', global_output+ '.gz')
-        
+    
 def clean_stranger_things(path_to_vcfgz, tmp_dirname):
     print('Clean strange things in vcf ...')
     output_path_file = os.path.join(tmp_dirname,'vcf.final.gz' )

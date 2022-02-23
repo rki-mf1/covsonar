@@ -955,3 +955,39 @@ class sonarDBManager():
 				break
 			size /= 1024.0
 		return f"{size:.{decimal_places}f}{unit}"
+
+	@staticmethod
+	def upgrade_db(dbfile):
+		try:
+			with sqlite3.connect(dbfile) as con:
+				cur = con.cursor()
+				current_version= cur.execute('pragma user_version').fetchone()[0]
+
+			print('Current version:', current_version, ' Upgrade to:', SUPPORTED_DB_VERSION)
+			uri = "file:" + urlquote(dbfile)
+			print('Perform the Upgrade:',uri)
+			while(current_version < SUPPORTED_DB_VERSION):
+
+				next_version = current_version + 1
+				file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "migrate/"+str(next_version)+".sql")
+				if not os.path.isfile(file_path):
+					raise ValueError ("Sorry, we cannot find",file_path) 		
+
+				with open(file_path, 'r') as handle:
+					sql = handle.read()
+				with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
+					con.executescript(sql)
+				
+				current_version = next_version
+
+		except sqlite3.Error as er:
+			con.executescript('ROLLBACK')
+			raise er
+		except ValueError  as er:
+			print(er)
+		finally:
+			print('Database now version:', current_version)
+			if(current_version==SUPPORTED_DB_VERSION):
+				print("Success: Database upgrade was successfully completed")
+			else:
+				print("Error: Upgrade was not completed")

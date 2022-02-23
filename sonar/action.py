@@ -130,6 +130,13 @@ class sonarActions(object):
 		self.__codedict = None
 		self.__fasta_tag_regex = None
 
+		self._covSonar_version = self.get_version()
+
+	@staticmethod
+	def get_version():
+		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
+			return handle.read().strip()
+
 	# DB MAINTENANCE
 
 	@staticmethod
@@ -317,9 +324,8 @@ class sonarActions(object):
 			print()
 	
 	def show_system_info(self):
-		print("show_system_info")
-		#print("sonarDB version:       ", self.db.get_version())
-		#print("reference genome:      ", self.db.refdescr)
+		print("System info.")
+		print("conSonar Version:      ", self._covSonar_version)
 		#print("reference length:      ", str(len(self.db.refseq)) + "bp")
 		#print("annotated proteins:    ", ", ".join(self.db.refgffObj.symbols))
 		#print("used translation table:", self.db.translation_table)
