@@ -22,10 +22,10 @@ def create_fix_vcf_header(ref,sample_id):
     header = "##fileformat=VCFv4.2\n##poweredby=CovSonarV1.1.3\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
-    info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">'
-
-    column = "\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+sample_id+"\n"
-    return header+format+info+column
+    info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">\n'
+    note =  "##Note_1='Currently we ignore DEL of the SARS-CoV-2 seqeunce'\n"
+    column = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+sample_id+"\n"
+    return header+format+info+note+column
 
 from multiprocessing import Pool
 
@@ -89,6 +89,8 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr,_pos):
             f.write(create_fix_vcf_header(refdescr,group_name))
             df_group = df_group.sort_values(by='start', ascending=True)
             # replace null to .
+            #df_group['ref'] = df_group['ref'].replace('', '.') # for insertion
+            #df_group['alt'] = df_group['alt'].replace('', '.') # for deltion
             df_group['alt'] = df_group['alt'].replace('', np.nan)
             df_group = df_group.dropna(axis=0, subset=['alt']) # remove Deletion
             for index, row in df_group.iterrows():

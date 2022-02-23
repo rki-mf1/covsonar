@@ -23,10 +23,8 @@ def create_fix_vcf_header(ref):
     header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV1.1.3\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
-    info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">'
-    info = info+'\n##INFO=<ID=TYPE,Number=.,Type=String,Description="Mutation type e.g., SNP,INS and DEL">\n'
-    note =  "##Note_1='Currently we ignore DEL type'\n"
-    note =  note+ "##Note_2='This VCF file is genereted by using var2vcf with betaV2, if you find any bugs, then please write a bug report to us'\n"
+    info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">\n'
+    note =  "##Note='Currently ignore INDEL'\n"
     # column = "\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+sample_id+"\n"
     return header+format+info+note
 
@@ -85,8 +83,8 @@ def calculate_AC_AN(final_df):
     # order-preserving index between POS and INFO AC
     # e.g. a.POS;b.POS a.AC,b.AC
     for row in final_df.itertuples():
-        #print(np.unique(np.asarray(row[11:])))
-        unique, counts = np.unique(np.asarray(row[11:]), return_counts=True) # row[11:] means we start from sample ID column
+        # print('POS '+str(row.POS))
+        unique, counts = np.unique(np.asarray(row[10:]), return_counts=True) # row[10:] means we start from sample ID column
         # for unique, counts in zip(unique, counts):
         AN=0
         AC=''
@@ -98,43 +96,19 @@ def calculate_AC_AN(final_df):
                 AN = AN +_AC
                 AC = str(_AC) if not AC else AC+','+str(_AC)
         # print('AN='+str(AN)+';AC='+AC)
-        final_df.at[row.Index, 'INFO'] = 'AN='+str(AN)+';AC='+AC
+        final_df.at[row.POS, 'INFO'] = 'AN='+str(AN)+';AC='+AC
     return final_df
 
-def _check_variant_type(ref, alt):
-    
-    if len(ref) == len(alt) and len(alt)==1: # SNP
-        return 'SNP'
-    elif len(ref) < len(alt) and len(alt) > 0: # INS
-        return 'INS'
-    elif len(ref) > len(alt) and len(ref) > 0: # DEL
-        return 'DEL'
-    else:
-        print('Unknown:',ref, alt)
-        return 'Unknown'
 
 def create_vcf(rows_grouped, tmp_dirname, refdescr):
 
     process_id =str(getpid())
     # print(process_id+" Start")
     # iterate over each group
-    final_df = pd.DataFrame({'#CHROM': pd.Series(dtype='str'),
-                'POS': pd.Series(dtype='int'),
-                   'ID': pd.Series(dtype='str'),
-                   'REF': pd.Series(dtype='str'),
-                    'ALT': pd.Series(dtype='str'),
-                    'FILTER': pd.Series(dtype='str'),
-                    'QUAL': pd.Series(dtype='str'),
-                    'INFO': pd.Series(dtype='str'),
-                    'FORMAT': pd.Series(dtype='str'),
-                    'TYPE': pd.Series(dtype='str'),})
-    #final_df['#CHROM'] = refdescr.split()[0].replace(">", "") 
-    #final_df['POS']= '.'
-    #for id in np.arange(0, 29903):
-    #    final_df.loc[id,'POS'] = id+1
-    refdescr = refdescr.split()[0].replace(">", "")
+    final_df = pd.DataFrame()
+    final_df.index = np.arange(1, 29904)
+    final_df['#CHROM'] = refdescr.split()[0].replace(">", "")
     final_df['POS'] = np.arange(1, 29904)
-    final_df['#CHROM'] = refdescr 
     final_df['ID'] = '.'
     final_df['REF'] = '.'
     final_df['ALT'] = '.'
@@ -142,12 +116,9 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
     final_df['QUAL'] = '.'
     final_df['INFO'] = '.'
     final_df['FORMAT'] = 'GT'
-    final_df['TYPE'] = '.'
-    #final_df['POS'] = final_df['POS'].astype('int16') # int16 bit max value 32767
-
+    final_df['POS'] = final_df['POS'].astype('int16') # int16 bit max value 32767
     vcf_filename =process_id+'.vcf'
     full_path = os.path.join(tmp_dirname,vcf_filename)
-
     with open(full_path, 'w') as f:
         # print("Create VCF file:",full_path)
         f.write(create_fix_vcf_header(refdescr))
@@ -155,94 +126,44 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
             final_df[group_name] = "."
             for row in df_.itertuples():
                 try:
-                    #if( getattr(row, 'start') < 1 or getattr(row, 'start') > 29903):
-                    #    continue
-                    _id = getattr(row, 'ref')+str(getattr(row, 'start'))+getattr(row, 'alt')
-                    _type  = _check_variant_type( getattr(row, 'ref'),getattr(row, 'alt'))
-                    if(_type == 'SNP'):
-                        # find  ID
-                        selected_row = final_df[(final_df['POS'] == getattr(row, 'start')) & (final_df['TYPE'] == 'SNP')] 
-                        if(len(selected_row) == 0): # A
-                            A_selected_row = final_df[(final_df['POS'] == getattr(row, 'start')) & (final_df['TYPE']=='.')]
-                            A_selected_row_index = A_selected_row.index[0]
-
-                            final_df.at[A_selected_row_index, 'ID'] = _id
-                            final_df.at[A_selected_row_index, group_name] = 1
-                            final_df.at[A_selected_row_index, 'REF'] = getattr(row, 'ref')
-                            final_df.at[A_selected_row_index, 'ALT'] = getattr(row, 'alt')
-                            final_df.at[A_selected_row_index, 'TYPE'] = 'SNP'
-                                
-                        elif(len(selected_row) == 1): # B
-                            index_start_postion = selected_row.index[0]
-
-                            if(selected_row.ID.values[0] == _id): # only one ID exists and just update GT of a sample
-                                final_df.at[index_start_postion, group_name] = 1
-                            else:
-                                splited_final_id_list = selected_row.ID.values[0].split(";")
-                                totel_len = len(splited_final_id_list)
-                                for new_GT, splited_final_id in enumerate(splited_final_id_list, start=1):
-                                    if(splited_final_id == _id): # Found the exist one
-
-                                        final_df.at[index_start_postion, group_name] = new_GT
-                                        break 
-                                    elif(totel_len == new_GT): # cannot find the same ID ,so we append the new one to the string
-                                  
-                                        final_df.at[index_start_postion, 'ID'] = final_df.at[index_start_postion,'ID']+ ';'+ _id
-                                        # with new GT number
-                                        final_df.at[index_start_postion, group_name] = new_GT + 1
-                                        # appends new alt 
-                                        final_df.at[index_start_postion, 'ALT'] = final_df.at[index_start_postion,'ALT']+ ','+getattr(row, 'alt')
-                                        
-                        elif(len(selected_row) > 1):
-                            print('Found more than one sample in SNP type')
-                            raise
-                        else:
-                            # get index 
-                            print('Something went wrong')
-                            raise
-                    elif( _type == 'INS'):   # C    _type == 'DEL' or   <-- add this when DEL    
-                        selected_row = final_df[(final_df['POS'] == getattr(row, 'start')) & (final_df['TYPE'] == _type)]
-                        if(len(selected_row) == 0): # D, always insert new records
-                            new_row = {'#CHROM': refdescr,'ID': _id, 'POS': getattr(row, 'start'), 'REF':getattr(row, 'ref'),
-                                        'ALT':getattr(row, 'alt'), 'TYPE':_type, group_name: 1,
-                                        'FILTER':'.', 'QUAL':'.', 'INFO': '.','FORMAT':'GT'}
-                            final_df = final_df.append(new_row, ignore_index=True)
-                        elif(len(selected_row) > 0): # E , found more than 0 which means we can update or insert it
-                            for _E_rows  in selected_row.itertuples():
-                                index_postion= _E_rows.Index
-                                splited_IDs_list = _E_rows.ID.split(";")
-                                totel_len = len(splited_IDs_list)
-                                for _E_new_GT, splited_ID in enumerate(splited_IDs_list, start=1):
-                                    if(splited_ID == _id): # Found the exist one
-                                        final_df.at[index_postion, group_name] = _E_new_GT
-                                        break 
-                                    elif(totel_len == _E_new_GT): # cannot find the same ID ,so we append the new one to the string
-                                        final_df.at[index_postion, 'ID'] = final_df.at[index_postion,'ID']+ ';'+ _id
-                                        # with new GT number
-                                        final_df.at[index_postion, group_name] = _E_new_GT + 1
-                                        # appends new alt 
-                                        final_df.at[index_postion, 'ALT'] = final_df.at[index_postion,'ALT']+ ','+getattr(row, 'alt')
-                                        
-                    else:
-                        print('Skip this ', _id)
+                    if( getattr(row, 'start') < 1 or getattr(row, 'start') > 29903):
                         continue
+                    selected_final_row = final_df.loc[getattr(row, 'start')]
+                    index_start_postion = getattr(row, 'start')
+                    id = getattr(row, 'ref')+str(getattr(row, 'start'))+getattr(row, 'alt')
+
+                    if(selected_final_row.ID=='.'):
+                        final_df.at[index_start_postion, 'ID'] = id
+                        final_df.at[index_start_postion, group_name] = 1
+                        final_df.at[index_start_postion, 'REF'] = getattr(row, 'ref')
+                        final_df.at[index_start_postion, 'ALT'] = getattr(row, 'alt')
+                    else: # update 
+                        # check ref and alt 
+                        if(selected_final_row.ID==id): # only one ID exists
+                            final_df.at[index_start_postion, group_name] = 1
+                        else:
+                            splited_final_id_list = selected_final_row.ID.split(";")
+                            totel_len = len(splited_final_id_list)
+                            for new_GT, splited_final_id in enumerate(splited_final_id_list, start=1):
+                                if(splited_final_id==id): # find the exist one
+                                    final_df.at[index_start_postion, group_name] = new_GT
+                                    break
+                                elif(totel_len == new_GT): # cannot find the same id ,so we append the new one to the string
+                                    final_df.at[index_start_postion, 'ID'] = final_df.at[index_start_postion,'ID']+ ';'+id
+                                    # with new GT number
+                                    final_df.at[index_start_postion, group_name] = new_GT + 1
+                                    # appends new alt 
+                                    final_df.at[index_start_postion, 'ALT'] = final_df.at[index_start_postion,'ALT']+ ','+getattr(row, 'alt')
                 except Exception as e:
                     print("An exception occurred at...") 
                     print(group_name)
                     print(row)
                     print(traceback.format_exc())
-                    raise
-        
-        final_df = final_df.drop(final_df[final_df.ID=='.'].index)  
-        final_df.replace(np.nan, '.', inplace=True)
-        final_df['ALT'].replace(' ', '.', inplace=True)  # for deletion 
-        final_df = final_df.sort_values(["POS"], ascending=True) 
+                    continue
 
-        final_df = calculate_AC_AN(final_df) 
-        final_df["INFO"] = final_df["INFO"] +";TYPE="+ final_df["TYPE"]
-        final_df= final_df.drop(columns=['TYPE'])
+        final_df = calculate_AC_AN(final_df)
+        final_df = final_df.drop(final_df[final_df.ID=='.'].index)   
         final_df.to_csv(f, sep='\t', encoding='utf-8', index=False)
-
     bgzip(full_path)
     tabix_index(full_path) 
     return full_path+'.gz'
@@ -307,7 +228,6 @@ def export2VCF(
         track_vcf = []
         count = 0
         if not rows.empty:
-            # rows.to_pickle("dummy.pkl")  
             tmp_dirname = mkdtemp( prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
 
@@ -323,9 +243,6 @@ def export2VCF(
             # http://samtools.github.io/hts-specs/VCFv4.2.pdf
             rows['start'] = rows['start'] + 1
             rows['end'] = rows['end']+1
-
-            rows= rows.loc[ (1 <= rows['start']) & (rows['start'] <= 29903)] # filter out 
-
             rows['alt'] = rows['alt'].replace('', np.nan) # remove Deletion
             # rows['start'] = rows['start'].replace('', np.nan) # remove Insertion
             rows = rows.dropna(axis=0, subset=['alt'])
@@ -378,6 +295,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
             bcftool_index(tmp_output)
             first_create_ = False
             second_create_ = True
+            third_create_ = True
         elif second_create_:
             _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.2' )
             tmp_output = os.path.join(tmp_dirname,'vcf.3' )
@@ -389,6 +307,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
             #tabix_index(tmp_output) 
             bcftool_index(tmp_output)
             second_create_ = False
+            third_create_ = True
         else:
             _vcfs = _vcfs +' '+ os.path.join(tmp_dirname,'vcf.3' )
             tmp_output = os.path.join(tmp_dirname,'vcf.2' )
@@ -400,6 +319,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
             #tabix_index(tmp_output) 
             bcftool_index(tmp_output)
             second_create_ = True
+            third_create_ = False
 
         if(merge_type =='v'):
             bgzip(tmp_output)
