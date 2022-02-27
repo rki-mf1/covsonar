@@ -144,7 +144,7 @@ class sonarActions(object):
 		return os.path.join(os.path.dirname(os.path.realpath(__file__)), *join_with)
 
 	@staticmethod
-	def setup_db(fname, default_setup=True, debug=False):
+	def setup_db(fname, auto_create=False, default_setup=True, debug=False):
 		if os.path.isfile(fname):
 			sys.exit("setup error: " + fname + " does already exist.")
 		sonarDBManager.setup(fname, debug=debug)
@@ -154,6 +154,18 @@ class sonarActions(object):
 				### adding pre-defined sample properties
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
+				##  if enable, create important properties
+				if (auto_create):
+					print('Enable automatic import property')
+					dbm.add_property("date", "date", "date", "Sampling date")
+					dbm.add_property("submission_date", "date", "date", "Submission date")
+					dbm.add_property("country", "text", "text", "Country where a sample belongs to")
+					dbm.add_property("host", "text", "text", "e.g., HUMAN")
+					dbm.add_property("collection", "text", "text", "e.g., DESH_STICHPROBE")
+					dbm.add_property("zip", "text", "text", "e.g., 33602")
+					dbm.add_property("lab", "text", "text", "e.g., 11069")
+					dbm.add_property("lineage", "text", "text", "e.g., BA.2 or B.1.1.7")
+					dbm.add_property("technology", "text", "text", "e.g., ILLUMINA")
 
 				### adding built-in reference (unsegmented genome)
 				records = [x for x in sonarActions.iter_genbank(sonarActions.get_module_base("ref.gb"))]

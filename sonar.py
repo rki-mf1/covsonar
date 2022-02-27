@@ -3,6 +3,7 @@
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
 VERSION = "2.0.0"
+from ast import arg
 import os
 import sys
 import csv
@@ -39,7 +40,8 @@ def parse_args():
 	general_parser.add_argument('--debug', help="activate debugging mode showing all sqllite queries on screen", action="store_true")
 
 	# create the parser for the "setup" command
-	parser_add = subparsers.add_parser('setup', parents=[general_parser], help='setup a new database.')
+	parser_setup = subparsers.add_parser('setup', parents=[general_parser], help='setup a new database.')
+	parser_setup.add_argument('-a','--auto_create', help="Auto create important properties", action="store_true")
 
 	# create the parser for the "add" command
 	parser_add = subparsers.add_parser('add', parents=[general_parser], help='add genome sequences to the database.')
@@ -350,7 +352,7 @@ if __name__ == "__main__":
 
 	# setup
 	if args.tool == "setup":
-		sonarActions.setup_db(args.db, debug=debug)
+		sonarActions.setup_db(args.db, args.auto_create, debug=debug)
 		exit(0)
 
 	# update-lineage-info

@@ -199,7 +199,7 @@ class sonarDBManager():
 				sql = "INSERT INTO sample2property (property_id, value_" + self.properties[name]['datatype'] + ", sample_id) SELECT ?, ?, id FROM sample WHERE 1"
 				vals = [pid, standard]
 				self.cursor.execute(sql, vals)
-			print('Inserted successfully')
+			print('Inserted successfully:', name)
 		except sqlite3.Error as error:
 			print("Failed to insert data into sqlite table", error)
 		return pid
@@ -534,8 +534,6 @@ class sonarDBManager():
 			return str(feat.extract(sequence))
 		return str(Seq(feat.extract(sequence)).translate(table=translation_table, stop_symbol=""))
 
-	def get_samples_vcf(self, accession,date):
-		varaintview
 
 	# MATCHING PROFILES
 	def get_operator(self, val):
@@ -771,14 +769,14 @@ class sonarDBManager():
 		snv_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Z]+)$')
 
 		# set variants and generate sql
-		base_sql = "SELECT \"sample.id\" FROM variantView WHERE "
+		base_sql = "SELECT \"sample.id\", \"sample.name\"FROM variantView WHERE "
 		intersect_sqls = []
 		intersect_vals = []
 		except_sqls = []
 		except_vals = []
 		for var in vars:
-			c = []
-			v = []
+			c = [] # condition 
+			v = [] # variable
 
 			if var.startswith("^"):
 				var = var[1:]
@@ -805,7 +803,7 @@ class sonarDBManager():
 			## set element
 			if match.group(2):
 				c.append("\"element.type\" = ?")
-				v.append("protein")
+				v.append("cds") ## protein, but in database we use cds
 				c.append("\"element.symbol\" = ?")
 				v.append(match.group(2)[:-1])
 				code = iupac_aa_code
