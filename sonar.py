@@ -548,7 +548,7 @@ if __name__ == "__main__":
 		if args.file:
 			if not os.path.isfile(args.file):
 				sys.exit("input error: file " + args.file + " does not exist.")
-			with snr.open_file(fname, compressed=args.file,) as handle:
+			with snr.open_file(args.file, compressed=args.file,) as handle:
 				for line in handle:
 					args.acc.add(line.strip())
 		if len(args.acc) == 0:
