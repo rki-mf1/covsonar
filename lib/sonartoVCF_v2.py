@@ -9,7 +9,7 @@ import shutil
 import pandas as pd
 import numpy as np
 import subprocess
-from os import getpid
+from os import getpid, system
 from multiprocessing import Pool
 import warnings
 import math
@@ -17,7 +17,7 @@ from tqdm import tqdm
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning) 
 import traceback
 import gzip
-
+import sys
 
 def create_fix_vcf_header(ref):
     header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV1.1.3\n##reference="+ref
@@ -85,7 +85,6 @@ def calculate_AC_AN(final_df):
     # order-preserving index between POS and INFO AC
     # e.g. a.POS;b.POS a.AC,b.AC
     for row in final_df.itertuples():
-        #print(np.unique(np.asarray(row[11:])))
         unique, counts = np.unique(np.asarray(row[11:]), return_counts=True) # row[11:] means we start from sample ID column
         # for unique, counts in zip(unique, counts):
         AN=0
@@ -97,7 +96,6 @@ def calculate_AC_AN(final_df):
                 _AC = counts[idx]
                 AN = AN +_AC
                 AC = str(_AC) if not AC else AC+','+str(_AC)
-        # print('AN='+str(AN)+';AC='+AC)
         final_df.at[row.Index, 'INFO'] = 'AN='+str(AN)+';AC='+AC
     return final_df
 
@@ -106,7 +104,10 @@ def _check_variant_type(ref, alt):
     if len(ref) == len(alt) and len(alt)==1: # SNP
         return 'SNP'
     elif len(ref) < len(alt) and len(alt) > 0: # INS
-        return 'INS'
+        if ref == alt[0]:
+            return 'INS'
+        else:
+            return 'INDEL'    
     elif len(ref) > len(alt) and len(ref) > 0: # DEL
         return 'DEL'
     else:
@@ -114,11 +115,32 @@ def _check_variant_type(ref, alt):
         return 'Unknown'
 
 def create_vcf(rows_grouped, tmp_dirname, refdescr):
-
+    refdescr= refdescr.split()[0].replace(">", "")
     process_id =str(getpid())
     # print(process_id+" Start")
     # iterate over each group
-    final_df = pd.DataFrame({'#CHROM': pd.Series(dtype='str'),
+    final_snp_df = pd.DataFrame({'#CHROM': pd.Series(dtype='str'),
+                   'POS': pd.Series(dtype='int'),
+                   'ID': pd.Series(dtype='str'),
+                   'REF': pd.Series(dtype='str'),
+                    'ALT': pd.Series(dtype='str'),
+                    'FILTER': pd.Series(dtype='str'),
+                    'QUAL': pd.Series(dtype='str'),
+                    'INFO': pd.Series(dtype='str'),
+                    'FORMAT': pd.Series(dtype='str'),
+                    'TYPE': pd.Series(dtype='str'),}, index = np.arange(1, 29904))
+    final_snp_df['POS'] = np.arange(1, 29904)
+    final_snp_df['#CHROM'] = refdescr # duplicated line here did a trick for assigning the value
+    final_snp_df['ID'] = '.'
+    final_snp_df['REF'] = '.'
+    final_snp_df['ALT'] = '.'
+    final_snp_df['FILTER'] = '.'
+    final_snp_df['QUAL'] = '.'
+    final_snp_df['INFO'] = '.'
+    final_snp_df['FORMAT'] = 'GT'
+    final_snp_df['TYPE'] = '.'
+    
+    final_indel_df = pd.DataFrame({'#CHROM': pd.Series(dtype='str'),
                 'POS': pd.Series(dtype='int'),
                    'ID': pd.Series(dtype='str'),
                    'REF': pd.Series(dtype='str'),
@@ -128,116 +150,101 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                     'INFO': pd.Series(dtype='str'),
                     'FORMAT': pd.Series(dtype='str'),
                     'TYPE': pd.Series(dtype='str'),})
-    #final_df['#CHROM'] = refdescr.split()[0].replace(">", "") 
-    #final_df['POS']= '.'
-    #for id in np.arange(0, 29903):
-    #    final_df.loc[id,'POS'] = id+1
-    refdescr = refdescr.split()[0].replace(">", "")
-    final_df['POS'] = np.arange(1, 29904)
-    final_df['#CHROM'] = refdescr 
-    final_df['ID'] = '.'
-    final_df['REF'] = '.'
-    final_df['ALT'] = '.'
-    final_df['FILTER'] = '.'
-    final_df['QUAL'] = '.'
-    final_df['INFO'] = '.'
-    final_df['FORMAT'] = 'GT'
-    final_df['TYPE'] = '.'
-    #final_df['POS'] = final_df['POS'].astype('int16') # int16 bit max value 32767
-
     vcf_filename =process_id+'.vcf'
     full_path = os.path.join(tmp_dirname,vcf_filename)
-
     with open(full_path, 'w') as f:
         # print("Create VCF file:",full_path)
         f.write(create_fix_vcf_header(refdescr))
         for group_name, df_ in tqdm(rows_grouped, mininterval=0.5):
-            final_df[group_name] = "."
-            for row in df_.itertuples():
-                try:
-                    #if( getattr(row, 'start') < 1 or getattr(row, 'start') > 29903):
-                    #    continue
+            try:
+                #final_snp_df[group_name] = "." # init value 
+                #final_indel_df[group_name] = "." # init value 
+                for row in df_.itertuples():
+                        
                     _id = getattr(row, 'ref')+str(getattr(row, 'start'))+getattr(row, 'alt')
-                    _type  = _check_variant_type( getattr(row, 'ref'),getattr(row, 'alt'))
-                    if(_type == 'SNP'):
+                    _type  =_check_variant_type( getattr(row, 'ref'),getattr(row, 'alt'))
+                            
+                    if(_type == 'SNP' ):
                         # find  ID
-                        selected_row = final_df[(final_df['POS'] == getattr(row, 'start')) & (final_df['TYPE'] == 'SNP')] 
-                        if(len(selected_row) == 0): # A
-                            A_selected_row = final_df[(final_df['POS'] == getattr(row, 'start')) & (final_df['TYPE']=='.')]
-                            A_selected_row_index = A_selected_row.index[0]
+                        index_start_postion = getattr(row, 'start')
+                        selected_row = final_snp_df.loc[index_start_postion] # return scalar instead DF
+                        if(selected_row.ID == '.'): # A
 
-                            final_df.at[A_selected_row_index, 'ID'] = _id
-                            final_df.at[A_selected_row_index, group_name] = 1
-                            final_df.at[A_selected_row_index, 'REF'] = getattr(row, 'ref')
-                            final_df.at[A_selected_row_index, 'ALT'] = getattr(row, 'alt')
-                            final_df.at[A_selected_row_index, 'TYPE'] = 'SNP'
+                            final_snp_df.at[index_start_postion, 'ID'] = _id
+                            final_snp_df.at[index_start_postion, group_name] = '1'
+                            final_snp_df.at[index_start_postion, 'REF'] = getattr(row, 'ref')
+                            final_snp_df.at[index_start_postion, 'ALT'] = getattr(row, 'alt')
+                            final_snp_df.at[index_start_postion, 'TYPE'] = 'SNP'
                                 
-                        elif(len(selected_row) == 1): # B
-                            index_start_postion = selected_row.index[0]
-
-                            if(selected_row.ID.values[0] == _id): # only one ID exists and just update GT of a sample
-                                final_df.at[index_start_postion, group_name] = 1
+                        elif(selected_row.ID != '.'): # B
+                            if(selected_row.ID == _id): # only one ID exists and just update GT of a sample
+                                final_snp_df.at[index_start_postion, group_name] = '1'
                             else:
-                                splited_final_id_list = selected_row.ID.values[0].split(";")
+
+                                splited_final_id_list = selected_row.ID.split(";")
                                 totel_len = len(splited_final_id_list)
                                 for new_GT, splited_final_id in enumerate(splited_final_id_list, start=1):
                                     if(splited_final_id == _id): # Found the exist one
-
-                                        final_df.at[index_start_postion, group_name] = new_GT
+                                        final_snp_df.at[index_start_postion, group_name] = str(new_GT)
                                         break 
                                     elif(totel_len == new_GT): # cannot find the same ID ,so we append the new one to the string
-                                  
-                                        final_df.at[index_start_postion, 'ID'] = final_df.at[index_start_postion,'ID']+ ';'+ _id
+                                        final_snp_df.at[index_start_postion, 'ID'] = final_snp_df.at[index_start_postion,'ID']+ ';'+ _id
                                         # with new GT number
-                                        final_df.at[index_start_postion, group_name] = new_GT + 1
+                                        final_snp_df.at[index_start_postion, group_name] = str(new_GT + 1)
                                         # appends new alt 
-                                        final_df.at[index_start_postion, 'ALT'] = final_df.at[index_start_postion,'ALT']+ ','+getattr(row, 'alt')
-                                        
-                        elif(len(selected_row) > 1):
-                            print('Found more than one sample in SNP type')
-                            raise
+                                        final_snp_df.at[index_start_postion, 'ALT'] = final_snp_df.at[index_start_postion,'ALT']+ ','+getattr(row, 'alt')
                         else:
                             # get index 
-                            print('Something went wrong')
-                            raise
-                    elif( _type == 'INS'):   # C    _type == 'DEL' or   <-- add this when DEL    
-                        selected_row = final_df[(final_df['POS'] == getattr(row, 'start')) & (final_df['TYPE'] == _type)]
+                            print(selected_row)
+                            raise ValueError('Something went wrong')
+                                    
+                    #elif(_type == 'DEL'):
+                    #    continue
+                    elif(_type == 'INS' or _type == 'INDEL'or _type == 'DEL'):   # C      or _type == 'DEL'          
+
+                        selected_row = final_indel_df[(final_indel_df['POS'] == getattr(row, 'start')) & (final_indel_df['TYPE'] == _type)]
                         if(len(selected_row) == 0): # D, always insert new records
-                            new_row = {'#CHROM': refdescr,'ID': _id, 'POS': getattr(row, 'start'), 'REF':getattr(row, 'ref'),
-                                        'ALT':getattr(row, 'alt'), 'TYPE':_type, group_name: 1,
-                                        'FILTER':'.', 'QUAL':'.', 'INFO': '.','FORMAT':'GT'}
-                            final_df = final_df.append(new_row, ignore_index=True)
+                            new_row = {'#CHROM': refdescr,'ID': _id, 'POS': int(getattr(row, 'start')), 'REF':getattr(row, 'ref'),
+                                        'ALT':getattr(row, 'alt'), 'TYPE':_type,
+                                        'FILTER':'.', 'QUAL':'.', 'INFO': '.','FORMAT':'GT', group_name: '1'}
+                            final_indel_df = final_indel_df.append(new_row, ignore_index=True)
                         elif(len(selected_row) > 0): # E , found more than 0 which means we can update or insert it
                             for _E_rows  in selected_row.itertuples():
                                 index_postion= _E_rows.Index
                                 splited_IDs_list = _E_rows.ID.split(";")
                                 totel_len = len(splited_IDs_list)
                                 for _E_new_GT, splited_ID in enumerate(splited_IDs_list, start=1):
+                                    #print('index',index_postion,'test', splited_ID, _E_new_GT)
                                     if(splited_ID == _id): # Found the exist one
-                                        final_df.at[index_postion, group_name] = _E_new_GT
+                                        #print('Found the exist one', splited_final_id)
+                                        final_indel_df.at[index_postion, group_name] = str(_E_new_GT)
                                         break 
                                     elif(totel_len == _E_new_GT): # cannot find the same ID ,so we append the new one to the string
-                                        final_df.at[index_postion, 'ID'] = final_df.at[index_postion,'ID']+ ';'+ _id
+                                        final_indel_df.at[index_postion, 'ID'] = final_indel_df.at[index_postion,'ID']+ ';'+ _id
                                         # with new GT number
-                                        final_df.at[index_postion, group_name] = _E_new_GT + 1
+                                        final_indel_df.at[index_postion, group_name] = str(_E_new_GT + 1)
                                         # appends new alt 
-                                        final_df.at[index_postion, 'ALT'] = final_df.at[index_postion,'ALT']+ ','+getattr(row, 'alt')
+                                        final_indel_df.at[index_postion, 'ALT'] = final_indel_df.at[index_postion,'ALT']+ ','+getattr(row, 'alt')
                                         
                     else:
-                        print('Skip this ', _id)
+                        print('Skip this ', _id) # right now skip for Unknown
                         continue
-                except Exception as e:
+            except ValueError as err:
+                    print(err.args)  
+                    raise 
+            except Exception as e:
                     print("An exception occurred at...") 
                     print(group_name)
                     print(row)
+                    print(selected_row)
                     print(traceback.format_exc())
-                    raise
-        
-        final_df = final_df.drop(final_df[final_df.ID=='.'].index)  
-        final_df.replace(np.nan, '.', inplace=True)
-        final_df['ALT'].replace(' ', '.', inplace=True)  # for deletion 
-        final_df = final_df.sort_values(["POS"], ascending=True) 
+                    raise e
 
+        final_df = pd.concat( [final_snp_df, final_indel_df ],axis=0,ignore_index=True)      
+        final_df = final_df.drop(final_df[final_df.ID=='.'].index) 
+        final_df.replace(np.nan, '.', inplace=True)
+        final_df['ALT'].replace('', '.', inplace=True)  # for deletion
+        final_df = final_df.sort_values(["POS"], ascending=True) 
         final_df = calculate_AC_AN(final_df) 
         final_df["INFO"] = final_df["INFO"] +";TYPE="+ final_df["TYPE"]
         final_df= final_df.drop(columns=['TYPE'])
@@ -322,7 +329,7 @@ def export2VCF(
             # so we should + 1
             # http://samtools.github.io/hts-specs/VCFv4.2.pdf
             rows['start'] = rows['start'] + 1
-            rows['end'] = rows['end']+1
+            # rows['end'] = rows['end']+1
 
             rows= rows.loc[ (1 <= rows['start']) & (rows['start'] <= 29903)] # filter out 
 
@@ -351,7 +358,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
     print('size:', list_length)
     first_create_ = True 
     second_create_ = True
-    tmp_dirname = mkdtemp( prefix=".final.sonarCache_")
+    tmp_dirname = mkdtemp(dir='/home/kongkitimanonk/SCRATCH_NOBAK/CovSonar1/workdir_covsonar/test-vcf/',  prefix=".final.sonarCache_")
     # we can tweak performance by using U at Bcftools for piping between bcftools subcommands (future work)
     bar = tqdm(range(list_length), desc="Create Global VCF:")
     merge_type='b'
@@ -406,7 +413,7 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
             tabix_index(tmp_output)  
     tmp_output = clean_stranger_things(tmp_output+ '.gz', tmp_dirname)
     shutil.copy(tmp_output, global_output+ '.gz')
-    
+    # sys.exit(" exist.")
     print('Clean workspace ...')
     if os.path.isdir(tmp_dirname):
         shutil.rmtree(tmp_dirname)   

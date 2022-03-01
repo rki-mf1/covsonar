@@ -23,7 +23,7 @@ def create_fix_vcf_header(ref,sample_id):
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
     info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">\n'
-    note =  "##Note_1='Currently we ignore DEL of the SARS-CoV-2 seqeunce'\n"
+    note =   '' #"##Note_1='Currently we ignore DEL of the SARS-CoV-2 seqeunce'\n"
     column = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"+sample_id+"\n"
     return header+format+info+note+column
 
@@ -91,8 +91,8 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr,_pos):
             # replace null to .
             #df_group['ref'] = df_group['ref'].replace('', '.') # for insertion
             #df_group['alt'] = df_group['alt'].replace('', '.') # for deltion
-            df_group['alt'] = df_group['alt'].replace('', np.nan)
-            df_group = df_group.dropna(axis=0, subset=['alt']) # remove Deletion
+            #df_group['alt'] = df_group['alt'].replace('', np.nan)
+            #df_group = df_group.dropna(axis=0, subset=['alt']) # remove Deletion
             for index, row in df_group.iterrows():
                 id = row['ref']+str(row['start'])+row['alt']
                 f.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(row['CHROM'], row['start'], id, 
