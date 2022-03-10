@@ -20,7 +20,7 @@ import gzip
 import sys
 
 def create_fix_vcf_header(ref):
-    header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV1.1.3\n##reference="+ref
+    header = "##fileformat=VCFv4.2\n##CreatedBy=covSonarV1.1.4\n##reference="+ref
     format = '\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">'
     info = '\n##INFO=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">'
     info = info+'\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">'
