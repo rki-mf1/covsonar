@@ -1491,7 +1491,20 @@ class sonarDBManager():
 
 	def get_profile_condition(self, field, *profiles, negate=False):
 		op = " NOT " if negate else " "
+		search_all = False
+		if(field == 'dna_profile'):
+			for x in profiles:
+				if "N" == x[-1]:
+					search_all = True
+		elif(field == 'aa_profile'):
+			for x in profiles:
+				if "X" == x[-1]:
+					search_all = True
+
 		clause = [field + op + "LIKE '% " + x + " %'" for x in profiles]
+		if(search_all):
+			return " OR ".join(clause)
+
 		return " AND ".join(clause)
 
 	def get_metadata_in_condition(self, field, *vals, negate=False):
@@ -1700,7 +1713,6 @@ class sonarDBManager():
 					profile_clause[-1].append(self.get_profile_condition('dna_profile', *profile['dna']))
 				if len(profile['aa']) > 0:
 					profile_clause[-1].append(self.get_profile_condition('aa_profile', *profile['aa']))
-
 				if len(profile_clause[-1]) > 1:
 					profile_clause[-1] = "(" + " AND ".join(profile_clause[-1]) + ")"
 				else:
@@ -1710,6 +1722,7 @@ class sonarDBManager():
 				where_clause.append("(" + " OR ".join(profile_clause) + ")")
 			else:
 				where_clause.append(profile_clause[0])
+
 		if exclude_profiles:
 			profile_clause = []
 			for profile in exclude_profiles:
@@ -2837,12 +2850,13 @@ class sonarDB(object):
 			sys.exit("input error: matching a given software version needs a software defined.")
 
 		# adding conditions of profiles to include to where clause
+		#print(include_profiles)
 		if include_profiles:
 			include_profiles = [ self.make_profile_explicit(x) for x in include_profiles ]
 		# adding conditions of profiles to exclude to where clause
 		if exclude_profiles:
 			exclude_profiles = [ self.make_profile_explicit(x) for x in exclude_profiles ]
-		# print(include_profiles)
+		#print(include_profiles)
 		# adding accession, lineage, zips, and dates based conditions
 		include_acc = [x for x in accessions if not x.startswith("^")]
 		exclude_acc = [x[1:] for x in accessions if x.startswith("^")]

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.3"
+VERSION = "1.1.4"
 import os
 from posixpath import split
 import sys
@@ -548,7 +548,7 @@ if __name__ == "__main__":
 		if args.file:
 			if not os.path.isfile(args.file):
 				sys.exit("input error: file " + args.file + " does not exist.")
-			with snr.open_file(fname, compressed=args.file,) as handle:
+			with snr.open_file(args.file, compressed=args.file,) as handle:
 				for line in handle:
 					args.acc.add(line.strip())
 		if len(args.acc) == 0:
