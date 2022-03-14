@@ -329,7 +329,12 @@ class sonar():
 		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol", "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
+	allowed = {"accession": "accCol", "lineage": "lineageCol",
+	 "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol",
+	  "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol",
+	   "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol",
+	    "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol",
+		 "lab": "labCol"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
