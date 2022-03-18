@@ -88,9 +88,11 @@ class sonarAligner(object):
 					i += 1
 				if s == -1:
 					ref = " "
+					alt = qry_seq[:i+1]
 				else:
 					ref = ref_seq[s]
-				yield ref, str(s-offset), str(s-offset+1), qry_seq[s:i+1]
+					alt = qry_seq[s:i+1]
+				yield ref, str(s-offset), str(s-offset+1), alt
 				offset += i-s
 			#snps
 			else:
