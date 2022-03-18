@@ -769,7 +769,7 @@ class sonarDBManager():
 		snv_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Z]+)$')
 
 		# set variants and generate sql
-		base_sql = "SELECT \"sample.id\", \"sample.name\"FROM variantView WHERE "
+		base_sql = "SELECT \"sample.id\", \"sample.name\" FROM variantView WHERE "
 		intersect_sqls = []
 		intersect_vals = []
 		except_sqls = []
@@ -922,9 +922,45 @@ class sonarDBManager():
 				sql = property_sqls + " INTERSECT " + profile_sqls
 		else:
 			sql = property_sqls + profile_sqls
+		
+		### First Get ID ###
+		rows = self.cursor.execute(sql, property_vals + profile_vals).fetchall()
+		COLUMN = 'sample.id'
+		id_list =[elt[COLUMN] for elt in rows]
+		# print(id_list)
+		### Use ID get all proflies from variantView ###
+		# (\"variant.start\" +1) = plus one to change from 0 based to 1 based system
+		sql_nt = """
+				(SELECT 
+					"sample.id",
+					group_concat("variant.ref"|| ("variant.start"+1) ||"variant.alt", ' ') as dna_profile
+					FROM  variantView
+					WHERE "sample.id" in ({id}) AND "element.type" == 'source'
+					GROUP BY "sample.id" , "element.type") as NT
+				""".format( id=','.join(['?']*len(id_list)))
 
-		print(sql)
-		return self.cursor.execute(sql, property_vals + profile_vals).fetchall()
+		sql_aa = """ 
+				(SELECT "sample.id", 
+						group_concat("element.symbol"|| ':' ||"variant.ref"|| ("variant.start"+1) ||"variant.alt", ' ') as aa_profile 
+						FROM  variantView  
+						WHERE "sample.id" in ({id}) AND "element.type" == "cds" 
+						GROUP BY "sample.id" , "element.type") as AA 
+					""".format( id=','.join(['?']*len(id_list)))
+				
+		sql = """
+				SELECT AA."sample.id", aa_profile , dna_profile
+				FROM	{sql_nt} , {sql_aa}
+				WHERE  AA."sample.id" = NT."sample.id"
+				""".format( sql_nt=sql_nt,sql_aa=sql_aa)
+		# print(sql)
+		rows = self.cursor.execute(sql,id_list+id_list).fetchall()
+		# need to change deletion format !!
+		# for row in rows:
+		#	print(row)
+
+		### Use ID get all proflies from propertyView ###
+
+		return rows
 
 	# UPDATE DATA
 

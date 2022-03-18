@@ -291,11 +291,14 @@ class sonarActions(object):
 	# matching
 	def match(self, profiles=[], propdict={}, count=None):
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
+			#  get ID
 			rows = dbm.match(*profiles, properties=propdict)
+
+
 			if count:
 				print(len(rows))
 			else:
-				print(rows)
+				# print(rows)
 
 				self.rows_to_csv(rows, na="*** no match ***", tsv=True)
 	

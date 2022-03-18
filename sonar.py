@@ -329,12 +329,12 @@ class sonar():
 		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol",
+	allowed = {"accession": "accession", "lineage": "lineageCol",
 	 "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol",
 	  "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol",
 	   "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol",
 	    "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol",
-		 "lab": "labCol"}
+		 "lab": "labCol", "submission_date":"submission_date"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
@@ -344,7 +344,7 @@ def process_update_expressions(expr):
 		if key in fields:
 			sys.exit("input error: multiple assignments for " + val[0])
 		fields[key] = "=".join(val[1:])
-		if 'accCol' not in fields:
+		if 'accession' not in fields:
 			sys.exit("input error: an accession column has to be defined.")
 	return fields
 
@@ -423,7 +423,7 @@ if __name__ == "__main__":
 			else:
 				print("property not deleted.")
 
-	# delprop
+	# show prop
 	if args.tool == "props":
 		snr.show_props()
 	# update
