@@ -393,7 +393,7 @@ class sonarCache():
 	def import_samples(self):
 		refseqs = {}
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			for sample_data in self.iter_samples():
+			for sample_data in tqdm(self.iter_samples(), total=len(self._samplefiles)):
 				# nucleotide level import
 				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 				if sample_data['algnid'] is None:

@@ -157,12 +157,6 @@ class sonarDBManager():
 			sql = "SELECT * FROM property"
 			rows = self.cursor.execute(sql).fetchall()
 			self.__properties = {} if not rows else { x['name']: x for x in rows }
-			#for pname in self.__properties:
-			#	if self.__properties[pname]['standard'] is not None:
-			#		if self.__properties[pname]['datatype'] == 'integer':
-			#			self.__properties[pname]['standard'] = int(self.__properties['standard'])
-			#		elif self.__properties[pname]['datatype'] == 'float':
-			#			self.__properties[pname]['standard'] = float(self.__properties['standard'])
 		return self.__properties
 
 	# SETUP
@@ -186,6 +180,8 @@ class sonarDBManager():
 		self.cursor.execute(sql, [translation_table, codon, aa])
 
 	def add_property(self, name, datatype, querytype, description, standard=None):
+		if name == "sample":
+			sys.exit("error: 'sample' is reserved and cannot be used as property name")
 		if not re.match("^[a-zA-Z0-9_]+$", name):
 			sys.exit("error: invalid property name (property names can contain only letters, numbers and underscores)")
 		if name in self.properties:
@@ -553,6 +549,8 @@ class sonarDBManager():
 		op2 = re.compile(r'^(\^*)(-?[1-9]+[0-9]*):(-?[1-9]+[0-9]*)$')
 		errmsg =  "query error: numeric value or range expected for field " + field + "(got: "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		intersect_sqls = []
 		intersect_vals = []
@@ -594,6 +592,8 @@ class sonarDBManager():
 		op2 = re.compile(r'^(\^*)(-?[1-9]+[0-9]*(?:.[0-9]+)*):(-?[1-9]+[0-9]*(?:.[0-9]+)*)$')
 		errmsg =  "query error: decimal value or range expected for field " + field + "(got: "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		for val in vals:
 			val = str(val).strip()
@@ -664,6 +664,8 @@ class sonarDBManager():
 	def query_string(self, field, *vals, link="OR"):
 		link = " " + link.strip() + " "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		for val in vals:
 			if val.startswith("^"):
@@ -688,6 +690,8 @@ class sonarDBManager():
 	def query_zip(self, field, *vals, link="OR"):
 		link = " " + link.strip() + " "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		for val in vals:
 			if val.startswith("^"):
@@ -708,8 +712,8 @@ class sonarDBManager():
 		return link.join(conditions), vallist
 
 	def query_metadata(self, name, *vals):
-		conditions = []
-		valueList = []
+		conditions = ['\"property.name\" = ?']
+		valueList = [name]
 		targetfield = "value_" + self.properties[name]['datatype']
 
 		# query dates
@@ -720,35 +724,35 @@ class sonarDBManager():
 
 		# query numeric
 		elif self.properties[name]['querytype'] == "numeric":
-			a,b = self.query_numeric(targetfield, vals)
+			a,b = self.query_numeric(targetfield, *vals)
 			conditions.append(a)
 			valueList.extend(b)
 
 		# query text
 		elif self.properties[name]['querytype'] == "string":
-			a,b = self.query_string(targetfield, vals)
+			a,b = self.query_string(targetfield, *vals)
 			conditions.append(a)
 			valueList.extend(b)
 
 		# query zip
 		elif self.properties[name]['querytype'] == "zip":
-			a,b = self.query_zip(targetfield, vals)
+			a,b = self.query_zip(targetfield, *vals)
 			conditions.append(a)
 			valueList.extend(b)
 
 		else:
 			sys.exit("error: unknown query type.")
 
-		return "SELECT \"sample.id\" FROM propertyView WHERE " + " AND ".join(conditions), valueList
+		return "SELECT \"sample.id\" AS id FROM propertyView WHERE " + " AND ".join(conditions), valueList
 
-	def query_profile(self, *vars, reference_accession=None, molecule_accession=None, element_accession=None):
+	def query_profile(self, *vars):
 		iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AGR"), "Y": set("CTY"), "S": set("GCS"), "W": set("ATW"), "K": set("GTK"), "M": set("ACM"), "B": set("CGTB"), "D": set("AGTD"), "H": set("ACTH"), "V": set("ACGV"), "N": set("ACGTRYSWKMBDHVN") }
 		iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O"), "B": set("DNB"), "Z": set("EQZ"), "J": set("ILJ"), "Φ": set("VILFWYMΦ"), "Ω": set("FWYHΩ"), "Ψ": set("VILMΨ"), "π": set("PGASπ"), "ζ": set("STHNQEDKRζ"), "+": set("KRH+"), "-": set("DE-"), "X": set("ARNDCQEGHILKMFPSTWYVUOBZJΦΩΨπζ+-X") }
 		del_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$')
 		snv_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Z]+)$')
 
 		# set variants and generate sql
-		base_sql = "SELECT \"sample.id\" FROM variantView WHERE "
+		base_sql = "SELECT \"sample.id\" AS id FROM variantView WHERE "
 		intersect_sqls = []
 		intersect_vals = []
 		except_sqls = []
@@ -867,7 +871,17 @@ class sonarDBManager():
 
 		return sql, intersect_vals + except_vals
 
-	def match(self, *profiles, properties=None, reference_accession=None, molecule_accession=None, element_accession = None):
+	def count_molecules(self, reference_accession=None):
+		if reference_accession:
+			condition = "\"reference.accession\" = ?"
+			vals = [reference_accession]
+		else:
+			condition = "\"reference.standard\" = ?"
+			vals = [1]
+		sql = "SELECT count(DISTINCT \"molecule.id\") AS count FROM referenceView WHERE " + condition
+		return self.cursor.execute(sql, vals).fetchone()['count']
+
+	def match(self, *profiles, properties=None, reference_accession=None):
 		#collecting sqls for metadata-based filtering
 		property_sqls = []
 		property_vals = []
@@ -893,22 +907,37 @@ class sonarDBManager():
 		else:
 			profile_sqls = ""
 
-		# assembling final compound query
+		# assembling compound query for sample selection
 		if property_sqls and profile_sqls:
 			if len(profiles) > 1:
-				sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
+				sample_selection_sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
 			else:
-				sql = property_sqls + " INTERSECT " + profile_sqls
+				sample_selection_sql = property_sqls + " INTERSECT " + profile_sqls
 		else:
-			sql = property_sqls + profile_sqls
+			sample_selection_sql = property_sqls + profile_sqls
 
-		print(sql)
+		# assembling final sql
+		if self.count_molecules(reference_accession) == 1:
+			m = ""
+		else:
+			m = "\"molecule.symbol\" || \"@\" || "
+
+		sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
+		       SELECT  *, \
+					    ( \
+						  SELECT group_concat(" + m + "CASE \"variant.alt\" WHEN \" \" THEN \"del:\" || \"variant.start\" || \"-\" || \"variant.end\" ELSE \"variant.ref\" || \"variant.start\" || \"variant.alt\" END, \" \") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND \"element.type\" = \"source\" GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
+						) nt_profile, \
+							( \
+						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || CASE \"variant.alt\" WHEN \" \" THEN \"del:\" || \"variant.start\" || \"-\" || \"variant.end\" ELSE \"variant.ref\" || \"variant.start\" || \"variant.alt\" END, \" \") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND \"element.type\" = \"cds\" GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
+						) aa_profile \
+							FROM sample \
+						WHERE id IN ( SELECT id FROM selected_samples )"
+
 		return self.cursor.execute(sql, property_vals + profile_vals).fetchall()
 
-	# UPDATE DATA
-
-
-	# MISCg
+	# MISC
 
 	@staticmethod
 	def optimize(dbfile):

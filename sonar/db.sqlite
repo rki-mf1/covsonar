@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS sample2property (
 	value_varchar VARCHAR,
 	value_blob BLOB,
 	value_date DATE,
+	value_zip TEXT,
 	PRIMARY KEY(property_id, sample_id),
 	FOREIGN KEY(sample_id) REFERENCES sample(id) ON DELETE CASCADE,
 	FOREIGN KEY(property_id) REFERENCES property(id) ON DELETE CASCADE
@@ -53,6 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_sample2property_text ON sample2property(value_tex
 CREATE INDEX IF NOT EXISTS idx_sample2property_vchar ON sample2property(value_varchar);
 CREATE INDEX IF NOT EXISTS idx_sample2property_blob ON sample2property(value_blob);
 CREATE INDEX IF NOT EXISTS idx_sample2property_date ON sample2property(value_date);
+CREATE INDEX IF NOT EXISTS idx_sample2property_zip ON sample2property(value_zip);
 CREATE INDEX IF NOT EXISTS idx_sample2property_property_id ON sample2property(property_id);
 
 --
@@ -212,6 +214,7 @@ SELECT
 	sample2property.value_integer as "value_integer",
 	sample2property.value_float as "value_float",
 	sample2property.value_text as "value_text",
+	sample2property.value_zip as "value_zip",
 	sample2property.value_varchar as "value_varchar",
 	sample2property.value_blob as "value_blob",
 	sample2property.value_date as "value_date"
