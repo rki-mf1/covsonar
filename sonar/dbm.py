@@ -422,8 +422,14 @@ class sonarDBManager():
 		return None if row is None else row['id']
 
 	def iter_dna_variants(self, sample_name, *element_ids):
-		sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" IN (" + ", ".join(['?'] * len(element_ids)) + ");"
-		for row in self.cursor.execute(sql, [sample_name] + [str(x) for x in element_ids]):
+		if len(element_ids) == 1:
+			condition = " = ?"
+		elif len(element_ids) > 1:
+			condition = " IN (" + ", ".join(['?'] * len(element_ids))  + ")"
+		else:
+			condition = ""
+		sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\"" + condition
+		for row in self.cursor.execute(sql, [sample_name] + list(element_ids)):
 			if row["variant.start"] is not None:
 				yield row
 
