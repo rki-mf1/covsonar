@@ -127,6 +127,10 @@ class sonarDBManager():
 	def start_transaction(self):
 		self.cursor.execute("BEGIN DEFERRED")
 
+	def new_transaction(self):
+		self.commit()
+		self.start_transaction()
+
 	def commit(self):
 		self.connection.commit()
 
@@ -317,13 +321,13 @@ class sonarDBManager():
 
 	def get_molecule_ids(self, reference_accession=None):
 		if reference_accession:
-			 condition = "reference.accession = ?"
-			 val = reference_accession
+			 condition = "\"reference.accession\" = ?"
+			 val = [reference_accession]
 		else:
-			 condition = "reference.standard = ?"
-			 val = 1
-		sql = "SELECT molecule.accession, molecule.id FROM referenceView WHERE " + condition
-		return {x['molecule.accession']: x[molecule.id] for x in self.cursor.execute(sql, val).fetchall() if x is not None }
+			 condition = "\"reference.standard\" = ?"
+			 val = [1]
+		sql = "SELECT \"molecule.accession\", \"molecule.id\" FROM referenceView WHERE " + condition
+		return {x['molecule.accession']: x["molecule.id"] for x in self.cursor.execute(sql, val).fetchall() if x is not None }
 
 	def get_molecule_id(self, molecule_accession):
 		sql = "SELECT id FROM molecule WHERE accession = ?;"
@@ -357,6 +361,17 @@ class sonarDBManager():
 		if not row:
 			return []
 		return row
+
+	def get_element_ids(self, reference_accession=None, type=None):
+		molecule_ids = list(self.get_molecule_ids(reference_accession=reference_accession).values())
+		sql = "SELECT id FROM element WHERE \"molecule_id\" IN (" + ", ".join(["?"] * len(molecule_ids)) + ")"
+		if type:
+			sql += " AND type = ?"
+			molecule_ids.append(type)
+		row = self.cursor.execute(sql, molecule_ids).fetchall()
+		if not row:
+			return []
+		return [x['id'] for x in row]
 
 	def get_source(self, molecule_id):
 		return self.get_elements(molecule_id, 'source')[0]
@@ -418,7 +433,7 @@ class sonarDBManager():
 			yield row
 
 	def iter_protein_variants(self, sample_name, *element_ids):
-		sql = "SELECT element_id, element.symbol, start, end, ref, alt FROM variant WHERE name = ? AND element.id IN (" + ", ".join(['?'] * len(element_ids)) + ") AND type = 'protein' LEFT JOIN element ON element.id = element_id;"
+		sql = "SELECT element_id, element.symbol, start, end, ref, alt FROM variant WHERE name = ? AND element.id IN (" + ", ".join(['?'] * len(element_ids)) + ") AND type = 'cds' LEFT JOIN element ON element.id = element_id;"
 		for row in self.cursor.execute(sql, [sample_name] + element_ids):
 			yield row
 
@@ -745,7 +760,7 @@ class sonarDBManager():
 
 		return "SELECT \"sample.id\" AS id FROM propertyView WHERE " + " AND ".join(conditions), valueList
 
-	def query_profile(self, *vars):
+	def query_profile(self, *vars, reference_accession=None):
 		iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AGR"), "Y": set("CTY"), "S": set("GCS"), "W": set("ATW"), "K": set("GTK"), "M": set("ACM"), "B": set("CGTB"), "D": set("AGTD"), "H": set("ACTH"), "V": set("ACGV"), "N": set("ACGTRYSWKMBDHVN") }
 		iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O"), "B": set("DNB"), "Z": set("EQZ"), "J": set("ILJ"), "Φ": set("VILFWYMΦ"), "Ω": set("FWYHΩ"), "Ψ": set("VILMΨ"), "π": set("PGASπ"), "ζ": set("STHNQEDKRζ"), "+": set("KRH+"), "-": set("DE-"), "X": set("ARNDCQEGHILKMFPSTWYVUOBZJΦΩΨπζ+-X") }
 		del_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$')
@@ -786,7 +801,7 @@ class sonarDBManager():
 			## set element
 			if match.group(2):
 				c.append("\"element.type\" = ?")
-				v.append("protein")
+				v.append("cds")
 				c.append("\"element.symbol\" = ?")
 				v.append(match.group(2)[:-1])
 				code = iupac_aa_code
@@ -881,7 +896,7 @@ class sonarDBManager():
 		sql = "SELECT count(DISTINCT \"molecule.id\") AS count FROM referenceView WHERE " + condition
 		return self.cursor.execute(sql, vals).fetchone()['count']
 
-	def match(self, *profiles, properties=None, reference_accession=None):
+	def match(self, *profiles, properties=None, reference_accession=None, showN=False):
 		#collecting sqls for metadata-based filtering
 		property_sqls = []
 		property_vals = []
@@ -917,20 +932,35 @@ class sonarDBManager():
 			sample_selection_sql = property_sqls + profile_sqls
 
 		# assembling final sql
-		if self.count_molecules(reference_accession) == 1:
+		genome_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "source")]
+		if len(genome_element_condition) == 1:
+			genome_element_condition = "\"element.id\" = " + genome_element_condition[0]
 			m = ""
 		else:
-			m = "\"molecule.symbol\" || \"@\" || "
+			genome_element_condition = "\"element.id\" IN (" + ", ".join(genome_element_condition) + ")"
+			m = " \"molecule.symbol\" || \"@\" || "
+
+		if not showN:
+			n = " AND \"variant.alt\" != \"N\" "
+		else:
+			n = ""
+
+		cds_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "cds")]
+		if len(cds_element_condition) == 1:
+			cds_element_condition = "\"element.id\" = " + cds_element_condition[0]
+		else:
+			cds_element_condition = "\"element.id\" IN (" + ", ".join(cds_element_condition) + ")"
+
 
 		sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
 		       SELECT  *, \
 					    ( \
 						  SELECT group_concat(" + m + "CASE \"variant.alt\" WHEN \" \" THEN \"del:\" || \"variant.start\" || \"-\" || \"variant.end\" ELSE \"variant.ref\" || \"variant.start\" || \"variant.alt\" END, \" \") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND \"element.type\" = \"source\" GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
 						) nt_profile, \
 							( \
 						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || CASE \"variant.alt\" WHEN \" \" THEN \"del:\" || \"variant.start\" || \"-\" || \"variant.end\" ELSE \"variant.ref\" || \"variant.start\" || \"variant.alt\" END, \" \") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND \"element.type\" = \"cds\" GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
 						) aa_profile \
 							FROM sample \
 						WHERE id IN ( SELECT id FROM selected_samples )"

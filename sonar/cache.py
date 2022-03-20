@@ -390,10 +390,17 @@ class sonarCache():
 					del(data['sequence'])
 					self.cache_sample(**data)
 
-	def import_samples(self):
+	def import_samples(self, samples_per_transaction=0):
 		refseqs = {}
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
+			sample_chunk = 0
+			if not samples_per_transaction:
+				samples_per_transaction = len(self._samplefiles)
 			for sample_data in tqdm(self.iter_samples(), total=len(self._samplefiles)):
+				if sample_chunk == samples_per_transaction:
+					sample_chunk = 0
+					dbm.new_transaction()
+				sample_chunk += 1
 				# nucleotide level import
 				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 				if sample_data['algnid'] is None:

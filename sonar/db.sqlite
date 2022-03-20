@@ -1,7 +1,5 @@
 PRAGMA user_version = 4;
 PRAGMA foreign_keys = OFF;
-PRAGMA analysis_limit=400;
-PRAGMA optimize;
 
 --
 -- SEQUENCE SECTION
@@ -140,7 +138,6 @@ CREATE TABLE IF NOT EXISTS variant (
 	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_variant_lookup ON variant(element_id, start, end, ref, alt, parent_id);
-CREATE INDEX IF NOT EXISTS idx_variant_parent_id ON variant(parent_id);
 
 CREATE TABLE IF NOT EXISTS alignment (
 	id INTEGER PRIMARY KEY,
@@ -291,14 +288,15 @@ SELECT
   variant.end as "variant.end",
   variant.alt as "variant.alt",
   variant.parent_id as "variant.parent_id"
-FROM variant
-  JOIN alignment2variant ON alignment2variant.variant_id = variant.id
-  JOIN alignment ON alignment.id = alignment2variant.alignment_id
-  JOIN sequence ON sequence.seqhash = alignment.seqhash
-  JOIN sample ON sample.seqhash = sequence.seqhash
-  JOIN element ON element.id = variant.element_id
-  JOIN molecule ON molecule.id = element.molecule_id
-  JOIN reference ON reference.id = molecule.reference_id;
+FROM
+	variant
+LEFT JOIN alignment2variant ON alignment2variant.variant_id = variant.id
+LEFT JOIN alignment ON alignment.id = alignment2variant.alignment_id
+LEFT JOIN sequence ON sequence.seqhash = alignment.seqhash
+LEFT JOIN sample ON sample.seqhash = sequence.seqhash
+LEFT JOIN element ON element.id = variant.element_id
+LEFT JOIN molecule ON molecule.id = element.molecule_id
+LEFT JOIN reference ON reference.id = molecule.reference_id;
 
 --
 -- TRIGGER

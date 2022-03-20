@@ -364,7 +364,8 @@ if __name__ == "__main__":
 
 	# optimize
 	if args.tool == "optimize":
-		sonardb.sonarDBManager.optimize(args.db)
+		with sonarDBManager(args.db, debug=args.debug) as dbm:
+			dbm.optimize(args.db)
 
 	# optimize
 	if args.tool == "dev":
