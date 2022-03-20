@@ -10,6 +10,7 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from collections import OrderedDict, defaultdict
 from urllib.parse import quote as urlquote
 import itertools
+import logging
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
@@ -63,6 +64,7 @@ class sonarDBManager():
 	"""
 
 	def __init__(self, dbfile, timeout=-1, readonly=False, debug=False, autocreate=False):
+		logging.basicConfig(format='%(asctime)s %(message)s')
 		self.connection = None
 		if not autocreate and not os.path.isfile(dbfile):
 			sys.exit("database error: database does not exists")
@@ -116,17 +118,10 @@ class sonarDBManager():
 		if self.connection:
 			self.close()
 
-	@staticmethod
-	def trace_sql(sql):
-		print("")
-		print("SQL TRACE:")
-		print(re.sub('[ \t]+', ' ', sql))
-		print("")
-
 	def connect(self):
 		con = sqlite3.connect(self.__uri + "?mode=" + self.__mode, self.__timeout, isolation_level = None, uri = True)
 		if self.debug:
-			con.set_trace_callback(self.trace_sql)
+			con.set_trace_callback(logging.warning)
 		con.row_factory = self.dict_factory
 		cur = con.cursor()
 		return con, cur
@@ -427,7 +422,7 @@ class sonarDBManager():
 		return None if row is None else row['id']
 
 	def iter_dna_variants(self, sample_name, *element_ids):
-		sql = "SELECT \"element.id\", \"element.symbol\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" IN (" + ", ".join(['?'] * len(element_ids)) + ");"
+		sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" IN (" + ", ".join(['?'] * len(element_ids)) + ");"
 		for row in self.cursor.execute(sql, [sample_name] + [str(x) for x in element_ids]):
 			if row["variant.start"] is not None:
 				yield row
