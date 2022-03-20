@@ -390,17 +390,10 @@ class sonarCache():
 					del(data['sequence'])
 					self.cache_sample(**data)
 
-	def import_samples(self, samples_per_transaction=0):
+	def import_samples(self):
 		refseqs = {}
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			sample_chunk = 0
-			if not samples_per_transaction:
-				samples_per_transaction = len(self._samplefiles)
 			for sample_data in tqdm(self.iter_samples(), total=len(self._samplefiles)):
-				if sample_chunk == samples_per_transaction:
-					sample_chunk = 0
-					dbm.new_transaction()
-				sample_chunk += 1
 				# nucleotide level import
 				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 				if sample_data['algnid'] is None:
@@ -410,7 +403,7 @@ class sonarCache():
 							if line == "//":
 								break
 							vardat = line.strip("\r\n").split("\t")
-							dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2])
+							dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2], vardat[5])
 						if line != "//":
 							sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
 				# paranoia test

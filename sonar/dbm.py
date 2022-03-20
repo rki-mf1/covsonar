@@ -116,10 +116,17 @@ class sonarDBManager():
 		if self.connection:
 			self.close()
 
+	@staticmethod
+	def trace_sql(sql):
+		print("")
+		print("SQL TRACE:")
+		print(re.sub('[ \t]+', ' ', sql))
+		print("")
+
 	def connect(self):
 		con = sqlite3.connect(self.__uri + "?mode=" + self.__mode, self.__timeout, isolation_level = None, uri = True)
 		if self.debug:
-			con.set_trace_callback(print)
+			con.set_trace_callback(self.trace_sql)
 		con.row_factory = self.dict_factory
 		cur = con.cursor()
 		return con, cur
@@ -253,7 +260,7 @@ class sonarDBManager():
 		if symbol.strip() == "":
 			symbol = accession
 		if standard:
-			sql = "UPDATE molecule SET standard = ? WHERE reference_id = ? AND standard != 0"
+			sql = "UPDATE molecule SET standard = ? WHERE reference_id = ? AND standard = 1"
 			self.cursor.execute(sql, [0, reference_id])
 		sql = "INSERT INTO molecule (id, reference_id, type, accession, symbol, description, segment, length, standard) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);"
 		self.cursor.execute(sql, [None, reference_id, type, accession, symbol, description, segment, length, standard])
@@ -261,11 +268,11 @@ class sonarDBManager():
 		mid = self.cursor.execute(sql, [accession]).fetchone()['id']
 		return mid
 
-	def insert_element(self, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard=0, parent_id="", parts=None):
+	def insert_element(self, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard=0, parent_id=" ", parts=None):
 		if symbol.strip() == "":
 			symbol = accession
 		if standard:
-			sql = "UPDATE element SET standard = ? WHERE molecule_id = ? AND standard != 0"
+			sql = "UPDATE element SET standard = ? WHERE molecule_id = ? AND standard = 1"
 			self.cursor.execute(sql, [0, molecule_id])
 		sql = "INSERT INTO element (id, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
 		self.cursor.execute(sql, [None, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard, parent_id])
@@ -277,12 +284,10 @@ class sonarDBManager():
 				self.cursor.execute(sql, [mid] + part)
 		return mid
 
-	def insert_variant(self, alignment_id, element_id, ref, alt, start, end, parent_id=""):
-		vid = self.get_variant_id(ref, element_id, alt, start, end, parent_id)
-		if not vid:
-			sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?);"
-			self.cursor.execute(sql, [None, element_id, start, end, ref, alt, parent_id])
-			vid = self.cursor.lastrowid
+	def insert_variant(self, alignment_id, element_id, ref, alt, start, end, label, parent_id=""):
+		sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, label, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?);"
+		self.cursor.execute(sql, [None, element_id, start, end, ref, alt, label, parent_id])
+		vid = self.get_variant_id(element_id, start, end, ref, alt)
 		sql = "INSERT OR IGNORE INTO alignment2variant (alignment_id, variant_id) VALUES(?, ?);"
 		self.cursor.execute(sql, [alignment_id, vid])
 		return vid
@@ -311,12 +316,12 @@ class sonarDBManager():
 		return row['id'] if row else None
 
 	def seq_exists(self, seqhash):
-		sql = "SELECT EXISTS(SELECT 1 FROM sample2sequence WHERE sequence_id=? LIMIT 1) as found;"
-		return bool(self.cursor.execute(sql, [seqhash]).fetchone()['found'])
+		sql = "SELECT id FROM sample WHERE seqhash=? LIMIT 1;"
+		return False if self.cursor.execute(sql, [seqhash]).fetchone() is None else True
 
 	def get_alignment_id(self, seqhash, element_id):
-		sql = "SELECT id FROM alignment WHERE seqhash = ? AND element_id = ? LIMIT 1;"
-		row = self.cursor.execute(sql, [seqhash, element_id]).fetchone()
+		sql = "SELECT id FROM alignment WHERE element_id = ? AND seqhash = ? LIMIT 1;"
+		row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
 		return None if row is None else row['id']
 
 	def get_molecule_ids(self, reference_accession=None):
@@ -410,15 +415,15 @@ class sonarDBManager():
 		return self.cursor.execute(sql, [sample_id, element_id]).fetchall()
 
 	def get_alignment_id(self, seqhash, element_id):
-		sql = "SELECT id FROM alignment WHERE \"seqhash\" = ? AND \"element.id\" = ? LIMIT 1;"
-		row = self.cursor.execute(sql, [seqhash, element_id]).fetchone()
+		sql = "SELECT id FROM alignment WHERE \"element.id\" = ? AND \"seqhash\" = ? LIMIT 1;"
+		row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
 		if row:
 			return row['id']
 		return None
 
-	def get_variant_id(self, ref, element_id, alt, start, end, parent_id):
-		sql = "SELECT id FROM variant WHERE element_id = ? AND start = ? AND end = ? AND ref = ? AND alt = ? AND parent_id = ?;"
-		row = self.cursor.execute(sql, [element_id, start, end, ref, alt, parent_id]).fetchone()
+	def get_variant_id(self, element_id, start, end, ref, alt):
+		sql = "SELECT id FROM variant WHERE element_id = ? AND start = ? AND end = ? AND ref = ? AND alt = ?;"
+		row = self.cursor.execute(sql, [element_id, start, end, ref, alt]).fetchone()
 		return None if row is None else row['id']
 
 	def iter_dna_variants(self, sample_name, *element_ids):
@@ -428,7 +433,7 @@ class sonarDBManager():
 				yield row
 
 	def iter_profile(self, sample_name, element_id):
-		sql = "SELECT * FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" = ? ORDER BY \"variant.start\";"
+		sql = "SELECT * FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" = ? ORDER BY \"element.id\", \"variant.start\";"
 		for row in self.cursor.execute(sql, [sample_name, element_id]):
 			yield row
 
@@ -447,7 +452,7 @@ class sonarDBManager():
 		return self.cursor.execute(sql).fetchone()['COUNT(*)']
 
 	def count_sequences(self):
-		sql = "SELECT COUNT(DISTINCT seqhash) FROM sample2sequence;"
+		sql = "SELECT COUNT(DISTINCT seqhash) FROM samples;"
 		return self.cursor.execute(sql).fetchone()['COUNT(seqhash)']
 
 	def count_property(self, property_name, distinct=False, ignore_standard=False):
@@ -955,12 +960,12 @@ class sonarDBManager():
 		sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
 		       SELECT  *, \
 					    ( \
-						  SELECT group_concat(" + m + "CASE \"variant.alt\" WHEN \" \" THEN \"del:\" || \"variant.start\" || \"-\" || \"variant.end\" ELSE \"variant.ref\" || \"variant.start\" || \"variant.alt\" END, \" \") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
+						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
 						) nt_profile, \
 							( \
-						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || CASE \"variant.alt\" WHEN \" \" THEN \"del:\" || \"variant.start\" || \"-\" || \"variant.end\" ELSE \"variant.ref\" || \"variant.start\" || \"variant.alt\" END, \" \") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"variant.start\" \
+						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
 						) aa_profile \
 							FROM sample \
 						WHERE id IN ( SELECT id FROM selected_samples )"

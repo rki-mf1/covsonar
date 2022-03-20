@@ -49,8 +49,8 @@ class sonarAligner(object):
 			if line == "//":
 				return
 		alignment = self.align(data['seq_file'], data['ref_file'])
-		nuc_vars = [x for x in self.extract_vars(*alignment)]
-		vars = "\n".join(["\t".join(x) + "\t" + sourceid for x in nuc_vars])
+		nuc_vars = [x for x in self.extract_vars(*alignment, sourceid)]
+		vars = "\n".join(["\t".join(x) for x in nuc_vars])
 		if nuc_vars:
 			aa_vars = "\n".join(["\t".join(x) for x in self.lift_vars(nuc_vars, data['lift_file'], data['tt_file'])])
 			if aa_vars:
@@ -63,7 +63,7 @@ class sonarAligner(object):
 			with open(data['var_file'], "w") as handle:
 				handle.write(vars + "\n//")
 
-	def extract_vars(self, qry_seq, ref_seq):
+	def extract_vars(self, qry_seq, ref_seq, elemid):
 		l = len(qry_seq)
 		if l != len(ref_seq):
 			sys.exit("error: sequences differ in length")
@@ -80,7 +80,10 @@ class sonarAligner(object):
 				s = i
 				while qry_seq[i+1] == "-":
 					i += 1
-				yield ref_seq[s:i+1], str(s-offset), str(i+1-offset), " "
+				start = s-offset
+				end = i+1-offset
+				yield ref_seq[s:i+1], str(start), str(end), " ", elemid, "del:" + str(start+1) + "-" + str(end)
+
 			#insertion
 			elif ref_seq[i] == "-":
 				s = i-1
@@ -92,11 +95,15 @@ class sonarAligner(object):
 				else:
 					ref = ref_seq[s]
 					alt = qry_seq[s:i+1]
-				yield ref, str(s-offset), str(s-offset+1), alt
+				pos = s-offset+1
+				yield ref, str(pos-1), str(pos), alt, elemid, ref + str(pos) + alt
 				offset += i-s
 			#snps
 			else:
-				yield ref_seq[i], str(i-offset), str(i-offset+1), qry_seq[i]
+				ref = ref_seq[i]
+				alt = qry_seq[i]
+				pos = i-offset+1
+				yield ref, str(pos-1), str(pos), alt, elemid, ref + str(pos) + alt
 			i += 1
 
 	def translate(self, seq, tt):
@@ -122,18 +129,28 @@ class sonarAligner(object):
 		df = df.loc[(df["ref1"] != df["alt1"]) | (df["ref2"] != df["alt2"]) | (df["ref3"] != df["alt3"])]
 		df["altAa"] = df.apply(lambda x: self.translate(x["alt1"]+x["alt1"]+x["alt1"], tt), axis=1)
 		df = df.loc[df["aa"] != df["altAa"]]
+
 		# snps or inserts
 		for index, row in df.loc[(df["altAa"] != "-") & (df["altAa"] != "")].iterrows():
-			yield row["aa"], str(row["aaPos"]), str(row["aaPos"]+1), row['altAa'], str(row["elemid"])
+			pos = row["aaPos"]+1
+			label = row["aa"] + str(pos) + row['altAa']
+			yield row["aa"], str(pos-1), str(pos), row['altAa'], str(row["elemid"]), label
+
 		# deletions
 		prev_row = None
-		for index, row in df.loc[(df["altAa"] == "-") | (df["altAa"] == "")].sort_values(['elemid', 'aaPos']).iterrows():
+		for index, row in df.loc[(df["altAa"] == "-")].sort_values(['elemid', 'aaPos']).iterrows():
 			if prev_row is None:
 				prev_row = row
 			elif prev_row["elemid"] == row["elemid"] and abs(prev_row["aaPos"]-row['aaPos'])==1:
 				prev_row["aa"] += row['aa']
 			else:
-				yield prev_row["aa"], str(prev_row["aaPos"]), str(prev_row["aaPos"]+len(prev_row["aa"])), prev_row['altAa'], str(prev_row["elemid"])
+				start = prev_row["aaPos"]
+				end = prev_row["aaPos"]+len(prev_row["aa"])
+				label = "del:" + str(start+1) + "-" + str(end)
+				yield prev_row["aa"], str(start), str(end), " ", str(prev_row["elemid"]), label
 				prev_row = row
 		if not prev_row is None:
-			yield prev_row["aa"], str(prev_row["aaPos"]), str(prev_row["aaPos"]+len(prev_row["aa"])), prev_row['altAa'], str(prev_row["elemid"])
+			start = prev_row["aaPos"]
+			end = prev_row["aaPos"]+len(prev_row["aa"])
+			label = "del:" + str(start+1) + "-" + str(end)
+			yield prev_row["aa"], str(start), str(end), " ", str(prev_row["elemid"]), label
