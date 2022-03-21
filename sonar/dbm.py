@@ -178,7 +178,7 @@ class sonarDBManager():
 		uri = sonarDBManager.get_uri(filename)
 		with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
 			if debug:
-				con.set_trace_callback(print)
+				con.set_trace_callback(logging.warning)
 			con.executescript(sql)
 
 	def add_codon(self, translation_table, codon, aa):

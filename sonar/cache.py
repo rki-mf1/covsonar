@@ -64,9 +64,6 @@ class sonarCache():
 		return self
 
 	def __exit__(self, exc_type, exc_value, exc_traceback):
-		#if [exc_type, exc_value, exc_traceback].count(None) != 3:
-		#	print("warning:", file=sys.stderr)
-		#	print(traceback.format_exc(), file=sys.stderr)
 		if os.path.isdir(self.basedir) and self.temp:
 			shutil.rmtree(self.basedir)
 		if self.logfile:
