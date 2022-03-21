@@ -82,7 +82,11 @@ class sonarAligner(object):
 					i += 1
 				start = s-offset
 				end = i+1-offset
-				yield ref_seq[s:i+1], str(start), str(end), " ", elemid, "del:" + str(start+1) + "-" + str(end)
+				if end-start == 1:
+					label = "del:" + str(start+1)
+				else:
+					label = "del:" + str(start+1) + "-" + str(end)
+				yield ref_seq[s:i+1], str(start), str(end), " ", elemid, label
 
 			#insertion
 			elif ref_seq[i] == "-":
@@ -146,11 +150,17 @@ class sonarAligner(object):
 			else:
 				start = prev_row["aaPos"]
 				end = prev_row["aaPos"]+len(prev_row["aa"])
-				label = "del:" + str(start+1) + "-" + str(end)
+				if end-start == 1:
+					label = "del:" + str(start+1)
+				else:
+					label = "del:" + str(start+1) + "-" + str(end)
 				yield prev_row["aa"], str(start), str(end), " ", str(prev_row["elemid"]), label
 				prev_row = row
 		if not prev_row is None:
 			start = prev_row["aaPos"]
 			end = prev_row["aaPos"]+len(prev_row["aa"])
-			label = "del:" + str(start+1) + "-" + str(end)
+			if end-start == 1:
+				label = "del:" + str(start+1)
+			else:
+				label = "del:" + str(start+1) + "-" + str(end)
 			yield prev_row["aa"], str(start), str(end), " ", str(prev_row["elemid"]), label
