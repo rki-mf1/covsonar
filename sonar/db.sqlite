@@ -1,5 +1,6 @@
 PRAGMA user_version = 4;
 PRAGMA foreign_keys = OFF;
+PRAGMA analysis_limit=1000;
 
 --
 -- SEQUENCE SECTION
@@ -262,6 +263,27 @@ LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
 
 CREATE VIEW IF NOT EXISTS variantView
+AS
+SELECT
+  sample.id as "sample.id",
+  sample.name as "sample.name",
+  sample.seqhash as "sample.seqhash",
+  variant.id as "variant.id",
+  variant.ref as "variant.ref",
+  variant.start as "variant.start",
+  variant.end as "variant.end",
+  variant.alt as "variant.alt",
+	variant.label as "variant.label",
+  variant.parent_id as "variant.parent_id",
+	variant.element_id as "element.id"
+FROM
+	sample
+LEFT JOIN sequence ON sample.seqhash = sequence.seqhash
+LEFT JOIN alignment ON sequence.seqhash = alignment.seqhash
+LEFT JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
+LEFT JOIN variant ON alignment2variant.variant_id = variant.id;
+
+CREATE VIEW IF NOT EXISTS variantViewOld
 AS
 SELECT
   sample.id as "sample.id",
