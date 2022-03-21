@@ -947,9 +947,11 @@ class sonarDBManager():
 			m = " \"molecule.symbol\" || \"@\" || "
 
 		if not showN:
-			n = " AND \"variant.alt\" != \"N\" "
+			nn = " AND \"variant.alt\" != \"N\" "
+			np = " AND \"variant.alt\" != \"X\" "
 		else:
-			n = ""
+			nn = ""
+			np = ""
 
 		cds_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "cds")]
 		if len(cds_element_condition) == 1:
@@ -962,11 +964,11 @@ class sonarDBManager():
 		       SELECT  *, \
 					    ( \
 						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
 						) nt_profile, \
 							( \
 						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + n + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
 						) aa_profile \
 							FROM sample \
 						WHERE id IN ( SELECT id FROM selected_samples )"
