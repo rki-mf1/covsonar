@@ -17,7 +17,10 @@ from math import ceil
 from tempfile import mkdtemp, TemporaryDirectory
 import pandas as pd
 from tqdm import tqdm
-
+import shutil
+from pickle import load as load_pickle
+import gzip
+import lzma
 
 class sonarCache():
 	"""
@@ -271,7 +274,7 @@ class sonarCache():
 				for record in SeqIO.parse(handle, "fasta"):
 					refmol = self.get_refmol(record.description)
 					if not refmol:
-						sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(fasta_header) + ").")
+						sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(record.description) + ").")
 					refmolid = self.refmols[refmol]['molecule.id']
 					seq = sonarActions.harmonize(record.seq)
 					seqhash = sonarActions.hash(seq)
@@ -357,7 +360,7 @@ class sonarCache():
 						self.log(data['name'] + " skipped as it exists in the database and updating is disabled")
 						continue
 					else:
-						stored_properties = dbm.get_properties(sample_name)
+						stored_properties = dbm.get_properties(data['name'])
 						data['properties'] = { x: data['properties'][x] for x in data['properties'].items() if stored_properties[x] != y }
 
 					# check reference
@@ -391,49 +394,56 @@ class sonarCache():
 		refseqs = {}
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
 			for sample_data in tqdm(self.iter_samples(), total=len(self._samplefiles)):
-				# nucleotide level import
-				sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
-				if sample_data['algnid'] is None:
-					algnid = dbm.insert_alignment(sample_data['seqhash'], sample_data['refmolid'])
-					with open(sample_data['var_file'], "r") as handle:
-						for line in handle:
-							if line == "//":
-								break
-							vardat = line.strip("\r\n").split("\t")
-							dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2], vardat[5])
-						if line != "//":
-							sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
-				# paranoia test
 				try:
-					seq = list(refseqs[sample_data['refmolid']])
-				except:
-					refseqs[sample_data['refmolid']] = list(dbm.get_sequence(sample_data['refmolid']))
-					seq = list(refseqs[sample_data['refmolid']])
-				prefix = ""
-				for vardata in dbm.iter_dna_variants(sample_data['name'], sample_data['refmolid']):
-					if vardata['variant.alt'] == " ":
-						for i in range(vardata['variant.start'], vardata['variant.end']):
-							seq[i] = ""
-					elif vardata['variant.start'] >= 0:
-						seq[vardata['variant.start']] = vardata['variant.alt']
-					else:
-						prefix = vardata['variant.alt']
-				seq = prefix + "".join(seq)
-				with open(sample_data['seq_file'], "r") as handle:
-					orig_seq = handle.read()
-				if seq != orig_seq:
-					aligner = sonarAligner()
-					with TemporaryDirectory() as tempdir:
-						qryfile = os.path.join(tempdir, "qry")
-						reffile = os.path.join(tempdir, "ref")
-						with open(qryfile, "w") as handle:
-							handle.write(">seq\n" + seq)
-						with open(reffile, "w") as handle:
-							handle.write(">ref\n" + orig_seq)
-						qry, ref = aligner.align(qryfile, reffile)
-					with open("paranoid.alignment.fna", "w") as handle:
-						handle.write(">original_" + sample_data['name'] + "\n" + ref + "\n>restored_" + sample_data['name'] + "\n" + qry)
-					sys.exit("import error: original sequence of sample " + sample_data['name'] + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)")
+					# nucleotide level import
+					sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
+					if sample_data['algnid'] is None:
+						algnid = dbm.insert_alignment(sample_data['seqhash'], sample_data['refmolid'])
+						with open(sample_data['var_file'], "r") as handle:
+							for line in handle:
+								if line == "//":
+									break
+								vardat = line.strip("\r\n").split("\t")
+								dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2], vardat[5])
+							if line != "//":
+								sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
+					# paranoia test
+					try:
+						seq = list(refseqs[sample_data['refmolid']])
+					except:
+						refseqs[sample_data['refmolid']] = list(dbm.get_sequence(sample_data['refmolid']))
+						seq = list(refseqs[sample_data['refmolid']])
+					prefix = ""
+					for vardata in dbm.iter_dna_variants(sample_data['name'], sample_data['refmolid']):
+						if vardata['variant.alt'] == " ":
+							for i in range(vardata['variant.start'], vardata['variant.end']):
+								seq[i] = ""
+						elif vardata['variant.start'] >= 0:
+							seq[vardata['variant.start']] = vardata['variant.alt']
+						else:
+							prefix = vardata['variant.alt']
+					seq = prefix + "".join(seq)
+					with open(sample_data['seq_file'], "r") as handle:
+						orig_seq = handle.read()
+					if seq != orig_seq:
+						aligner = sonarAligner()
+						with TemporaryDirectory() as tempdir:
+							qryfile = os.path.join(tempdir, "qry")
+							reffile = os.path.join(tempdir, "ref")
+							with open(qryfile, "w") as handle:
+								handle.write(">seq\n" + seq)
+							with open(reffile, "w") as handle:
+								handle.write(">ref\n" + orig_seq)
+							qry, ref = aligner.align(qryfile, reffile)
+						with open("paranoid.alignment.fna", "w") as handle:
+							handle.write(">original_" + sample_data['name'] + "\n" + ref + "\n>restored_" + sample_data['name'] + "\n" + qry)
+						sys.exit("import error: original sequence of sample " + sample_data['name'] + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)")
+				except Exception as e: 
+					print(e)
+					print(line) 
+					print(vardat) 
+					print('Error at:', sample_data['name'])
+					sys.exit("import error:")
 
 if __name__ == "__main__":
 	pass

@@ -321,11 +321,11 @@ class sonarDBManager():
 
 	def get_molecule_ids(self, reference_accession=None):
 		if reference_accession:
-			 condition = "\"reference.accession\" = ?"
-			 val = [reference_accession]
+			condition = "\"reference.accession\" = ?"
+			val = [reference_accession]
 		else:
-			 condition = "\"reference.standard\" = ?"
-			 val = [1]
+			condition = "\"reference.standard\" = ?"
+			val = [1]
 		sql = "SELECT \"molecule.accession\", \"molecule.id\" FROM referenceView WHERE " + condition
 		return {x['molecule.accession']: x["molecule.id"] for x in self.cursor.execute(sql, val).fetchall() if x is not None }
 
@@ -342,11 +342,11 @@ class sonarDBManager():
 		elif "\"molecule.accession\"" not in fields:
 			fields = list(fields)+ ["\"molecule.accession\""]
 		if reference_accession:
-			 condition = "\"reference.accession\" = ?"
-			 vals = [reference_accession]
+			condition = "\"reference.accession\" = ?"
+			vals = [reference_accession]
 		else:
-			 condition = "\"reference.standard\" = ?"
-			 vals = [1]
+			condition = "\"reference.standard\" = ?"
+			vals = [1]
 		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + condition + ";"
 		row = self.cursor.execute(sql, vals).fetchall()
 		if row:
@@ -380,26 +380,26 @@ class sonarDBManager():
 		conditions = []
 		vals = []
 		if reference_accession:
-			 conditions.append("\"reference.accession\" = ?")
-			 vals.append(reference_accession)
+			conditions.append("\"reference.accession\" = ?")
+			vals.append(reference_accession)
 		else:
-			 conditions.append("\"reference.standard\" = ?")
-			 vals.append(1)
+			conditions.append("\"reference.standard\" = ?")
+			vals.append(1)
 		if molecule_accession:
-			 conditions.append("\"molecule.accession\" = ?")
-			 vals.append(molecule_accession)
+			conditions.append("\"molecule.accession\" = ?")
+			vals.append(molecule_accession)
 		else:
-			 conditions.append("\"molecule.standard\" = ?")
-			 vals.append(1)
+			conditions.append("\"molecule.standard\" = ?")
+			vals.append(1)
 		if element_accession:
-			 conditions.append("\"element.accession\" = ?")
-			 vals.append(element_accession)
+			conditions.append("\"element.accession\" = ?")
+			vals.append(element_accession)
 		elif not element_type:
-			 conditions.append("\"element.type\" = ?")
-			 vals.append('source')
+			conditions.append("\"element.type\" = ?")
+			vals.append('source')
 		if element_type:
-			 conditions.append("\"element.type\" = ?")
-			 vals.append(element_type)
+			conditions.append("\"element.type\" = ?")
+			vals.append(element_type)
 		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + " AND ".join(conditions) + " ORDER BY \"reference.id\" ASC, \"molecule.id\" ASC, \"element.id\" ASC, \"element.segment\" ASC"
 		return self.cursor.execute(sql, vals).fetchall()
 
@@ -428,7 +428,28 @@ class sonarDBManager():
 			condition = " IN (" + ", ".join(['?'] * len(element_ids))  + ")"
 		else:
 			condition = ""
-		sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\"" + condition
+		# sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\"" + condition
+		sql = '''
+			SELECT  variant.element_id as \"element.id\", 
+					variant.start as \"variant.start\",
+					variant.end as  \"variant.end\", 
+					variant.ref as  \"variant.ref\",
+					variant.alt as \"variant.alt\"
+					FROM 
+						( SELECT sample.seqhash
+						FROM sample
+						WHERE sample.name = ?
+						) AS sample_T
+					INNER JOIN alignment 
+						ON sample_T.seqhash == alignment.seqhash 
+					INNER JOIN alignment2variant 
+						ON alignment.id == alignment2variant.alignment_id
+					INNER JOIN	variant
+						ON alignment2variant.variant_id == variant.id 
+						WHERE  variant.element_id ''' +condition
+
+
+		# print(sql)
 		for row in self.cursor.execute(sql, [sample_name] + list(element_ids)):
 			if row["variant.start"] is not None:
 				yield row
@@ -482,7 +503,7 @@ class sonarDBManager():
 
 	def get_seqhash(self, sample_name):
 		sql = "SELECT \"sample.seqhash\" FROM sequenceView WHERE sample.name = ?"
-		return [ x[sample.hash] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
+		return [ x['sample.hash'] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
 
 	def get_translation_dict(self, translation_id):
 		sql = "SELECT codon, aa FROM translation WHERE id = ?"
@@ -958,20 +979,19 @@ class sonarDBManager():
 			cds_element_condition = "\"element.id\" = " + cds_element_condition[0]
 		else:
 			cds_element_condition = "\"element.id\" IN (" + ", ".join(cds_element_condition) + ")"
-
-
+		# Version 1
 		sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
 		       SELECT  *, \
 					    ( \
 						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
 						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
 						) nt_profile, \
-							( \
+						( \
 						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
 						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
 						) aa_profile \
-							FROM sample \
-						WHERE id IN ( SELECT id FROM selected_samples )"
+				FROM sample \
+				WHERE id IN ( SELECT id FROM selected_samples )"
 
 		return self.cursor.execute(sql, property_vals + profile_vals).fetchall()
 
