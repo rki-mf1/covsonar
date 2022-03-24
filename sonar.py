@@ -62,8 +62,8 @@ def parse_args():
 	parser_newprop = subparsers.add_parser('addprop', parents=[general_parser], help='add a new sample property to the database.')
 	parser_newprop.add_argument('--name', metavar="STR", help="unique name of the new property (only alphanumeric characters and _ as only special character)", type=str, required=True)
 	parser_newprop.add_argument('--descr', metavar="STR", help="description of the new property", type=str, required=True)
-	parser_newprop.add_argument('--dtype', metavar="STR", help="data type of the new property", type=str, choices=['integer', 'float', 'text', 'date'], required=True)
-	parser_newprop.add_argument('--qtype', metavar="STR", help="query type of the new property", type=str, choices=['numeric', 'float', 'date', 'text', 'zip'], required=True)
+	parser_newprop.add_argument('--dtype', metavar="STR", help="data type of the new property", type=str, choices=['integer', 'float', 'text', 'date', 'zip'], required=True)
+	parser_newprop.add_argument('--qtype', metavar="STR", help="query type of the new property", type=str, choices=['numeric', 'float', 'date', 'text', 'zip'], default=None)
 	parser_newprop.add_argument('--default', metavar="VAR", help="default value of the new property (none by default)", type=str, default=None)
 
 	# create the parser for the "delprop" command
@@ -403,7 +403,18 @@ if __name__ == "__main__":
 
 	# newprop
 	if args.tool == "addprop":
-		with sonarDBManager(args.db, debug=debug) as dbm:
+		with sonarDBManager(args.db, debug=args.debug) as dbm:
+			if args.qtype is None:
+				if args.dtype == 'integer':
+					args.qtype = 'numeric'
+				elif args.dtype == 'float':
+					args.qtype = 'numeric'
+				elif args.dtype == 'text':
+					args.qtype = 'text'
+				elif args.dtype == 'date':
+					args.qtype = 'date'
+				elif args.dtype == 'zip':
+					args.qtype = 'zip'
 			dbm.add_property(args.name, args.dtype, args.qtype, args.descr, args.default)
 
 	# delprop
@@ -460,7 +471,8 @@ if __name__ == "__main__":
 
 	# optimize
 	if args.tool == "optimize":
-		sonarDBManager.optimize(args.db)
+		with sonarDBManager(args.db, debug=args.debug) as dbm:
+			dbm.optimize(args.db)
 
 	# Var2Vcf (export variants to  VCF)
 	if args.tool == "var2vcf":

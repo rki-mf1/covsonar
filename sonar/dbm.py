@@ -10,7 +10,8 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
 from collections import OrderedDict, defaultdict
 from urllib.parse import quote as urlquote
 import itertools
-import pandas as pd
+import logging
+
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
 
@@ -63,6 +64,7 @@ class sonarDBManager():
 	"""
 
 	def __init__(self, dbfile, timeout=-1, readonly=False, debug=False, autocreate=False):
+		logging.basicConfig(format='%(asctime)s %(message)s')
 		self.connection = None
 		if not autocreate and not os.path.isfile(dbfile):
 			sys.exit("database error: database does not exists")
@@ -119,13 +121,17 @@ class sonarDBManager():
 	def connect(self):
 		con = sqlite3.connect(self.__uri + "?mode=" + self.__mode, self.__timeout, isolation_level = None, uri = True)
 		if self.debug:
-			con.set_trace_callback(print)
+			con.set_trace_callback(logging.warning)
 		con.row_factory = self.dict_factory
 		cur = con.cursor()
 		return con, cur
 
 	def start_transaction(self):
 		self.cursor.execute("BEGIN DEFERRED")
+
+	def new_transaction(self):
+		self.commit()
+		self.start_transaction()
 
 	def commit(self):
 		self.connection.commit()
@@ -157,12 +163,6 @@ class sonarDBManager():
 			sql = "SELECT * FROM property"
 			rows = self.cursor.execute(sql).fetchall()
 			self.__properties = {} if not rows else { x['name']: x for x in rows }
-			#for pname in self.__properties:
-			#	if self.__properties[pname]['standard'] is not None:
-			#		if self.__properties[pname]['datatype'] == 'integer':
-			#			self.__properties[pname]['standard'] = int(self.__properties['standard'])
-			#		elif self.__properties[pname]['datatype'] == 'float':
-			#			self.__properties[pname]['standard'] = float(self.__properties['standard'])
 		return self.__properties
 
 	# SETUP
@@ -178,7 +178,7 @@ class sonarDBManager():
 		uri = sonarDBManager.get_uri(filename)
 		with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
 			if debug:
-				con.set_trace_callback(print)
+				con.set_trace_callback(logging.warning)
 			con.executescript(sql)
 
 	def add_codon(self, translation_table, codon, aa):
@@ -186,6 +186,8 @@ class sonarDBManager():
 		self.cursor.execute(sql, [translation_table, codon, aa])
 
 	def add_property(self, name, datatype, querytype, description, standard=None):
+		if name == "sample":
+			sys.exit("error: 'sample' is reserved and cannot be used as property name")
 		if not re.match("^[a-zA-Z0-9_]+$", name):
 			sys.exit("error: invalid property name (property names can contain only letters, numbers and underscores)")
 		if name in self.properties:
@@ -257,7 +259,7 @@ class sonarDBManager():
 		if symbol.strip() == "":
 			symbol = accession
 		if standard:
-			sql = "UPDATE molecule SET standard = ? WHERE reference_id = ? AND standard != 0"
+			sql = "UPDATE molecule SET standard = ? WHERE reference_id = ? AND standard = 1"
 			self.cursor.execute(sql, [0, reference_id])
 		sql = "INSERT INTO molecule (id, reference_id, type, accession, symbol, description, segment, length, standard) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);"
 		self.cursor.execute(sql, [None, reference_id, type, accession, symbol, description, segment, length, standard])
@@ -265,11 +267,11 @@ class sonarDBManager():
 		mid = self.cursor.execute(sql, [accession]).fetchone()['id']
 		return mid
 
-	def insert_element(self, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard=0, parent_id="", parts=None):
+	def insert_element(self, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard=0, parent_id=" ", parts=None):
 		if symbol.strip() == "":
 			symbol = accession
 		if standard:
-			sql = "UPDATE element SET standard = ? WHERE molecule_id = ? AND standard != 0"
+			sql = "UPDATE element SET standard = ? WHERE molecule_id = ? AND standard = 1"
 			self.cursor.execute(sql, [0, molecule_id])
 		sql = "INSERT INTO element (id, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
 		self.cursor.execute(sql, [None, molecule_id, type, accession, symbol, description, start, end, strand, sequence, standard, parent_id])
@@ -281,12 +283,10 @@ class sonarDBManager():
 				self.cursor.execute(sql, [mid] + part)
 		return mid
 
-	def insert_variant(self, alignment_id, element_id, ref, alt, start, end, parent_id=""):
-		vid = self.get_variant_id(ref, element_id, alt, start, end, parent_id)
-		if not vid:
-			sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?);"
-			self.cursor.execute(sql, [None, element_id, start, end, ref, alt, parent_id])
-			vid = self.cursor.lastrowid
+	def insert_variant(self, alignment_id, element_id, ref, alt, start, end, label, parent_id=""):
+		sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, label, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?);"
+		self.cursor.execute(sql, [None, element_id, start, end, ref, alt, label, parent_id])
+		vid = self.get_variant_id(element_id, start, end, ref, alt)
 		sql = "INSERT OR IGNORE INTO alignment2variant (alignment_id, variant_id) VALUES(?, ?);"
 		self.cursor.execute(sql, [alignment_id, vid])
 		return vid
@@ -315,23 +315,23 @@ class sonarDBManager():
 		return row['id'] if row else None
 
 	def seq_exists(self, seqhash):
-		sql = "SELECT EXISTS(SELECT 1 FROM sample2sequence WHERE sequence_id=? LIMIT 1) as found;"
-		return bool(self.cursor.execute(sql, [seqhash]).fetchone()['found'])
+		sql = "SELECT id FROM sample WHERE seqhash=? LIMIT 1;"
+		return False if self.cursor.execute(sql, [seqhash]).fetchone() is None else True
 
 	def get_alignment_id(self, seqhash, element_id):
-		sql = "SELECT id FROM alignment WHERE seqhash = ? AND element_id = ? LIMIT 1;"
-		row = self.cursor.execute(sql, [seqhash, element_id]).fetchone()
+		sql = "SELECT id FROM alignment WHERE element_id = ? AND seqhash = ? LIMIT 1;"
+		row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
 		return None if row is None else row['id']
 
 	def get_molecule_ids(self, reference_accession=None):
 		if reference_accession:
-			condition = "reference.accession = ?"
-			val = reference_accession
+			condition = "\"reference.accession\" = ?"
+			val = [reference_accession]
 		else:
-			condition = "reference.standard = ?"
-			val = 1
-		sql = "SELECT molecule.accession, molecule.id FROM referenceView WHERE " + condition
-		return {x['molecule.accession']: x[molecule.id] for x in self.cursor.execute(sql, val).fetchall() if x is not None }
+			condition = "\"reference.standard\" = ?"
+			val = [1]
+		sql = "SELECT \"molecule.accession\", \"molecule.id\" FROM referenceView WHERE " + condition
+		return {x['molecule.accession']: x["molecule.id"] for x in self.cursor.execute(sql, val).fetchall() if x is not None }
 
 	def get_molecule_id(self, molecule_accession):
 		sql = "SELECT id FROM molecule WHERE accession = ?;"
@@ -366,21 +366,16 @@ class sonarDBManager():
 			return []
 		return row
 
-	def get_element_by_ids(self, _id=[], all=False):
-		
-		if all:
-			sql = "SELECT * FROM element"
-		else:
-			if(len(_id) == 1):
-				sql = "SELECT * FROM element WHERE id = ?"
-			else:
-				sql = 'SELECT * FROM element WHERE id IN (%s)' % ','.join('?'*len(_id))
-
-		row = self.cursor.execute(sql, _id).fetchall()
+	def get_element_ids(self, reference_accession=None, type=None):
+		molecule_ids = list(self.get_molecule_ids(reference_accession=reference_accession).values())
+		sql = "SELECT id FROM element WHERE \"molecule_id\" IN (" + ", ".join(["?"] * len(molecule_ids)) + ")"
+		if type:
+			sql += " AND type = ?"
+			molecule_ids.append(type)
+		row = self.cursor.execute(sql, molecule_ids).fetchall()
 		if not row:
 			return []
-		return row
-
+		return [x['id'] for x in row]
 
 	def get_source(self, molecule_id):
 		return self.get_elements(molecule_id, 'source')[0]
@@ -401,14 +396,14 @@ class sonarDBManager():
 			conditions.append("\"molecule.standard\" = ?")
 			vals.append(1)
 		if element_accession:
-			 conditions.append("\"element.accession\" = ?")
-			 vals.append(element_accession)
+			conditions.append("\"element.accession\" = ?")
+			vals.append(element_accession)
 		elif not element_type:
-			 conditions.append("\"element.type\" = ?")
-			 vals.append('source')
+			conditions.append("\"element.type\" = ?")
+			vals.append('source')
 		if element_type:
-			 conditions.append("\"element.type\" = ?")
-			 vals.append(element_type)
+			conditions.append("\"element.type\" = ?")
+			vals.append(element_type)
 		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + " AND ".join(conditions) + " ORDER BY \"reference.id\" ASC, \"molecule.id\" ASC, \"element.id\" ASC, \"element.segment\" ASC"
 		return self.cursor.execute(sql, vals).fetchall()
 
@@ -419,30 +414,57 @@ class sonarDBManager():
 		return self.cursor.execute(sql, [sample_id, element_id]).fetchall()
 
 	def get_alignment_id(self, seqhash, element_id):
-		sql = "SELECT id FROM alignment WHERE \"seqhash\" = ? AND \"element.id\" = ? LIMIT 1;"
-		row = self.cursor.execute(sql, [seqhash, element_id]).fetchone()
+		sql = "SELECT id FROM alignment WHERE \"element.id\" = ? AND \"seqhash\" = ? LIMIT 1;"
+		row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
 		if row:
 			return row['id']
 		return None
 
-	def get_variant_id(self, ref, element_id, alt, start, end, parent_id):
-		sql = "SELECT id FROM variant WHERE element_id = ? AND start = ? AND end = ? AND ref = ? AND alt = ? AND parent_id = ?;"
-		row = self.cursor.execute(sql, [element_id, start, end, ref, alt, parent_id]).fetchone()
+	def get_variant_id(self, element_id, start, end, ref, alt):
+		sql = "SELECT id FROM variant WHERE element_id = ? AND start = ? AND end = ? AND ref = ? AND alt = ?;"
+		row = self.cursor.execute(sql, [element_id, start, end, ref, alt]).fetchone()
 		return None if row is None else row['id']
 
 	def iter_dna_variants(self, sample_name, *element_ids):
-		sql = "SELECT \"element.id\", \"element.symbol\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" IN (" + ", ".join(['?'] * len(element_ids)) + ");"
-		for row in self.cursor.execute(sql, [sample_name] + [str(x) for x in element_ids]):
+		if len(element_ids) == 1:
+			condition = " = ?"
+		elif len(element_ids) > 1:
+			condition = " IN (" + ", ".join(['?'] * len(element_ids))  + ")"
+		else:
+			condition = ""
+		# sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\"" + condition
+		sql = '''
+			SELECT  variant.element_id as \"element.id\", 
+					variant.start as \"variant.start\",
+					variant.end as  \"variant.end\", 
+					variant.ref as  \"variant.ref\",
+					variant.alt as \"variant.alt\"
+					FROM 
+						( SELECT sample.seqhash
+						FROM sample
+						WHERE sample.name = ?
+						) AS sample_T
+					INNER JOIN alignment 
+						ON sample_T.seqhash == alignment.seqhash 
+					INNER JOIN alignment2variant 
+						ON alignment.id == alignment2variant.alignment_id
+					INNER JOIN	variant
+						ON alignment2variant.variant_id == variant.id 
+						WHERE  variant.element_id ''' +condition
+
+
+		# print(sql)
+		for row in self.cursor.execute(sql, [sample_name] + list(element_ids)):
 			if row["variant.start"] is not None:
 				yield row
 
 	def iter_profile(self, sample_name, element_id):
-		sql = "SELECT * FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" = ? ORDER BY \"variant.start\";"
+		sql = "SELECT * FROM variantView WHERE \"sample.name\" = ? AND \"element.id\" = ? ORDER BY \"element.id\", \"variant.start\";"
 		for row in self.cursor.execute(sql, [sample_name, element_id]):
 			yield row
 
 	def iter_protein_variants(self, sample_name, *element_ids):
-		sql = "SELECT element_id, element.symbol, start, end, ref, alt FROM variant WHERE name = ? AND element.id IN (" + ", ".join(['?'] * len(element_ids)) + ") AND type = 'protein' LEFT JOIN element ON element.id = element_id;"
+		sql = "SELECT element_id, element.symbol, start, end, ref, alt FROM variant WHERE name = ? AND element.id IN (" + ", ".join(['?'] * len(element_ids)) + ") AND type = 'cds' LEFT JOIN element ON element.id = element_id;"
 		for row in self.cursor.execute(sql, [sample_name] + element_ids):
 			yield row
 
@@ -456,7 +478,7 @@ class sonarDBManager():
 		return self.cursor.execute(sql).fetchone()['COUNT(*)']
 
 	def count_sequences(self):
-		sql = "SELECT COUNT(DISTINCT seqhash) FROM sample2sequence;"
+		sql = "SELECT COUNT(DISTINCT seqhash) FROM samples;"
 		return self.cursor.execute(sql).fetchone()['COUNT(seqhash)']
 
 	def count_property(self, property_name, distinct=False, ignore_standard=False):
@@ -485,7 +507,7 @@ class sonarDBManager():
 
 	def get_seqhash(self, sample_name):
 		sql = "SELECT \"sample.seqhash\" FROM sequenceView WHERE sample.name = ?"
-		return [ x[sample.hash] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
+		return [ x['sample.hash'] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
 
 	def get_translation_dict(self, translation_id):
 		sql = "SELECT codon, aa FROM translation WHERE id = ?"
@@ -574,6 +596,8 @@ class sonarDBManager():
 		op2 = re.compile(r'^(\^*)(-?[1-9]+[0-9]*):(-?[1-9]+[0-9]*)$')
 		errmsg =  "query error: numeric value or range expected for field " + field + "(got: "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		intersect_sqls = []
 		intersect_vals = []
@@ -615,6 +639,8 @@ class sonarDBManager():
 		op2 = re.compile(r'^(\^*)(-?[1-9]+[0-9]*(?:.[0-9]+)*):(-?[1-9]+[0-9]*(?:.[0-9]+)*)$')
 		errmsg =  "query error: decimal value or range expected for field " + field + "(got: "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		for val in vals:
 			val = str(val).strip()
@@ -685,6 +711,8 @@ class sonarDBManager():
 	def query_string(self, field, *vals, link="OR"):
 		link = " " + link.strip() + " "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		for val in vals:
 			if val.startswith("^"):
@@ -709,6 +737,8 @@ class sonarDBManager():
 	def query_zip(self, field, *vals, link="OR"):
 		link = " " + link.strip() + " "
 		data = defaultdict(set)
+		conditions = []
+		vallist = []
 
 		for val in vals:
 			if val.startswith("^"):
@@ -729,8 +759,8 @@ class sonarDBManager():
 		return link.join(conditions), vallist
 
 	def query_metadata(self, name, *vals):
-		conditions = []
-		valueList = []
+		conditions = ['\"property.name\" = ?']
+		valueList = [name]
 		targetfield = "value_" + self.properties[name]['datatype']
 
 		# query dates
@@ -741,35 +771,35 @@ class sonarDBManager():
 
 		# query numeric
 		elif self.properties[name]['querytype'] == "numeric":
-			a,b = self.query_numeric(targetfield, vals)
+			a,b = self.query_numeric(targetfield, *vals)
 			conditions.append(a)
 			valueList.extend(b)
 
 		# query text
 		elif self.properties[name]['querytype'] == "string":
-			a,b = self.query_string(targetfield, vals)
+			a,b = self.query_string(targetfield, *vals)
 			conditions.append(a)
 			valueList.extend(b)
 
 		# query zip
 		elif self.properties[name]['querytype'] == "zip":
-			a,b = self.query_zip(targetfield, vals)
+			a,b = self.query_zip(targetfield, *vals)
 			conditions.append(a)
 			valueList.extend(b)
 
 		else:
 			sys.exit("error: unknown query type.")
 
-		return "SELECT \"sample.id\" FROM propertyView WHERE " + " AND ".join(conditions), valueList
+		return "SELECT \"sample.id\" AS id FROM propertyView WHERE " + " AND ".join(conditions), valueList
 
-	def query_profile(self, *vars, reference_accession=None, molecule_accession=None, element_accession=None):
+	def query_profile(self, *vars, reference_accession=None):
 		iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AGR"), "Y": set("CTY"), "S": set("GCS"), "W": set("ATW"), "K": set("GTK"), "M": set("ACM"), "B": set("CGTB"), "D": set("AGTD"), "H": set("ACTH"), "V": set("ACGV"), "N": set("ACGTRYSWKMBDHVN") }
 		iupac_aa_code = { "A": set("A"), "R": set("R"), "N": set("N"), "D": set("D"), "C": set("C"), "Q": set("Q"), "E": set("E"), "G": set("G"), "H": set("H"), "I": set("I"), "L": set("L"), "K": set("K"), "M": set("M"), "F": set("F"), "P": set("P"), "S": set("S"), "T": set("T"), "W": set("W"), "Y": set("Y"), "V": set("V"), "U": set("U"), "O": set("O"), "B": set("DNB"), "Z": set("EQZ"), "J": set("ILJ"), "Φ": set("VILFWYMΦ"), "Ω": set("FWYHΩ"), "Ψ": set("VILMΨ"), "π": set("PGASπ"), "ζ": set("STHNQEDKRζ"), "+": set("KRH+"), "-": set("DE-"), "X": set("ARNDCQEGHILKMFPSTWYVUOBZJΦΩΨπζ+-X") }
 		del_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$')
 		snv_regex = re.compile(r'^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Z]+)$')
 
 		# set variants and generate sql
-		base_sql = "SELECT \"sample.id\", \"sample.name\" FROM variantView WHERE "
+		base_sql = "SELECT \"sample.id\" AS id FROM variantView WHERE "
 		intersect_sqls = []
 		intersect_vals = []
 		except_sqls = []
@@ -803,7 +833,7 @@ class sonarDBManager():
 			## set element
 			if match.group(2):
 				c.append("\"element.type\" = ?")
-				v.append("cds") ## protein, but in database we use cds
+				v.append("cds")
 				c.append("\"element.symbol\" = ?")
 				v.append(match.group(2)[:-1])
 				code = iupac_aa_code
@@ -888,7 +918,17 @@ class sonarDBManager():
 
 		return sql, intersect_vals + except_vals
 
-	def match(self, *profiles, properties=None, reference_accession=None, molecule_accession=None, element_accession = None):
+	def count_molecules(self, reference_accession=None):
+		if reference_accession:
+			condition = "\"reference.accession\" = ?"
+			vals = [reference_accession]
+		else:
+			condition = "\"reference.standard\" = ?"
+			vals = [1]
+		sql = "SELECT count(DISTINCT \"molecule.id\") AS count FROM referenceView WHERE " + condition
+		return self.cursor.execute(sql, vals).fetchone()['count']
+
+	def match(self, *profiles, properties=None, reference_accession=None, showN=False):
 		#collecting sqls for metadata-based filtering
 		property_sqls = []
 		property_vals = []
@@ -914,58 +954,53 @@ class sonarDBManager():
 		else:
 			profile_sqls = ""
 
-		# assembling final compound query
+		# assembling compound query for sample selection
 		if property_sqls and profile_sqls:
 			if len(profiles) > 1:
-				sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
+				sample_selection_sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
 			else:
-				sql = property_sqls + " INTERSECT " + profile_sqls
+				sample_selection_sql = property_sqls + " INTERSECT " + profile_sqls
 		else:
-			sql = property_sqls + profile_sqls
-		
-		### First Get ID ###
-		rows = self.cursor.execute(sql, property_vals + profile_vals).fetchall()
-		COLUMN = 'sample.id'
-		id_list =[elt[COLUMN] for elt in rows]
-		# print(id_list)
-		### Use ID get all proflies from variantView ###
-		# (\"variant.start\" +1) = plus one to change from 0 based to 1 based system
-		sql_nt = """
-				(SELECT 
-					"sample.id",
-					group_concat("variant.ref"|| ("variant.start"+1) ||"variant.alt", ' ') as dna_profile
-					FROM  variantView
-					WHERE "sample.id" in ({id}) AND "element.type" == 'source'
-					GROUP BY "sample.id" , "element.type") as NT
-				""".format( id=','.join(['?']*len(id_list)))
+			sample_selection_sql = property_sqls + profile_sqls
 
-		sql_aa = """ 
-				(SELECT "sample.id", 
-						group_concat("element.symbol"|| ':' ||"variant.ref"|| ("variant.start"+1) ||"variant.alt", ' ') as aa_profile 
-						FROM  variantView  
-						WHERE "sample.id" in ({id}) AND "element.type" == "cds" 
-						GROUP BY "sample.id" , "element.type") as AA 
-					""".format( id=','.join(['?']*len(id_list)))
-				
-		sql = """
-				SELECT AA."sample.id", aa_profile , dna_profile
-				FROM	{sql_nt} , {sql_aa}
-				WHERE  AA."sample.id" = NT."sample.id"
-				""".format( sql_nt=sql_nt,sql_aa=sql_aa)
-		# print(sql)
-		rows = self.cursor.execute(sql,id_list+id_list).fetchall()
-		# need to change deletion format !!
-		# for row in rows:
-		#	print(row)
+		# assembling final sql
+		genome_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "source")]
+		if len(genome_element_condition) == 1:
+			genome_element_condition = "\"element.id\" = " + genome_element_condition[0]
+			m = ""
+		else:
+			genome_element_condition = "\"element.id\" IN (" + ", ".join(genome_element_condition) + ")"
+			m = " \"molecule.symbol\" || \"@\" || "
 
-		### Use ID get all proflies from propertyView ###
+		if not showN:
+			nn = " AND \"variant.alt\" != \"N\" "
+			np = " AND \"variant.alt\" != \"X\" "
+		else:
+			nn = ""
+			np = ""
 
-		return rows
+		cds_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "cds")]
+		if len(cds_element_condition) == 1:
+			cds_element_condition = "\"element.id\" = " + cds_element_condition[0]
+		else:
+			cds_element_condition = "\"element.id\" IN (" + ", ".join(cds_element_condition) + ")"
+		# Version 1
+		sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
+		       SELECT  *, \
+					    ( \
+						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+						) nt_profile, \
+						( \
+						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+						) aa_profile \
+				FROM sample \
+				WHERE id IN ( SELECT id FROM selected_samples )"
 
-	# UPDATE DATA
+		return self.cursor.execute(sql, property_vals + profile_vals).fetchall()
 
-
-	# MISCg
+	# MISC
 
 	@staticmethod
 	def optimize(dbfile):
