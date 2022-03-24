@@ -157,8 +157,8 @@ class sonarActions(object):
 				##  if enable, create important properties
 				if (auto_create):
 					print('Enable automatic import property')
-					dbm.add_property("date", "date", "date", "Sampling date")
-					dbm.add_property("submission_date", "date", "date", "Submission date")
+					dbm.add_property("DATE_DRAW", "date", "date", "Sampling date")
+					dbm.add_property("PROCESSING_DATE ", "date", "date", "Submission date")
 					dbm.add_property("country", "text", "text", "Country where a sample belongs to")
 					dbm.add_property("host", "text", "text", "e.g., HUMAN")
 					dbm.add_property("collection", "text", "text", "e.g., DESH_STICHPROBE")
