@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS element (
 CREATE INDEX IF NOT EXISTS idx_element_standard ON element(standard);
 CREATE INDEX IF NOT EXISTS idx_element_molecule_id ON element(molecule_id);
 CREATE INDEX IF NOT EXISTS idx_element_type ON element(type);
-CREATE INDEX IF NOT EXISTS idx_variant_element_id ON variant (element_id);
+
 
 CREATE TABLE IF NOT EXISTS elempart (
 	element_id INTEGER NOT NULL,
@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS variant (
 	UNIQUE(element_id, start, end, ref, alt)
 	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_variant_element_id ON variant (element_id);
 
 CREATE TABLE IF NOT EXISTS alignment (
 	id INTEGER PRIMARY KEY,

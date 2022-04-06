@@ -192,14 +192,18 @@ class sonarDBManager():
 			sys.exit("error: invalid property name (property names can contain only letters, numbers and underscores)")
 		if name in self.properties:
 			sys.exit("error: a property named " + name + " already exists in the given database.")
-		sql = "INSERT INTO property (name, datatype, querytype, description, standard) VALUES(?, ?, ?, ?, ?);"
-		self.cursor.execute(sql, [name, datatype, querytype, description, standard])
-		self.__properties = False
-		pid = self.properties[name]['id']
-		if not standard is None:
-			sql = "INSERT INTO sample2property (property_id, value_" + self.properties[name]['datatype'] + ", sample_id) SELECT ?, ?, id FROM sample WHERE 1"
-			vals = [pid, standard]
-			self.cursor.execute(sql, vals)
+		try:
+			sql = "INSERT INTO property (name, datatype, querytype, description, standard) VALUES(?, ?, ?, ?, ?);"
+			self.cursor.execute(sql, [name, datatype, querytype, description, standard])
+			self.__properties = False
+			pid = self.properties[name]['id']
+			if not standard is None:
+				sql = "INSERT INTO sample2property (property_id, value_" + self.properties[name]['datatype'] + ", sample_id) SELECT ?, ?, id FROM sample WHERE 1"
+				vals = [pid, standard]
+				self.cursor.execute(sql, vals)
+			print('Inserted successfully:', name)
+		except sqlite3.Error as error:
+			print("Failed to insert data into sqlite table", error)
 		return pid
 
 	def add_translation_table(self, translation_table):
@@ -406,7 +410,7 @@ class sonarDBManager():
 	def get_alignment_data(self, sample_id, element_id, *fields, limit=1):
 		if not fields:
 			fields = ['*']
-		sql = "SELECT " + ", ".join(fields) + " FROM alignmentView WHERE \"sample.id\" = ? AND \"element.id\" = ? LIMIT "+ LIMIT +";"
+		sql = "SELECT " + ", ".join(fields) + " FROM alignmentView WHERE \"sample.id\" = ? AND \"element.id\" = ? LIMIT "+ limit +";"
 		return self.cursor.execute(sql, [sample_id, element_id]).fetchall()
 
 	def get_alignment_id(self, seqhash, element_id):
@@ -551,6 +555,7 @@ class sonarDBManager():
 		if translation_table is None:
 			return str(feat.extract(sequence))
 		return str(Seq(feat.extract(sequence)).translate(table=translation_table, stop_symbol=""))
+
 
 	# MATCHING PROFILES
 	def get_operator(self, val):
@@ -800,8 +805,8 @@ class sonarDBManager():
 		except_sqls = []
 		except_vals = []
 		for var in vars:
-			c = []
-			v = []
+			c = [] # condition 
+			v = [] # variable
 
 			if var.startswith("^"):
 				var = var[1:]
@@ -1010,3 +1015,48 @@ class sonarDBManager():
 		for idx, col in enumerate(cursor.description):
 			d[col[0]] = row[idx]
 		return d
+
+	# Utils.
+	def get_db_size(self, decimal_places=3):
+		size = os.path.getsize(self.dbfile)
+		for unit in ['B','KiB','MiB','GiB','TiB']:
+			if size < 1024.0:
+				break
+			size /= 1024.0
+		return f"{size:.{decimal_places}f}{unit}"
+
+	@staticmethod
+	def upgrade_db(dbfile):
+		try:
+			with sqlite3.connect(dbfile) as con:
+				cur = con.cursor()
+				current_version= cur.execute('pragma user_version').fetchone()[0]
+
+			print('Current version:', current_version, ' Upgrade to:', SUPPORTED_DB_VERSION)
+			uri = "file:" + urlquote(dbfile)
+			print('Perform the Upgrade:',uri)
+			while(current_version < SUPPORTED_DB_VERSION):
+
+				next_version = current_version + 1
+				file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "migrate/"+str(next_version)+".sql")
+				if not os.path.isfile(file_path):
+					raise ValueError ("Sorry, we cannot find",file_path) 		
+
+				with open(file_path, 'r') as handle:
+					sql = handle.read()
+				with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
+					con.executescript(sql)
+				
+				current_version = next_version
+
+		except sqlite3.Error as er:
+			con.executescript('ROLLBACK')
+			raise er
+		except ValueError  as er:
+			print(er)
+		finally:
+			print('Database now version:', current_version)
+			if(current_version==SUPPORTED_DB_VERSION):
+				print("Success: Database upgrade was successfully completed")
+			else:
+				print("Error: Upgrade was not completed")

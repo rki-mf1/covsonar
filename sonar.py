@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.0"
+VERSION = "2.0.0"
+from ast import arg
 import os
 import sys
 import csv
@@ -12,19 +13,22 @@ import lzma
 import sonar
 from sonar.action import sonarActions
 from sonar.dbm import sonarDBManager
+from sonar.Lineages_UPDATER import download_source, process_lineage
 from Bio import SeqIO
-from tempfile import mkstemp
+from tempfile import mkstemp, mkdtemp
 from collections import defaultdict
 import re
 from tqdm import tqdm
 from multiprocessing import Pool
+import time
+import shutil
 
 class arg_namespace(object):
     pass
 
 def parse_args():
 	user_namespace = arg_namespace()
-	parser = argparse.ArgumentParser(prog="sonar.py", description="")
+	parser = argparse.ArgumentParser(prog="sonar.py", description="---> covSonar V2 \U0001f600")
 	subparsers = parser.add_subparsers(help='detect, store, and screen for mutations in SARS-CoV-2 genomic sequences')
 	subparsers.dest = 'tool'
 	subparsers.required = True
@@ -36,7 +40,8 @@ def parse_args():
 	general_parser.add_argument('--debug', help="activate debugging mode showing all sqllite queries on screen", action="store_true")
 
 	# create the parser for the "setup" command
-	parser_add = subparsers.add_parser('setup', parents=[general_parser], help='setup a new database.')
+	parser_setup = subparsers.add_parser('setup', parents=[general_parser], help='setup a new database.')
+	parser_setup.add_argument('-a','--auto_create', help="Auto create important properties", action="store_true")
 
 	# create the parser for the "add" command
 	parser_add = subparsers.add_parser('add', parents=[general_parser], help='add genome sequences to the database.')
@@ -119,6 +124,20 @@ def parse_args():
 	#create the parser for the "dev" command
 	parser_dev = subparsers.add_parser('dev', parents=[general_parser])
 
+	#create the parser for the "Var2Vcf" command
+	parser_var2vcf = subparsers.add_parser('var2vcf', parents=[general_parser], help='export variants from the database to vcf format.')
+	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
+	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
+	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
+	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
+	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
+
+	#create the parser for the "optimize" command
+	parser_opt = subparsers.add_parser('db-upgrade', parents=[general_parser], help='Upgrade the database to the latest version.')
+
+	#Update lineage information command
+	parser_update_anno = subparsers.add_parser('update-lineage-info', help='Update lineage information (e.g., lib/linage.all.tsv).')
+
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 	args = parser.parse_known_args(namespace=user_namespace)
@@ -144,6 +163,35 @@ class sonar():
 		self.debug = debug
 
 	def update_metadata(self, fname, accCol=None, lineageCol=None, zipCol=None, dateCol=None, gisaidCol=None, enaCol=None, labCol=None, sourceCol=None, collectionCol=None, technologyCol=None, platformCol=None, chemistryCol=None, softwareCol = None, versionCol = None, materialCol=None, ctCol=None, sep=",", pangolin=False, compressed=False):
+		'''
+		This function takes a file name and a list of column names and returns a dictionary of dictionaries.
+		The outer dictionary is keyed by the accession number and the inner dictionary is keyed by the
+		column name
+		
+		:param fname: the name of the file containing the metadata
+		:param accCol: the column in the metadata file that contains the accession number
+		:param lineageCol: the column in the metadata file that contains the lineage
+		:param zipCol: the column in the metadata file that contains the zip code
+		:param dateCol: the column in the metadata file that contains the date of sampling
+		:param gisaidCol: the column in the metadata file that contains the GISAID accession number
+		:param enaCol: the column in the metadata file that contains the ENA accession
+		:param labCol: the column in the metadata file that contains the lab of origin
+		:param sourceCol: the column in the metadata file that contains the source of the sequence (e.g.
+		"human", "environmental", "animal")
+		:param collectionCol: the column in the metadata file that contains the collection name
+		:param technologyCol: the name of the column in the metadata file that contains the sequencing
+		technology used to generate the reads
+		:param platformCol: the column in the metadata file that contains the platform
+		:param chemistryCol: the column in the metadata file that contains the chemistry used
+		:param softwareCol: the name of the column containing the software used to generate the fasta file
+		:param versionCol: the column in the metadata file that contains the version number
+		:param materialCol: the column in the metadata file that contains the material type (e.g. cell,
+		tissue, etc.)
+		:param ctCol: the column in the metadata file that contains the ct value
+		:param sep: the delimiter used in the metadata file, defaults to , (optional)
+		:param pangolin: if True, the file is a pangolin metadata file, defaults to False (optional)
+		:param compressed: If True, the file is compressed with gzip, defaults to False (optional)
+		'''
 		updates = defaultdict(dict)
 		if pangolin:
 			with self.open_file(fname, compressed=compressed, encoding='utf-8-sig') as handle:
@@ -194,13 +242,33 @@ class sonar():
 				dbm.update_genome(acc, **update)
 
 	def restore(self, acc):
+		'''
+		It takes a genome accession number and returns a genome object.
+		
+		:param acc: the accession number of the genome to be restored
+		:return: A list of dictionaries. Each dictionary is a genome.
+		'''
 		return self.db.restore_genome_using_dnavars(acc)
 
 	def view(self, acc):
+		'''
+		Self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
+		
+		This function is the heart of the program. It is called by the view() function.
+		It takes a single argument, acc, which is the accession number of the sequence
+		of interest. It returns a list of rows, which is a list of lists. Each list
+		within the list is a row of data
+		
+		:param acc: the accession number of the sequence to be viewed
+		'''
 		with sonardb.sonarDBManager(self.dbfile, readonly=True) as dbm:
 			self.rows_to_csv(self.db.get_dna_vars(acc, dbm=dbm))
 
 	def show_system_info(self):
+		'''
+		Prints out the version of the database, the name of the reference genome, the length of the
+		reference genome, the names of the annotated proteins, and the translation table used
+		'''
 		print("sonarDB version:       ", self.db.get_version())
 		print("reference genome:      ", self.db.refdescr)
 		print("reference length:      ", str(len(self.db.refseq)) + "bp")
@@ -234,6 +302,15 @@ class sonar():
 				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
 	def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
+		'''
+		The rows_to_csv function takes a list of dictionaries and writes them to a file in CSV format
+		
+		:param rows: the list of dictionaries to write to the file
+		:param file: The file to write to. If None, the output is written to sys.stdout
+		:param na: the value to print if there are no rows, defaults to *** no data *** (optional)
+		:param tsv: If True, the output will be written in tab-separated format, defaults to False
+		(optional)
+		'''
 		if len(rows) == 0:
 			print(na, file=sys.stderr)
 		else:
@@ -252,7 +329,12 @@ class sonar():
 		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
-	allowed = {"accession": "accCol", "lineage": "lineageCol", "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol", "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol", "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol", "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol", "lab": "labCol"}
+	allowed = {"accession": "accession", "lineage": "lineageCol",
+	 "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol",
+	  "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol",
+	   "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol",
+	    "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol",
+		 "lab": "labCol", "submission_date":"submission_date"}
 	fields = {}
 	for val in expr:
 		val = val.split("=")
@@ -262,21 +344,53 @@ def process_update_expressions(expr):
 		if key in fields:
 			sys.exit("input error: multiple assignments for " + val[0])
 		fields[key] = "=".join(val[1:])
-		if 'accCol' not in fields:
+		if 'accession' not in fields:
 			sys.exit("input error: an accession column has to be defined.")
 	return fields
 
 if __name__ == "__main__":
 	args = parse_args()
+	if hasattr(args, 'debug') and args.debug:
+		debug = True
+	else:
+		debug = False
 
 	# setup
 	if args.tool == "setup":
-		sonarActions.setup_db(args.db, debug=args.debug)
+		sonarActions.setup_db(args.db, args.auto_create, debug=debug)
 		exit(0)
 
-	snr = sonarActions(args.db, debug=args.debug)
-	with sonarDBManager(args.db, readonly=True) as dbm:
-		dbm.check_db_compatibility()
+	# update-lineage-info
+	if args.tool == "update-lineage-info":
+		tmp_dirname = mkdtemp(prefix=".tmp_")
+		alias_key, lineage = download_source(tmp_dirname)
+		process_lineage(alias_key,lineage,'lib/lineage.all.tsv')
+		if os.path.isdir(tmp_dirname):
+			shutil.rmtree(tmp_dirname)
+		sys.exit('Complete!')
+
+
+	if not args.db is None and not os.path.isfile(args.db):
+		sys.exit("input error: database does not exist.")
+
+	snr = sonarActions(args.db, debug=debug)
+
+	# info
+	if args.tool == "info":
+		snr.show_system_info()
+		if args.db:
+			print()
+			snr.show_db_info()
+		exit(0)
+
+	# if Upgrade  
+	if args.tool == "db-upgrade":
+		input("Warning: Backup db file before upgrading, Press Enter to continue...")
+		sonarDBManager.upgrade_db(args.db)
+	else:
+		with sonarDBManager(args.db, readonly=True) as dbm:
+			dbm.check_db_compatibility()
+
 
 	# match
 	if args.tool == "match":
@@ -305,7 +419,7 @@ if __name__ == "__main__":
 
 	# delprop
 	if args.tool == "delprop":
-		with sonarDBManager(args.db, debug=args.debug) as dbm:
+		with sonarDBManager(args.db, debug=debug) as dbm:
 			if args.name not in dbm.properties:
 				sys.exit("input error: unknown property.")
 			a = dbm.count_property(args.name)
@@ -320,7 +434,7 @@ if __name__ == "__main__":
 			else:
 				print("property not deleted.")
 
-	# delprop
+	# show prop
 	if args.tool == "props":
 		snr.show_props()
 	# update
@@ -343,7 +457,7 @@ if __name__ == "__main__":
 		if args.file:
 			if not os.path.isfile(args.file):
 				sys.exit("input error: file " + args.file + " does not exist.")
-			with snr.open_file(fname, compressed=args.file,) as handle:
+			with snr.open_file(args.file, compressed="auto") as handle:
 				for line in handle:
 					args.acc.add(line.strip())
 		if len(args.acc) == 0:
@@ -355,21 +469,40 @@ if __name__ == "__main__":
 	if args.tool == "view":
 		snr.view(args.acc)
 
-	# info
-	if args.tool == "info":
-		snr.show_system_info()
-		if args.db:
-			print()
-			snr.show_db_info()
-
 	# optimize
 	if args.tool == "optimize":
 		with sonarDBManager(args.db, debug=args.debug) as dbm:
 			dbm.optimize(args.db)
 
+	# Var2Vcf (export variants to  VCF)
+	if args.tool == "var2vcf":
+		start = time.time()
+		if args.date:
+			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
+			for d in args.date:
+				if not regex.match(d):
+					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
+
+		args.acc = set([x.strip() for x in args.acc])
+		if args.file:
+			if not os.path.isfile(args.file):
+				sys.exit("input error: file " + args.file + " does not exist.")
+			with snr.open_file(args.file, compressed='auto') as handle:
+				for line in handle:
+					args.acc.add(line.strip())
+		
+		snr.var2vcf(args.acc, args.date, args.output, args.cpus, args.betaV2)
+		end = time.time()
+		hours, rem = divmod(end-start, 3600)
+		minutes, seconds = divmod(rem, 60)
+		print("Runtime (H:M:S): {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+
+
 	# optimize
 	if args.tool == "dev":
 		print("***dev mode***")
-		with sonarDBManager(args.db, debug=args.debug) as dbm:
+		with sonarDBManager(args.db, debug=debug) as dbm:
 			for feature in dbm.get_annotation():
 				print(())
+				
+	
