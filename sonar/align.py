@@ -60,13 +60,14 @@ class sonarAligner(object):
 			if aa_vars:
 				# concatinate to the same file of NT variants
 				vars += "\n" + aa_vars
+			vars += "\n"
 		try:
 			with open(data['var_file'], "w") as handle:
-				handle.write(vars + "\n//")
+				handle.write(vars + "//")
 		except:
 			os.makedirs(os.path.dirname(data['var_file']))
 			with open(data['var_file'], "w") as handle:
-				handle.write(vars + "\n//")
+				handle.write(vars + "//")
 
 	def extract_vars(self, qry_seq, ref_seq, elemid):
 		l = len(qry_seq)

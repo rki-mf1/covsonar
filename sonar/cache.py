@@ -22,6 +22,9 @@ import shutil
 from pickle import load as load_pickle
 import gzip
 import lzma
+import pprint
+ 
+pp = pprint.PrettyPrinter(indent=4)
 
 class sonarCache():
 	"""
@@ -468,11 +471,11 @@ class sonarCache():
 							handle.write(">original_" + sample_data['name'] + "\n" + ref + "\n>restored_" + sample_data['name'] + "\n" + qry)
 						sys.exit("import error: original sequence of sample " + sample_data['name'] + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)")
 				except Exception as e: 
+					print("\n------- Fatal Error ---------")
+					print("\nDebugging Information")
 					print(e)
-					print(line) 
-					print(vardat) 
-					print('Error at:', sample_data['name'])
-					sys.exit("import error:")
+					pp.pprint(sample_data)
+					sys.exit("unknown import error")
 
 if __name__ == "__main__":
 	pass

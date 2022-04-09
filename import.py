@@ -99,6 +99,8 @@ if __name__ == "__main__":
 						fields = [x.strip() for x in line.split("\t")]
 						sample_name = fields[cols['sample']]
 						sample_id = dbm.get_sample_id(sample_name)
+						if not sample_id:
+							continue
 						for property_name, col_index in cols.items():
 							if property_name == "sample":
 								continue
