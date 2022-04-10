@@ -163,7 +163,7 @@ class sonarDBManager():
 			sql = "SELECT * FROM property"
 			rows = self.cursor.execute(sql).fetchall()
 			self.__properties = {} if not rows else { x['name']: x for x in rows }
-		return self.__properties
+		return self.__properties 
 
 	# SETUP
 
@@ -306,11 +306,11 @@ class sonarDBManager():
 	# SELECTING DATA
 
 	def sample_exists(self, sample_name):
-		sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found";
+		sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found"
 		return bool(self.cursor.execute(sql, [sample_name]).fetchone()['found'])
 
 	def get_sample_id(self, sample_name):
-		sql = "SELECT id FROM sample WHERE name = ? LIMIT 1;";
+		sql = "SELECT id FROM sample WHERE name = ? LIMIT 1;"
 		row = self.cursor.execute(sql, [sample_name]).fetchone()
 		return row['id'] if row else None
 
@@ -452,7 +452,6 @@ class sonarDBManager():
 						ON alignment2variant.variant_id == variant.id 
 						WHERE  variant.element_id ''' +condition
 
-
 		# print(sql)
 		for row in self.cursor.execute(sql, [sample_name] + list(element_ids)):
 			if row["variant.start"] is not None:
@@ -478,8 +477,8 @@ class sonarDBManager():
 		return self.cursor.execute(sql).fetchone()['COUNT(*)']
 
 	def count_sequences(self):
-		sql = "SELECT COUNT(DISTINCT seqhash) FROM samples;"
-		return self.cursor.execute(sql).fetchone()['COUNT(seqhash)']
+		sql = "SELECT COUNT(DISTINCT seqhash) FROM sample;"
+		return self.cursor.execute(sql).fetchone()['COUNT(DISTINCT seqhash)']
 
 	def count_property(self, property_name, distinct=False, ignore_standard=False):
 		d = "DISTINCT " if distinct else ""
@@ -555,7 +554,29 @@ class sonarDBManager():
 		if translation_table is None:
 			return str(feat.extract(sequence))
 		return str(Seq(feat.extract(sequence)).translate(table=translation_table, stop_symbol=""))
+	
+	# VAR2VCF 
+	def get_sample_ids(self, samples):
+		sql = "SELECT id FROM sample WHERE name IN (" + ", ".join(['?'] * len(samples)) + ") ;"
+		rows = self.cursor.execute(sql,samples).fetchall()
+		sample_IDs=[str(elt['id']) for elt in rows]
+		return sample_IDs
 
+	def query_metadata_forVCF(self, properties):
+		"""
+		"""
+		property_sqls = []
+		property_vals = []
+		for pname, vals in properties.items():
+				sql, val = self.query_metadata(pname, *vals)
+				property_sqls.append(sql)
+				property_vals.extend(val)
+
+		property_sqls = " INTERSECT ".join(property_sqls)
+		# print(property_sqls, property_vals)
+		rows = self.cursor.execute(property_sqls,property_vals).fetchall()
+		sample_IDs=[str(elt['id']) for elt in rows]
+		return sample_IDs
 
 	# MATCHING PROFILES
 	def get_operator(self, val):

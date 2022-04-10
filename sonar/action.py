@@ -22,6 +22,9 @@ import csv
 from tabulate import tabulate
 from textwrap import fill
 from tempfile import mkstemp, mkdtemp
+import gzip
+import lzma
+
 
 # CLASS
 class sonarActions(object):
@@ -370,8 +373,25 @@ class sonarActions(object):
 
 	# Call SonarToVCF
 
-	def var2vcf(self, acc, date, output, cpu, betaV2):
+	def var2vcf(self, acc, props, output, cpu, betaV2):
 		if betaV2:
-			return	sonartoVCF_v2.export2VCF(self.db,acc, date, output, cpu)
+			print('Warning: Under Construction, please remove --betaV2')
+			return True 	# sonartoVCF_v2.export2VCF(self.db,output, cpu, props)
 		else:
-			return	sonartoVCF.export2VCF(self.db,acc, date, output, cpu)
+			return	sonartoVCF.export2VCF(self.db,output, cpu, props, acc)
+
+
+	def open_file(self, fname, mode="r", compressed=False, encoding=None):
+		if not os.path.isfile(fname):
+			sys.exit("input error: " + fname + " does not exist.")
+		if compressed == "auto":
+			compressed = os.path.splitext(fname)[1][1:]
+		try:
+			if compressed == "gz":
+				return gzip.open(fname, mode + "t", encoding=encoding)
+			if compressed == "xz":
+				return lzma.open(fname, mode + "t", encoding=encoding)
+			else:
+				return open(fname, mode, encoding=encoding)
+		except:
+			sys.exit("input error: " + fname + " cannot be opened.")

@@ -1,9 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 import os
+from random import sample
 from sonar.dbm import sonarDBManager
 from contextlib import ExitStack
-from more_itertools import consecutive_groups, split_when
 from tempfile import mkstemp, mkdtemp
 import shutil
 import pandas as pd
@@ -28,7 +28,7 @@ def create_fix_vcf_header(ref, sample_id):
         info
         + '\n##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">\n'
     )
-    note = "##Note_1='Currently we ignore DEL of the SARS-CoV-2 seqeunce'\n"
+    note = "##Note_1='Currently, Deletion site is represented as ' ' (one whitespace)\n"
     column = (
         "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" + sample_id + "\n"
     )
@@ -105,9 +105,10 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr, _pos):
             df_group = df_group.sort_values(by="start", ascending=True)
             # replace null to .
             # df_group['ref'] = df_group['ref'].replace('', '.') # for insertion
-            df_group["alt"] = df_group["alt"].replace(" ", "")  # for deletion
-            # df_group['alt'] = df_group['alt'].replace('', np.nan)
-            df_group = df_group.dropna(axis=0, subset=["alt"])  # remove Deletion
+            # df_group["alt"] = df_group["alt"].replace(" ", ".")  # for deletion
+            # df_group["alt"] = df_group["alt"].replace(" ", "")  # remove Deletion
+            # df_group['alt'] = df_group['alt'].replace('', np.nan) # remove Deletion
+            # df_group = df_group.dropna(axis=0, subset=["alt"])  # remove Deletion
             for index, row in df_group.iterrows():
                 id = row["ref"] + str(row["start"]) + row["alt"]
 
@@ -147,50 +148,51 @@ def parallelize_dataframe(df, tmp_dir, num_cores, refdescr, func):
     pool.join()
 
 
-def export2VCF(
-    db_path,
-    include_acc,
-    include_dates,
-    output,
-    num_cores,
-    refdescr="No ref is provided",
-):
-    print("----- You are using sonartoVCF_V1 --------")
+def export2VCF(db_path, output, num_cores=4, properties=None, acc=None):
+    print("----- You are using covSonar-to-VCF V1 --------")
     print("Prepare export2VCF workspace for", num_cores, "cpu")
     with ExitStack() as stack:
         dbm = stack.enter_context(sonarDBManager(db_path))
+        fields = '  "sample.name" as accession, "reference.accession" as ref_name , "variant.start" as start, "variant.end" as end, "variant.alt" as alt, "variant.ref" as ref '
 
-        where_clause = []
-        where_vals = []
+        # collecting sqls for metadata-based filtering
+        if properties or acc:
+            if acc:
+                _tmp_sample = dbm.get_sample_ids(acc)
 
-        if include_acc:
-            where_clause.append(
-                dbm.get_metadata_in_condition("accession", *include_acc)
-            )
-            where_vals.extend(include_acc)
-        if include_dates:
-            where_clause.append(dbm.get_metadata_date_condition("date", *include_dates))
-
-        # print(where_clause)
-        fields = ' "sample.name" as accession, "element.accession" as ref_name , "variant.start" as start, "variant.end" as end, "variant.alt" as alt, "variant.ref" as ref '
-        if where_clause:
+            if properties:
+                print("Calculate Properties...")
+                print(properties)
+                _tmp_prop = dbm.query_metadata_forVCF(properties)
+                
+            if properties and acc:
+                sample_id_list = [value for value in _tmp_sample if value in _tmp_prop]
+            else:
+                if properties:
+                    sample_id_list = _tmp_prop
+                elif acc:
+                    sample_id_list = _tmp_sample
+                else:
+                    print("ERROR: Something went wrong...")
+                    raise
             sql = (
                 "SELECT "
                 + fields
                 + ' FROM variantView WHERE "element.type"="source" '
-                + " AND ".join(where_clause)
+                + ' AND "sample.id" IN ({0})'.format(", ".join(sample_id_list))
                 + ";"
             )
         else:
+            print("Warning: you query the whole database...")
             sql = (
                 "SELECT "
                 + fields
                 + ' FROM variantView  WHERE "element.type"="source"  ;'
             )
-
+        # print(sql)
         ##############################
         print("Start Bigquery...")
-        rows = pd.read_sql(sql, dbm.connection, params=where_vals)
+        rows = pd.read_sql(sql, dbm.connection)
         print("Return:", len(rows), " records")
         track_vcf = []
         count = 0
@@ -198,6 +200,13 @@ def export2VCF(
             tmp_dirname = mkdtemp(prefix=".sonarCache_")
             # vcf_path=os.path.join(tmp_dirname,)
             # create fasta_id
+            if len(rows.groupby("ref_name").size()) == 1:
+                refdescr = rows.iloc[0]["ref_name"]
+            else:
+                print("Error: Found reference more than 1")
+                refdescr = "No ref is provided"
+                raise
+
             chrom_id = refdescr.split()[0].replace(">", "")
             rows["CHROM"] = chrom_id
             rows["QUAL"] = "."
@@ -302,12 +311,6 @@ def divide_merge_vcf(list_track_vcf, global_output, num_cores):
     print("Clean workspace ...")
     if os.path.isdir(tmp_dirname):
         shutil.rmtree(tmp_dirname)
-    # if not first_create_ and  third_create_ and  second_create_:
-    #    os.rename( global_output + '.2.gz', global_output+ '.gz')
-    # elif second_create_ and  not third_create_:
-    #    os.rename( global_output + '.2.gz', global_output+ '.gz')
-    # elif  not second_create_ and   third_create_:
-    #    os.rename(global_output + '.3.gz', global_output+ '.gz')
 
 
 def clean_stranger_things(path_to_vcfgz, tmp_dirname):

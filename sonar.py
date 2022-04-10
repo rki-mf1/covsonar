@@ -126,11 +126,11 @@ def parse_args():
 
 	#create the parser for the "Var2Vcf" command
 	parser_var2vcf = subparsers.add_parser('var2vcf', parents=[general_parser], help='export variants from the database to vcf format.')
-	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
+	parser_var2vcf.add_argument('--acc', metavar="STR", help="acession(s)/sample(s) whose sequences are to be exported", type=str, default=[], nargs = "+")
 	parser_var2vcf.add_argument('--file', '-f', metavar="STR", help="file containing acession(s) whose sequences are to be exported (one accession per line)", type=str, default=None)
-	parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
+	#parser_var2vcf.add_argument('--date', help="only match genomes sampled at a certain sampling date or time frame. Accepts single dates (YYYY-MM-DD) or time spans (YYYY-MM-DD:YYYY-MM-DD).", nargs="+", type=str, default=[])
 	parser_var2vcf.add_argument('--output', '-o', metavar="STR", help="output file (merged vcf)", type=str, default=None, required=True)
-	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X5 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
+	parser_var2vcf.add_argument('--betaV2', help="Use in-memory computing for processing (speed up X3 times). WARNING: the function is still experimental/not fully implemented", action="store_true")
 
 	#create the parser for the "optimize" command
 	parser_opt = subparsers.add_parser('db-upgrade', parents=[general_parser], help='Upgrade the database to the latest version.')
@@ -141,7 +141,9 @@ def parse_args():
 	# version
 	parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 	args = parser.parse_known_args(namespace=user_namespace)
-	if user_namespace.tool == "match" and hasattr(args[0], 'db'):
+	print(user_namespace.tool )
+	print(args[0].db)
+	if (user_namespace.tool == "var2vcf" or user_namespace.tool == "match") and hasattr(args[0], 'db'):
 		with sonarDBManager(args[0].db, readonly = True, debug=args[0].debug) as dbm:
 			for prop in dbm.properties.values():
 				if prop['datatype'] == "integer":
@@ -150,8 +152,10 @@ def parse_args():
 					t = float
 				else:
 					t = str
-				parser_match.add_argument('--' + prop['name'], type=t, nargs = '+', default=argparse.SUPPRESS)
-
+				if(user_namespace.tool == "match"):
+					parser_match.add_argument('--' + prop['name'], type=t, nargs = '+', default=argparse.SUPPRESS)
+				elif(user_namespace.tool == "var2vcf"):
+					parser_var2vcf.add_argument('--' + prop['name'], type=t, nargs = '+', default=argparse.SUPPRESS)
 	#return parser.parse_args()
 	return parser.parse_args(namespace=user_namespace)
 
@@ -379,7 +383,6 @@ if __name__ == "__main__":
 	if args.tool == "info":
 		snr.show_system_info()
 		if args.db:
-			print()
 			snr.show_db_info()
 		exit(0)
 
@@ -399,6 +402,7 @@ if __name__ == "__main__":
 			for pname in dbm.properties:
 				if hasattr(args, pname):
 					props[pname] = getattr(args, pname)
+		#print('Test:', args.profile, props, args.count)
 		snr.match(args.profile, props, count=args.count)
 
 	# newprop
@@ -477,21 +481,23 @@ if __name__ == "__main__":
 	# Var2Vcf (export variants to  VCF)
 	if args.tool == "var2vcf":
 		start = time.time()
-		if args.date:
-			regex = re.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?::[0-9]{4}-[0-9]{2}-[0-9]{2})?$")
-			for d in args.date:
-				if not regex.match(d):
-					sys.exit("input error: " + d + " is not a valid date (YYYY-MM-DD) or time span (YYYY-MM-DD:YYYY-MM-DD).")
-
-		args.acc = set([x.strip() for x in args.acc])
+		with sonarDBManager(args.db, readonly=True) as dbm:
+			props = {}
+			for pname in dbm.properties:
+				if hasattr(args, pname):
+					props[pname] = getattr(args, pname)
+		
+		# Read file., need tp append value for IMS *sample
+		if args.acc:
+			args.acc = list(set([x.strip() for x in args.acc]))
 		if args.file:
 			if not os.path.isfile(args.file):
 				sys.exit("input error: file " + args.file + " does not exist.")
 			with snr.open_file(args.file, compressed='auto') as handle:
 				for line in handle:
-					args.acc.add(line.strip())
+					args.acc.append(line.strip())
 		
-		snr.var2vcf(args.acc, args.date, args.output, args.cpus, args.betaV2)
+		snr.var2vcf(args.acc, props, args.output, args.cpus, args.betaV2)
 		end = time.time()
 		hours, rem = divmod(end-start, 3600)
 		minutes, seconds = divmod(rem, 60)
