@@ -196,11 +196,9 @@ def parallelize_dataframe(df, tmp_dirname, num_cores,refdescr, func):
     return full_paht_list
 
 def export2VCF(
-    db_path,
-    include_acc,
-    include_dates,
     output,
-    num_cores,
+    num_cores=4,
+    properties=None,
     refdescr="No ref is provided"
     ):
     print('----- You are using sonartoVCF_V2 --------')
