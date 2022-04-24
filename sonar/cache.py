@@ -9,7 +9,7 @@ import sys
 import argparse
 import base64
 import pickle
-from sonar import sonarActions, sonarDBManager, sonarAligner
+from sonar import sonarBasics, sonarDBManager, sonarAligner
 import hashlib
 import yaml
 from Bio import SeqIO
@@ -23,7 +23,7 @@ from pickle import load as load_pickle
 import gzip
 import lzma
 import pprint
- 
+
 pp = pprint.PrettyPrinter(indent=4)
 
 class sonarCache():
@@ -132,7 +132,7 @@ class sonarCache():
 			'algn_dir': self.algn_dir,
 			'var_dir': self.var_dir
 		}
-		
+
 		with open(self.smk_config, 'w') as handle:
 			yaml.dump(data, handle)
 
@@ -228,7 +228,7 @@ class sonarCache():
 		'''
 		If the translation table
 		is not in the cache, it is retrieved from the database and written to a file
-		
+
 		:param translation_id: The id of the translation table
 		:param dbm: the database manager
 		:return: A file name.
@@ -244,12 +244,12 @@ class sonarCache():
 		The function takes in a reference id, a reference molecule accession number,
 		and a reference sequence. It then checks to see if the reference molecule accession number is in the set of molecules that
 		have been cached. If it is not, it iterates through all of the coding sequences for that molecule and creates a
-		dataframe for each one. 
-. 
+		dataframe for each one.
+.
 		It then saves the dataframe to a pickle file and adds the reference molecule accession number to
-		the set of molecules that have been cached. 
+		the set of molecules that have been cached.
 		It then returns the name of the pickle file
-	
+
 		'''
 		fname = self.get_lift_fname(refid)
 		rows = []
@@ -308,8 +308,8 @@ class sonarCache():
 					if not refmol:
 						sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(record.description) + ").")
 					refmolid = self.refmols[refmol]['molecule.id']
-					seq = sonarActions.harmonize(record.seq)
-					seqhash = sonarActions.hash(seq)
+					seq = sonarBasics.harmonize(record.seq)
+					seqhash = sonarBasics.hash(seq)
 					yield {
 						   'name': record.id,
 						   'header': record.description,
@@ -369,7 +369,7 @@ class sonarCache():
 	def get_refhash(self, refmol_acc):
 		try:
 			if 'seqhash' not in self.sources[refmol_acc]:
-				self.sources[refmol_acc]['seqhash'] = sonarActions.hash(self.sources[refmol_acc]['sequence'])
+				self.sources[refmol_acc]['seqhash'] = sonarBasics.hash(self.sources[refmol_acc]['sequence'])
 			return self.sources[refmol_acc]['seqhash']
 		except:
 			return None
@@ -470,7 +470,7 @@ class sonarCache():
 						with open("paranoid.alignment.fna", "w") as handle:
 							handle.write(">original_" + sample_data['name'] + "\n" + ref + "\n>restored_" + sample_data['name'] + "\n" + qry)
 						sys.exit("import error: original sequence of sample " + sample_data['name'] + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)")
-				except Exception as e: 
+				except Exception as e:
 					print("\n------- Fatal Error ---------")
 					print("\nDebugging Information")
 					print(e)

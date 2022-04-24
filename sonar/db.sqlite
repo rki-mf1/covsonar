@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS sequence (
 	seqhash VARCHAR PRIMARY KEY
 ) WITHOUT ROWID;
 
+
 --
 -- SAMPLE SECTION
 --
@@ -21,8 +22,8 @@ CREATE TABLE IF NOT EXISTS sample (
 	datahash VARCHAR NOT NULL,
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_sample_seqhash ON sample(seqhash);	
-CREATE INDEX IF NOT EXISTS idx_sample_name ON sample (name);
+CREATE INDEX IF NOT EXISTS idx_sample_name ON sample(name);
+CREATE INDEX IF NOT EXISTS idx_sample_seqhash ON sample(seqhash);
 
 CREATE TABLE IF NOT EXISTS property (
 	id INTEGER PRIMARY KEY,
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS sample2property (
 	FOREIGN KEY(sample_id) REFERENCES sample(id) ON DELETE CASCADE,
 	FOREIGN KEY(property_id) REFERENCES property(id) ON DELETE CASCADE
 ) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_sample2property_pid ON sample2property(property_id);
 CREATE INDEX IF NOT EXISTS idx_sample2property_int ON sample2property(value_integer);
 CREATE INDEX IF NOT EXISTS idx_sample2property_float ON sample2property(value_float);
 CREATE INDEX IF NOT EXISTS idx_sample2property_text ON sample2property(value_text);
@@ -75,6 +77,8 @@ CREATE TABLE IF NOT EXISTS reference (
 	standard INTEGER NOT NULL,
 	FOREIGN KEY(translation_id) REFERENCES translation(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_reference_id ON reference(id);
+CREATE INDEX IF NOT EXISTS idx_reference_accession ON reference(accession);
 CREATE INDEX IF NOT EXISTS idx_reference_standard ON reference(standard);
 
 CREATE TABLE IF NOT EXISTS molecule (
@@ -89,7 +93,9 @@ CREATE TABLE IF NOT EXISTS molecule (
 	standard INTEGER NOT NULL,
 	FOREIGN KEY(reference_id) REFERENCES reference(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_molecule_refid ON molecule(reference_id);
 CREATE INDEX IF NOT EXISTS idx_molecule_standard ON molecule(standard);
+CREATE INDEX IF NOT EXISTS idx_molecule_id ON molecule(id);
 
 CREATE TABLE IF NOT EXISTS element (
 	id INTEGER PRIMARY KEY,
@@ -140,6 +146,7 @@ CREATE TABLE IF NOT EXISTS variant (
 	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_variant_element_id ON variant (element_id);
+CREATE INDEX IF NOT EXISTS idx_variant_element_start ON variant (start);
 
 CREATE TABLE IF NOT EXISTS alignment (
 	id INTEGER PRIMARY KEY,
@@ -220,7 +227,7 @@ SELECT
 FROM
 	sample
 LEFT JOIN sample2property ON sample.id = sample2property.sample_id
-LEFT JOIN property ON sample2property.property_id = property.id;
+LEFT JOIN property ON sample2property.property_id = property.id
 
 CREATE VIEW IF NOT EXISTS sequenceView
 AS
@@ -258,48 +265,14 @@ SELECT
 	element.symbol as "element.symbol",
 	element.description as "element.description",
 	element.start as "element.end",
-	element.strand as "element.strand"
+	element.strand as "element.strand",
+	element.sequence as "element.sequence"
 FROM
 	sample
 LEFT JOIN alignment ON sample.seqhash = alignment.seqhash
 LEFT JOIN element ON alignment.element_id = element.id
 LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
-
-CREATE VIEW IF NOT EXISTS variantView2
-AS
-SELECT
-  sample.id as "sample.id",
-  sample.name as "sample.name",
-  sample.seqhash as "sample.seqhash",
-	reference.id as "reference.id",
-  reference.accession as "reference.accession",
-  reference.standard as "reference.standard",
-	molecule.id as "molecule.id",
-  molecule.accession as "molecule.accession",
-  molecule.symbol as "molecule.symbol",
-  molecule.standard as "molecule.standard",
-	element.id as "element.id",
-  element.accession as "element.accession",
-  element.symbol as "element.symbol",
-  element.standard as "element.standard",
-  element.type as "element.type",
-  variant.id as "variant.id",
-  variant.ref as "variant.ref",
-  variant.start as "variant.start",
-  variant.end as "variant.end",
-  variant.alt as "variant.alt",
-	variant.label as "variant.label",
-  variant.parent_id as "variant.parent_id"
-FROM
-	variant
-LEFT JOIN alignment2variant ON alignment2variant.variant_id = variant.id
-LEFT JOIN alignment ON alignment.id = alignment2variant.alignment_id
-LEFT JOIN sequence ON sequence.seqhash = alignment.seqhash
-LEFT JOIN sample ON sample.seqhash = sequence.seqhash
-LEFT JOIN element ON element.id = variant.element_id
-LEFT JOIN molecule ON molecule.id = element.molecule_id
-LEFT JOIN reference ON reference.id = molecule.reference_id;
 
 CREATE VIEW IF NOT EXISTS variantView
 AS

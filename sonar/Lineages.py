@@ -3,7 +3,7 @@
 # Script version 1 (copy from VOCAL)
 # The method originally came from  https://github.com/cov-lineages/pango-designation.
 # We just adapt and change some parts to be used in covsonar, vocal etc.
-import os 
+import os
 import pandas as pd
 from tempfile import mkstemp, mkdtemp
 import json
@@ -13,7 +13,6 @@ import requests
 
 class Aliasor:
     def __init__(self, alias_file):
-
         aliases = pd.read_json(alias_file)
 
         self.alias_dict = {}
@@ -54,8 +53,8 @@ class Aliasor:
         else:
             #print('len3:'+unaliased + '.' + ".".join(name_split[1:]))
             return unaliased + '.' + ".".join(name_split[1:])
-        
-        
+
+
 def lts(lineage):
     items = []
     for item in lineage.split("."):
@@ -100,16 +99,15 @@ def process_lineage(alias_key_path, lineages_path, output):
     for _id in lineages:
         sub_lineage_char = aliasor.realias_dict.get(_id)
         sub_lineage_list = []
-        
+
         for name_ in sorted_lineages:
             letter = name_.split('.')[0]
             if sub_lineage_char == letter:
                 sub_lineage_list.append(name_)
-        
+
         sub_lineage_list = list(filter((_id).__ne__, sub_lineage_list))
         if(len(sub_lineage_list)):
             df = df.append({'lineage': _id, 'sublineage': ",".join(sub_lineage_list)}, ignore_index=True)
         else:
             df = df.append({'lineage': _id, 'sublineage': 'none'}, ignore_index=True)
     df.to_csv(output, sep="\t", index=False)
-

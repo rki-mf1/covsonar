@@ -9,6 +9,7 @@ import sys
 from Bio.SeqUtils.CheckSum import seguid
 from Bio.Seq import Seq
 from Bio import SeqIO
+from Bio import bgzf
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 from Bio.Emboss.Applications import StretcherCommandline
@@ -17,19 +18,50 @@ from tqdm import tqdm
 import tempfile
 import itertools
 from contextlib import ExitStack
-from sonar import sonarDBManager, sonarAligner, sonartoVCF, sonartoVCF_v2
+from sonar import sonarDBManager, sonarAligner
 import csv
 from tabulate import tabulate
 from textwrap import fill
 from tempfile import mkstemp, mkdtemp
 import gzip
 import lzma
+import sqlite3
+import collections
+import logging
 
+class Aliasor:
+    def __init__(self, alias_file):
+        aliases = pd.read_json(alias_file)
+        self.alias_dict = {x: x if x.startswith("X") else aliases[x][0] for x in aliases.columns}
+        self.alias_dict['A'] = 'A'
+        self.alias_dict['B'] = 'B'
+        self.realias_dict = {v: k for k, v in self.alias_dict.items()}
+
+    def compress(self, name):
+        name_split = name.split('.')
+        if len(name_split) < 5:
+            return name
+        letter = self.realias_dict[".".join(name_split[0:4])]
+        if len(name_split) == 5:
+            return letter + '.' + name_split[4]
+        else:
+            return letter + '.' + ".".join(name_split[4:])
+
+    def uncompress(self, name):
+        name_split = name.split('.')
+        letter = name_split[0]
+        unaliased = self.alias_dict[letter]
+        if len(name_split) == 1:
+            return name
+        if len(name_split) == 2:
+            return unaliased + '.' + name_split[1]
+        else:
+            return unaliased + '.' + ".".join(name_split[1:])
 
 # CLASS
-class sonarActions(object):
+class sonarBasics(object):
 	"""
-	this object provides sonarActions functionalities and intelligence
+	this object provides sonarBasics functionalities and intelligence
 
 	Notes
 	-----
@@ -45,7 +77,7 @@ class sonarActions(object):
 
 	In this example the path to the database is stored in DOCTESTDB.
 
-	>>> db = sonarActions(DOCTESTDB)
+	>>> db = sonarBasics(DOCTESTDB)
 
 	Parameters
 	----------
@@ -110,7 +142,7 @@ class sonarActions(object):
 		without ambiguities
 	"""
 	def __init__(self, dbfile, translation_table = 1, debug=False):
-		self.db = os.path.abspath(dbfile)  if dbfile else mkstemp()[1]
+		self.db = os.path.abspath(dbfile) if dbfile else mkstemp()[1]
 		self.debug = debug
 		self.__moduledir = self.get_module_base()
 		self.reffna = os.path.join(self.__moduledir, "ref.fna")
@@ -132,12 +164,12 @@ class sonarActions(object):
 		self.__dnavar_grep_regex = None
 		self.__codedict = None
 		self.__fasta_tag_regex = None
-
 		self._covSonar_version = self.get_version()
+		logging.basicConfig(format='%(asctime)s %(message)s')
 
 	@staticmethod
 	def get_version():
-		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
+		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", ".version"), "r") as handle:
 			return handle.read().strip()
 
 	# DB MAINTENANCE
@@ -147,19 +179,20 @@ class sonarActions(object):
 		return os.path.join(os.path.dirname(os.path.realpath(__file__)), *join_with)
 
 	@staticmethod
-	def setup_db(fname, auto_create=False, default_setup=True, debug=False):
+	def setup_db(fname, auto_create=False, default_setup=True, reference_gb=None, debug=False):
 		if os.path.isfile(fname):
 			sys.exit("setup error: " + fname + " does already exist.")
 		sonarDBManager.setup(fname, debug=debug)
+
 		## loading default data
-		if default_setup:
-			with sonarDBManager(fname, debug=debug) as dbm:
+		if default_setup or auto_create:
+			with sonarDBManager(fname, readonly=False, debug=debug) as dbm:
 				### adding pre-defined sample properties
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
-				##  if enable, create important properties
-				if (auto_create):
-					print('Enable automatic import property')
+
+				### if enable, create important properties
+				if auto_create:
 					dbm.add_property("DATE_DRAW", "date", "date", "Sampling date")
 					dbm.add_property("PROCESSING_DATE ", "date", "date", "Submission date")
 					dbm.add_property("country", "text", "text", "Country where a sample belongs to")
@@ -170,8 +203,10 @@ class sonarActions(object):
 					dbm.add_property("lineage", "text", "text", "e.g., BA.2 or B.1.1.7")
 					dbm.add_property("technology", "text", "text", "e.g., ILLUMINA")
 
-				### adding built-in reference (unsegmented genome)
-				records = [x for x in sonarActions.iter_genbank(sonarActions.get_module_base("ref.gb"))]
+				### adding reference
+				if not reference:
+					gbk = sonarBasics.iter_genbank(sonarBasics.get_module_base("ref.gb"))
+				records = [x for x in sonarBasics.iter_genbank(gbk)]
 				ref_id = dbm.add_reference(records[0]['accession'], records[0]['description'], records[0]['organism'], 1, 1)
 
 				### adding reference molecule and elements
@@ -197,8 +232,8 @@ class sonarActions(object):
 						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], elem['strand'], elem['sequence'], 0, gene_ids[elem['gene']], elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(cid, translation_table=1):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (cds)")
-	# DATA IMPORT
 
+	# DATA IMPORT
 	## genbank handling handling
 	@staticmethod
 	def process_segments(feat_location_parts, cds = False):
@@ -239,9 +274,9 @@ class sonarActions(object):
 				"start": int(feat.location.start),
 				"end": int(feat.location.end),
 				"strand": "",
-				"sequence": sonarActions.harmonize(feat.extract(gb_record.seq)),
+				"sequence": sonarBasics.harmonize(feat.extract(gb_record.seq)),
 				"description": "",
-				"parts": sonarActions.process_segments(feat.location.parts)
+				"parts": sonarBasics.process_segments(feat.location.parts)
 			}
 			gb_data['length'] = len(gb_data['source']['sequence'])
 			if "segment" in feat.qualifiers:
@@ -256,9 +291,9 @@ class sonarActions(object):
 						"start": int(feat.location.start),
 						"end": int(feat.location.end),
 						"strand": feat.strand,
-						"sequence": sonarActions.harmonize(feat.extract(gb_data['source']['sequence'])),
+						"sequence": sonarBasics.harmonize(feat.extract(gb_data['source']['sequence'])),
 						"description": "",
-						"parts": sonarActions.process_segments(feat.location.parts)
+						"parts": sonarBasics.process_segments(feat.location.parts)
 					})
 
 
@@ -273,7 +308,7 @@ class sonarActions(object):
 						"gene": feat.qualifiers['gene'][0],
 						"sequence": feat.qualifiers['translation'][0],
 						"description": feat.qualifiers['product'][0],
-						"parts": sonarActions.process_segments(feat.location.parts, True)
+						"parts": sonarBasics.process_segments(feat.location.parts, True)
 					})
 			yield gb_data
 
@@ -292,96 +327,167 @@ class sonarActions(object):
 		return str(seq).strip().upper().replace("U", "T")
 
 	# matching
-	def match(self, profiles=[], propdict={}, count=None):
-		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			#  get ID
-			rows = dbm.match(*profiles, properties=propdict)
-
-
-			if count:
-				print(len(rows))
+	@staticmethod
+	def match(db, profiles=[], propdict={}, reference=None, outfile=None, format="csv", debug="False"):
+		with sonarDBManager(db, debug=debug) as dbm:
+			if format == "vcf" and reference is None:
+				reference = dbm.get_default_reference_accession()
+			cursor = dbm.match(*profiles, properties=propdict, reference_accession=reference, format=format)
+			if format == "csv" or format == "tsv":
+				tsv = True if format=="tsv" else False
+				sonarBasics.exportCSV(cursor, outfile=outfile, na="*** no match ***", tsv=tsv)
+			elif format == "count":
+				if outfile:
+					with open(outfile, "w") as handle:
+						handle.write(str(cursor.fetchone()['count']))
+				else:
+					print(cursor.fetchone()['count'])
+			elif format == "vcf":
+				sonarBasics.exportVCF(cursor, reference=reference, outfile=outfile, na="*** no match ***")
 			else:
-				# print(rows)
+				sys.exit("error: '" + format + "' is not a valid output format")
 
-				self.rows_to_csv(rows, na="*** no match ***", tsv=True)
-	
-	# show db infos
-	def show_props(self):
-		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			cols = ["name", "argument", "description", "data type", "query type", "default value"]
-			rows = []
-			if not dbm.properties:
-				print("the database does not conatin any sample property.")
-				exit()
-			for prop in sorted(dbm.properties.keys()):
-				rows.append([])
-				dt = dbm.properties[prop]['datatype'] if dbm.properties[prop]['datatype'] != "float" else "floating point"
-				rows[-1].append(prop)
-				rows[-1].append("--" + prop)
-				rows[-1].append(fill(dbm.properties[prop]['description'], width=25))
-				rows[-1].append(dt)
-				rows[-1].append(dbm.properties[prop]['querytype'])
-				rows[-1].append(dbm.properties[prop]['standard'])
-			print(tabulate(rows, headers=cols, tablefmt='fancy_grid'))
-			print()
-			print("DATE FORMAT")
-			print("dates must comply with the following format: YYYY-MM-DD")
-			print()
-			print("OPERATORS")
-			print("integer, floating point and date data types support the following operators prefixed directly to the respective value without spaces:")
-			print("  > larger than (e.g. >1)")
-			print("  < smaller than (e.g. <1)")
-			print("  >= larger than or equal to (e.g. >=1)")
-			print("  <= smaller than or equal to (e.g. <=1)")
-			print("  != different than (e.g. !=1)")
-			print()
-			print("RANGES")
-			print("integer, floating point and date data types support ranges defined by two values directly connected by a colon (:) with no space between them:")
-			print("  e.g. 1:10 (between 1 and 10)")
-			print("  e.g. 2021-01-01:2021-12-31 (between 1st Jan and 31st Dec of 2021)")
-			print()
-	
-	def show_system_info(self):
-		print("System info.")
-		print("conSonar Version:      ", self._covSonar_version)
-		#print("reference length:      ", str(len(self.db.refseq)) + "bp")
-		#print("annotated proteins:    ", ", ".join(self.db.refgffObj.symbols))
-		#print("used translation table:", self.db.translation_table)
 
-	def show_db_info(self):
-		with sonarDBManager(self.db, readonly=True) as dbm:
+	# restore
+	@staticmethod
+	def restore(db, *samples,reference_accession=None, aligned=False, outfile=None, debug=False):
+		with sonarDBManager(db, readonly=True, debug=debug) as dbm:
+			handle = sys.stdout if outfile is None else open(outfile, "w")
+			for sample in samples:
+				prefixes = collections.defaultdict(str)
+				molecules = { x['element.id']: {'seq': list(x['element.sequence']), 'mol': x['element.symbol']} for x in dbm.get_alignment_data(sample, reference_accession=None)}
+				gap = "-" if aligned else ""
+				for vardata in dbm.iter_dna_variants(sample, *molecules.keys()):
+					if aligned and len(vardata['variant.alt']) > 1:
+						vardata['variant.alt'] = vardata['variant.alt'][0] + vardata['variant.alt'][1:].lower()
+					if vardata['variant.alt'] == " ":
+						for i in range(vardata['variant.start'], vardata['variant.end']):
+							molecules[vardata['element.id']]['seq'][i] = gap
+					elif vardata['variant.start'] >= 0:
+						molecules[vardata['element.id']]['seq'][vardata['variant.start']] = vardata['variant.alt']
+					else:
+						prefixes[vardata['element.id']] = vardata['variant.alt']
+				l = len(molecules)
+				records = []
+				for element_id in molecules:
+					if l == 1:
+						records.append(">" + sample)
+					else:
+						records.append(">" + sample + " [molecule=" + molecules[vardata['element.id']]['mol'] + "]")
+					records.append(prefixes[element_id] + "".join(molecules[vardata['element.id']]['seq']))
+				handle.write("\n".join(records) + "\n")
+
+	@staticmethod
+	def show_db_info(db):
+		with sonarDBManager(db, readonly=True) as dbm:
+			print("covSonar Version:          ", sonarBasics.get_version())
 			print("database path:             ", dbm.dbfile)
 			print("database version:          ", dbm.get_db_version())
 			print("database size:             ", dbm.get_db_size())
 			print("unique sequences:          ", dbm.count_sequences())
-			print("earliest genome import:    ", dbm.get_earliest_import())
-			print("latest genome import:      ", dbm.get_latest_import())
-			print("earliest sampling date:    ", dbm.get_earliest_date())
-			print("latest sampling date:      ", dbm.get_latest_date())
-		
-	
+			print("Sample properties          ", dbm.get_earliest_import())
+			#print("latest genome import:      ", dbm.get_latest_import())
+			#print("earliest sampling date:    ", dbm.get_earliest_date())
+			#print("latest sampling date:      ", dbm.get_latest_date())
+
 	# output
-	def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
-		if not rows:
-			print(na, file=sys.stderr)
+	## profile generation
+	@staticmethod
+	def iter_formatted_match(cursor):
+		nuc_profiles = collections.defaultdict(list)
+		aa_profiles = collections.defaultdict(list)
+		samples = set()
+		logging.warning("getting profile data")
+		logging.warning("processing profile data")
+		for row in cursor:
+			samples.add(row['sample.name'])
+			if row["element.type"] == "cds":
+				aa_profiles[row['sample.name']].append((row['element.id'], row['variant.start'], row['element.symbol'] + ":" + row['variant.label']))
+			else:
+				nuc_profiles[row['sample.name']].append((row['element.id'], row['variant.start'], row['variant.label']))
+		out = []
+		logging.warning("assembling profile data")
+		for sample in sorted(samples):
+			out.append({
+				"sample.name": sample,
+				"nuc_profile": " ".join(sorted(nuc_profiles[sample], key=lambda x: (x[0], x[1]))),
+				"aa_profile": " ".join(sorted(aa_profiles[sample], key=lambda x: (x[0], x[1])))
+			})
+		return out
+
+	## csv
+	def exportCSV(cursor, outfile=None, na="*** no data ***", tsv=False):
+		i = -1
+		for i, row in enumerate(cursor):
+			if i == 0:
+				outfile = sys.stdout if outfile is None else open(outfile, "w")
+				sep = "\t" if tsv else ","
+				writer = csv.DictWriter(outfile, row.keys(), delimiter=sep, lineterminator=os.linesep)
+				writer.writeheader()
+			writer.writerow(row)
+		if i == -1:
+			print(na)
+
+	## vcf
+	def exportVCF(cursor, reference, outfile=None, na="*** no match ***"):
+		vcfdicts = []
+		records = collections.OrderedDict()
+		prev_sample = None
+		all_samples = set()
+		for row in sonarBasics.iter_formatted_match(cursor):
+			chrom, pos, ref, alt, samples = row['molecule.accession'], row['variant.start'], row['variant.ref'], row['variant.alt'], row['samples']
+			if chrom not in records:
+				records[chrom] = collections.OrderedDict()
+			if pos not in records[chrom]:
+				records[chrom][pos] = {}
+			if ref not in records[chrom][pos]:
+				records[chrom][pos][ref] = {}
+			records[chrom][pos][ref][alt] = set(samples.split("\t"))
+			all_samples.update(samples.split("\t"))
+
+		if len(records) != 0:
+			all_samples = sorted(all_samples)
+			if outfile is None:
+				handle = sys.stdout
+			else:
+				#if not outfile.endswith(".gz"):
+					#outfile += ".gz"
+				handle = open(outfile, mode='w') # bgzf.open(outfile, mode='wb')
+
+			# vcf header
+			handle.write("##fileformat=VCFv4.2\n")
+			handle.write("##poweredby=CovSonar\n")
+			handle.write("##reference=" + reference + "\n")
+			handle.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\"\n")
+			handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" + "\t".join(all_samples)+ "\n")
+
+			# records
+			for chrom in records:
+				for pos in records[chrom]:
+					for ref in records[chrom][pos]:
+						## snps and inserts (combined output)
+						alts = [x for x in records[chrom][pos][ref].keys() if x.strip()]
+						if alts:
+							alt_samples = set()
+							gts = []
+							for alt in alts:
+								samples = records[chrom][pos][ref][alt]
+								alt_samples.update(samples)
+								gts.append(["1" if x in samples else "0" for x in all_samples])
+							gts = [["0" if x in alt_samples else "1" for x in all_samples]] + gts
+							record = [chrom, str(pos), ref, ",".join(alts), ".", ".", ".", "GT"] + ["/".join(x) for x in zip(*gts)]
+						## dels (individual output)
+						for alt in [x for x in records[chrom][pos][ref].keys() if not x.strip()]:
+							samples = records[chrom][pos][ref][alt]
+							record = [chrom, str(pos), ref, ref[0], ".", ".", ".", "GT"] + ["0/1" if x in samples else "1/0" for x in all_samples]
+						handle.write("\t".join(record)+"\n")
+			handle.close()
 		else:
-			file = sys.stdout if file is None else open(file, "w")
-			sep = "\t" if tsv else ","
-			writer = csv.DictWriter(file, rows[0].keys(), delimiter=sep, lineterminator=os.linesep)
-			writer.writeheader()
-			writer.writerows(rows)
+			print(na)
 
-	# Call SonarToVCF
-
-	def var2vcf(self, acc, props, output, cpu, betaV2):
-		if betaV2:
-			print('Warning: Under Construction, please remove --betaV2')
-			return True 	# sonartoVCF_v2.export2VCF(self.db,output, cpu, props)
-		else:
-			return	sonartoVCF.export2VCF(self.db,output, cpu, props, acc)
-
-
-	def open_file(self, fname, mode="r", compressed=False, encoding=None):
+	# gerenal
+	@staticmethod
+	def open_file(fname, mode="r", compressed=False, encoding=None):
 		if not os.path.isfile(fname):
 			sys.exit("input error: " + fname + " does not exist.")
 		if compressed == "auto":

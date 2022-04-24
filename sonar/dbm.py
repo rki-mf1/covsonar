@@ -63,7 +63,7 @@ class sonarDBManager():
 
 	"""
 
-	def __init__(self, dbfile, timeout=-1, readonly=False, debug=False, autocreate=False):
+	def __init__(self, dbfile, timeout=-1, readonly=True, debug=False, autocreate=False):
 		logging.basicConfig(format='%(asctime)s %(message)s')
 		self.connection = None
 		if not autocreate and not os.path.isfile(dbfile):
@@ -163,7 +163,7 @@ class sonarDBManager():
 			sql = "SELECT * FROM property"
 			rows = self.cursor.execute(sql).fetchall()
 			self.__properties = {} if not rows else { x['name']: x for x in rows }
-		return self.__properties 
+		return self.__properties
 
 	# SETUP
 
@@ -201,7 +201,6 @@ class sonarDBManager():
 				sql = "INSERT INTO sample2property (property_id, value_" + self.properties[name]['datatype'] + ", sample_id) SELECT ?, ?, id FROM sample WHERE 1"
 				vals = [pid, standard]
 				self.cursor.execute(sql, vals)
-			print('Inserted successfully:', name)
 		except sqlite3.Error as error:
 			print("Failed to insert data into sqlite table", error)
 		return pid
@@ -323,6 +322,10 @@ class sonarDBManager():
 		row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
 		return None if row is None else row['id']
 
+	def get_default_reference_accession(self):
+		sql = "SELECT accession FROM reference WHERE standard=1"
+		return self.cursor.execute(sql).fetchone()['accession']
+
 	def get_molecule_ids(self, reference_accession=None):
 		if reference_accession:
 			condition = "\"reference.accession\" = ?"
@@ -407,11 +410,12 @@ class sonarDBManager():
 		sql = "SELECT " + ", ".join(fields) + " FROM referenceView WHERE " + " AND ".join(conditions) + " ORDER BY \"reference.id\" ASC, \"molecule.id\" ASC, \"element.id\" ASC, \"element.segment\" ASC"
 		return self.cursor.execute(sql, vals).fetchall()
 
-	def get_alignment_data(self, sample_id, element_id, *fields, limit=1):
-		if not fields:
-			fields = ['*']
-		sql = "SELECT " + ", ".join(fields) + " FROM alignmentView WHERE \"sample.id\" = ? AND \"element.id\" = ? LIMIT "+ limit +";"
-		return self.cursor.execute(sql, [sample_id, element_id]).fetchall()
+	def get_alignment_data(self, sample_name, reference_accession=None):
+		if reference_accession is None:
+			sql = "SELECT \"reference.accession\" as acc FROM alignmentView WHERE \"sample.name\" = ? LIMIT 1"
+			reference_accession = self.cursor.execute(sql, [sample_name]).fetchone()['acc']
+		sql = "SELECT \"element.sequence\", \"element.symbol\", \"element.id\" FROM alignmentView WHERE \"sample.name\" = ? AND \"reference.accession\" = ? "
+		return self.cursor.execute(sql, [sample_name, reference_accession])
 
 	def get_alignment_id(self, seqhash, element_id):
 		sql = "SELECT id FROM alignment WHERE \"element.id\" = ? AND \"seqhash\" = ? LIMIT 1;"
@@ -434,25 +438,24 @@ class sonarDBManager():
 			condition = ""
 		# sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\"" + condition
 		sql = '''
-			SELECT  variant.element_id as \"element.id\", 
+			SELECT  variant.element_id as \"element.id\",
 					variant.start as \"variant.start\",
-					variant.end as  \"variant.end\", 
+					variant.end as  \"variant.end\",
 					variant.ref as  \"variant.ref\",
 					variant.alt as \"variant.alt\"
-					FROM 
+					FROM
 						( SELECT sample.seqhash
 						FROM sample
 						WHERE sample.name = ?
 						) AS sample_T
-					INNER JOIN alignment 
-						ON sample_T.seqhash == alignment.seqhash 
-					INNER JOIN alignment2variant 
+					INNER JOIN alignment
+						ON sample_T.seqhash == alignment.seqhash
+					INNER JOIN alignment2variant
 						ON alignment.id == alignment2variant.alignment_id
 					INNER JOIN	variant
-						ON alignment2variant.variant_id == variant.id 
+						ON alignment2variant.variant_id == variant.id
 						WHERE  variant.element_id ''' +condition
 
-		# print(sql)
 		for row in self.cursor.execute(sql, [sample_name] + list(element_ids)):
 			if row["variant.start"] is not None:
 				yield row
@@ -504,6 +507,10 @@ class sonarDBManager():
 			properties[row['property.name']] = row["sample2property.value_" + row['property.datatype']]
 		return properties
 
+	def count_properties(self):
+		sql = "SELECT COUNT(*) as count FROM propertyView GROUP BY property_name;"
+		return self.cursor.execute(sql).fetchall()
+
 	def get_seqhash(self, sample_name):
 		sql = "SELECT \"sample.seqhash\" FROM sequenceView WHERE sample.name = ?"
 		return [ x['sample.hash'] for x in self.cursor.execute(sql, [sample_name]).fetchall() if x is not None ]
@@ -554,29 +561,6 @@ class sonarDBManager():
 		if translation_table is None:
 			return str(feat.extract(sequence))
 		return str(Seq(feat.extract(sequence)).translate(table=translation_table, stop_symbol=""))
-	
-	# VAR2VCF 
-	def get_sample_ids(self, samples):
-		sql = "SELECT id FROM sample WHERE name IN (" + ", ".join(['?'] * len(samples)) + ") ;"
-		rows = self.cursor.execute(sql,samples).fetchall()
-		sample_IDs=[str(elt['id']) for elt in rows]
-		return sample_IDs
-
-	def query_metadata_forVCF(self, properties):
-		"""
-		"""
-		property_sqls = []
-		property_vals = []
-		for pname, vals in properties.items():
-				sql, val = self.query_metadata(pname, *vals)
-				property_sqls.append(sql)
-				property_vals.extend(val)
-
-		property_sqls = " INTERSECT ".join(property_sqls)
-		# print(property_sqls, property_vals)
-		rows = self.cursor.execute(property_sqls,property_vals).fetchall()
-		sample_IDs=[str(elt['id']) for elt in rows]
-		return sample_IDs
 
 	# MATCHING PROFILES
 	def get_operator(self, val):
@@ -780,8 +764,8 @@ class sonarDBManager():
 		return link.join(conditions), vallist
 
 	def query_metadata(self, name, *vals):
-		conditions = ['\"property.name\" = ?']
-		valueList = [name]
+		conditions = ['\"property_id\" = ?']
+		valueList = [self.properties[name]["id"]]
 		targetfield = "value_" + self.properties[name]['datatype']
 
 		# query dates
@@ -797,7 +781,7 @@ class sonarDBManager():
 			valueList.extend(b)
 
 		# query text
-		elif self.properties[name]['querytype'] == "string":
+		elif self.properties[name]['querytype'] == "text":
 			a,b = self.query_string(targetfield, *vals)
 			conditions.append(a)
 			valueList.extend(b)
@@ -809,9 +793,9 @@ class sonarDBManager():
 			valueList.extend(b)
 
 		else:
-			sys.exit("error: unknown query type.")
+			sys.exit("error: unknown query type '" +self.properties[name]['querytype'] + "' for property '" + name + "'.")
 
-		return "SELECT \"sample.id\" AS id FROM propertyView WHERE " + " AND ".join(conditions), valueList
+		return "SELECT \"sample_id\" AS id FROM sample2property WHERE " + " AND ".join(conditions), valueList
 
 	def query_profile(self, *vars, reference_accession=None):
 		iupac_nt_code = { "A": set("A"), "C": set("C"), "G": set("G"), "T": set("T"), "R": set("AGR"), "Y": set("CTY"), "S": set("GCS"), "W": set("ATW"), "K": set("GTK"), "M": set("ACM"), "B": set("CGTB"), "D": set("AGTD"), "H": set("ACTH"), "V": set("ACGV"), "N": set("ACGTRYSWKMBDHVN") }
@@ -826,7 +810,7 @@ class sonarDBManager():
 		except_sqls = []
 		except_vals = []
 		for var in vars:
-			c = [] # condition 
+			c = [] # condition
 			v = [] # variable
 
 			if var.startswith("^"):
@@ -949,7 +933,7 @@ class sonarDBManager():
 		sql = "SELECT count(DISTINCT \"molecule.id\") AS count FROM referenceView WHERE " + condition
 		return self.cursor.execute(sql, vals).fetchone()['count']
 
-	def match(self, *profiles, properties=None, reference_accession=None, showN=False):
+	def match(self, *profiles, properties=None, reference_accession=None, showN=False, format="csv"):
 		#collecting sqls for metadata-based filtering
 		property_sqls = []
 		property_vals = []
@@ -981,8 +965,10 @@ class sonarDBManager():
 				sample_selection_sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
 			else:
 				sample_selection_sql = property_sqls + " INTERSECT " + profile_sqls
-		else:
+		elif  property_sqls or profile_sqls:
 			sample_selection_sql = property_sqls + profile_sqls
+		else:
+			sample_selection_sql = "SELECT \"sample.id\" AS id FROM variantView"
 
 		# assembling final sql
 		genome_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "source")]
@@ -995,31 +981,69 @@ class sonarDBManager():
 
 		if not showN:
 			nn = " AND \"variant.alt\" != \"N\" "
-			np = " AND \"variant.alt\" != \"X\" "
+			nx = " AND \"variant.alt\" != \"X\" "
 		else:
 			nn = ""
-			np = ""
+			nx = ""
 
 		cds_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "cds")]
 		if len(cds_element_condition) == 1:
 			cds_element_condition = "\"element.id\" = " + cds_element_condition[0]
 		else:
 			cds_element_condition = "\"element.id\" IN (" + ", ".join(cds_element_condition) + ")"
-		# Version 1
-		sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
-		       SELECT  *, \
-					    ( \
-						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
-						) nt_profile, \
-						( \
-						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
-						) aa_profile \
-				FROM sample \
-				WHERE id IN ( SELECT id FROM selected_samples )"
 
-		return self.cursor.execute(sql, property_vals + profile_vals).fetchall()
+		# standard query
+		if format == "csv" or format == "tsv":
+
+			## select samples
+			sql = sample_selection_sql
+			sample_ids = self.cursor.execute(sql, property_vals + profile_vals).fetchall()
+			if not sample_ids:
+				return []
+			s = ", ".join([str(x['id']) for x in sample_ids])
+
+			## get profiles
+			sql = "SELECT \"sample.id\" AS id, group_concat(" + m + "\"variant.label\") AS nuc_profile FROM variantView WHERE \"sample.id\" IN (" + s + ") AND " + genome_element_condition + nn + " GROUP BY \"sample.id\""
+			nuc_profile = self.cursor.execute(sql).fetchall()
+			sql = "SELECT \"sample.id\" AS id, group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS aa_profile FROM variantView WHERE \"sample.id\" IN (" + s + ") AND " + cds_element_condition + nx + " GROUP BY \"sample.id\""
+			aa_profile = self.cursor.execute(sql).fetchall()
+
+			## get properties
+
+
+			## merge results
+			rows = {x['id']: {"id": x['id']} for x in sample_ids}
+			for row in nuc_profile:
+				rows[row["id"]]['nuc_profile'] = row['nuc_profile']
+			for row in aa_profile:
+				rows[row["id"]]['aa_profile'] = row['aa_profile']
+
+			return list(rows.values())
+			"""
+			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
+			       SELECT  *, \
+						    ( \
+							  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
+							  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.id\" \
+							) nt_profile, \
+							( \
+							  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
+							  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.id\" \
+							) aa_profile \
+					FROM sample \
+					WHERE id IN ( SELECT id FROM selected_samples )"
+
+			sql = "SELECT * \
+				   FROM variantView \
+				   WHERE \"sample.id\" IN (" + sample_selection_sql + ")" # ORDER BY \"sample.id\", \"element.id\", \"variant.start\""
+			"""
+		elif format == "count":
+			sql = "SELECT count(DISTINCT id) as count FROM (" + sample_selection_sql + ")"
+		elif format == "vcf":
+			sql = "SELECT \"molecule.accession\", \"variant.start\", \"variant.ref\", \"variant.alt\", group_concat(\"sample.name\") as samples FROM variantView WHERE \"sample.id\" IN (" + sample_selection_sql + ") AND " + genome_element_condition + nn + "GROUP BY \"molecule.accession\", \"variant.start\", \"variant.ref\", \"variant.alt\" ORDER BY \"molecule.accession\", \"variant.start\""
+		else:
+			sys.exit("error: '" + format + "' is not a valid output format")
+		return self.cursor.execute(sql, property_vals + profile_vals) #.fetchall()
 
 	# MISC
 
@@ -1032,7 +1056,7 @@ class sonarDBManager():
 
 	@staticmethod
 	def dict_factory(cursor, row):
-		d = OrderedDict()
+		d = {} #OrderedDict()
 		for idx, col in enumerate(cursor.description):
 			d[col[0]] = row[idx]
 		return d
@@ -1061,13 +1085,13 @@ class sonarDBManager():
 				next_version = current_version + 1
 				file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "migrate/"+str(next_version)+".sql")
 				if not os.path.isfile(file_path):
-					raise ValueError ("Sorry, we cannot find",file_path) 		
+					raise ValueError ("Sorry, we cannot find",file_path)
 
 				with open(file_path, 'r') as handle:
 					sql = handle.read()
 				with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
 					con.executescript(sql)
-				
+
 				current_version = next_version
 
 		except sqlite3.Error as er:
