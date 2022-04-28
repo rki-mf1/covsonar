@@ -20,7 +20,10 @@ class sonarAligner(object):
 	"""
 
 	def __init__(self):
-		pass
+		self.nuc_profile = []
+		self.nuc_n_profile = []
+		self.aa_profile = []
+		self.aa_n_profile = []
 
 	def align(self, qry, ref, gapopen= 16, gapextend = 4):
 		"""

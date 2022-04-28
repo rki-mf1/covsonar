@@ -436,7 +436,7 @@ if __name__ == "__main__":
 				if hasattr(args, pname):
 					props[pname] = getattr(args, pname)
 		format = "count" if args.count else args.format
-		sonarBasics.match(args.db, args.profile, props, outfile=args.out, format=format)
+		sonarBasics.match(args.db, args.profile, props, outfile=args.out, debug=args.debug, format=format)
 
 	# view
 	if args.tool == "view":

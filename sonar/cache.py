@@ -439,6 +439,7 @@ class sonarCache():
 								dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2], vardat[5])
 							if line != "//":
 								sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
+
 					# paranoia test
 					try:
 						seq = list(refseqs[sample_data['refmolid']])

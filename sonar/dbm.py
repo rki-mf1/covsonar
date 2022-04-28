@@ -1001,22 +1001,13 @@ class sonarDBManager():
 			if not sample_ids:
 				return []
 			s = ", ".join([str(x['id']) for x in sample_ids])
+			#rows = {x['id']: {"id": x['id']} for x in sample_ids}
 
-			## get profiles
-			sql = "SELECT \"sample.id\" AS id, group_concat(" + m + "\"variant.label\") AS nuc_profile FROM variantView WHERE \"sample.id\" IN (" + s + ") AND " + genome_element_condition + nn + " GROUP BY \"sample.id\""
-			nuc_profile = self.cursor.execute(sql).fetchall()
-			sql = "SELECT \"sample.id\" AS id, group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS aa_profile FROM variantView WHERE \"sample.id\" IN (" + s + ") AND " + cds_element_condition + nx + " GROUP BY \"sample.id\""
-			aa_profile = self.cursor.execute(sql).fetchall()
-
-			## get properties
-
-
-			## merge results
-			rows = {x['id']: {"id": x['id']} for x in sample_ids}
-			for row in nuc_profile:
-				rows[row["id"]]['nuc_profile'] = row['nuc_profile']
-			for row in aa_profile:
-				rows[row["id"]]['aa_profile'] = row['aa_profile']
+			###
+			fields = ["\"sample.name\""] + ["\"" + x + "\"" for x in self.properties]
+			sql = "SELECT name as " + ", ".join(fields) + "FROM sample "
+			joins = ["LEFT JOIN (SELECT sample_id, value_" + y['datatype'] + " as " + x + " FROM sample2property WHERE property_id = " + str(y['id']) + ") as t" + str(y['id']) + " ON sample.id = t" + str(y['id']) + ".sample_id" for x,y in self.properties.items()]
+			print(sql + " ".join(joins))
 
 			return list(rows.values())
 			"""

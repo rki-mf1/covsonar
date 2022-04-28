@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS alignment2variant (
 ) WITHOUT ROWID;
 CREATE INDEX idx_a2v_alignment_id ON alignment2variant (alignment_id);
 CREATE INDEX idx_a2v_variant_id ON alignment2variant (variant_id);
+
 --
 -- VIEWS
 --

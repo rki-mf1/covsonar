@@ -190,6 +190,10 @@ class sonarBasics(object):
 				### adding pre-defined sample properties
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
+				dbm.add_property("nuc_profile", "string", "string", "stores the nucleotide level profiles")
+				dbm.add_property("aa_profile", "string", "string", "stores the aa level profiles")
+				dbm.add_property("nuc_n_profile", "string", "string", "stores the aa level profiles")
+				dbm.add_property("aa_n_profile", "string", "string", "stores the aa level profiles")
 
 				### if enable, create important properties
 				if auto_create:
