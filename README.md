@@ -1,11 +1,16 @@
 <img src="logo.png"  width="134" height="134" align="right"><br><br><br><br><br>
 
+# :warning: Attention :warning:
+
+*covSonar will move into [new home](https://github.com/rki-mf1/covsonar) :dash: at the end of May 2022. **This repository will be no longer MAINTAINED**, please report any new issue into the new reporsitory :speech_balloon:*
+
 
 # covSonar
 
 covSonar is a database-driven system for handling genomic sequences of SARS-CoV-2 and screening genomic profiles.
 
 <img src="https://img.shields.io/badge/covSonar-1.1.4-pink" />
+
 
 ## 1. Prerequisites
 
