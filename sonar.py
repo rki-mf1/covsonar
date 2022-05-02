@@ -75,7 +75,7 @@ def parse_args():
 	## import parser
 	parser_import = subparsers.add_parser('import', parents=[general_parser, thread_parser], help='Import genome sequences and sample information to the database.')
 	parser_import.add_argument('--fasta', help="fasta file containing genome sequences to import", type=str, nargs="+", default=None)
-	parser_import.add_argument('--props', help="tab-delimited file containing sample properties to import", type=str, default=None)
+	parser_import.add_argument('--tsv', help="tab-delimited file containing sample properties to import", type=str, default=None)
 	parser_import.add_argument('--cols', help="define column names for sample properties (if different from property name)", type=str, nargs="+", default=None)
 	parser_import.add_argument('--no-update', help="skip samples already existing in the database", action="store_true")
 	parser_import.add_argument('--cache', metavar="DIR", help="directory for chaching data (default: a temporary directory is created)", type=str, default=None)
@@ -262,13 +262,13 @@ if __name__ == "__main__":
 
 			cols = {x: x for x in stored_property_names if x in headline}
 			cols['sample'] = 'sample'
-
+			print(args.cols)
 			if not args.cols is None:
 				for x in args.cols:
 					if x.count("=") != 1:
 						sys.exit("input error: " + x + " is not a valid sample property assignment.")
 					k, v = x.split("=")
-					if k not in stored_property_names:
+					if k not in stored_property_names and k != "sample":
 						sys.exit("input error: sample property " + k + " is unknown.")
 					cols[k] = v
 
@@ -280,7 +280,11 @@ if __name__ == "__main__":
 
 			if len(cols) == 1:
 				sys.exit("input error: tsv does not provide any informative column.")
-
+		if args.no_update:
+			args.update = False
+			print("-- No update --")
+		else :
+			args.update = True
 		### setup cache
 		temp = False if args.cache else True
 		cache = sonarCache(args.db, outdir=args.cache, logfile="import.log", allow_updates=args.update, temp=temp, debug=args.debug)

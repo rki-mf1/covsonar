@@ -944,6 +944,9 @@ class sonarDBManager():
 				property_vals.extend(val)
 
 		property_sqls = " INTERSECT ".join(property_sqls)
+		print("*************** \n")
+		print(property_sqls)
+		print(property_vals)
 		#collecting sqls for genomic profile based filtering
 		profile_sqls = []
 		profile_vals = []
@@ -958,7 +961,9 @@ class sonarDBManager():
 			profile_sqls = " UNION ".join(["SELECT * FROM (" + x + ")" for x in profile_sqls])
 		else:
 			profile_sqls = ""
-
+		print("*************** \n")
+		print(profile_sqls)
+		print(profile_vals)
 		# assembling compound query for sample selection
 		if property_sqls and profile_sqls:
 			if len(profiles) > 1:
@@ -1001,15 +1006,16 @@ class sonarDBManager():
 			if not sample_ids:
 				return []
 			s = ", ".join([str(x['id']) for x in sample_ids])
-			#rows = {x['id']: {"id": x['id']} for x in sample_ids}
+			rows = {x['id']: {"id": x['id']} for x in sample_ids}
 
-			###
+			### 
 			fields = ["\"sample.name\""] + ["\"" + x + "\"" for x in self.properties]
 			sql = "SELECT name as " + ", ".join(fields) + "FROM sample "
 			joins = ["LEFT JOIN (SELECT sample_id, value_" + y['datatype'] + " as " + x + " FROM sample2property WHERE property_id = " + str(y['id']) + ") as t" + str(y['id']) + " ON sample.id = t" + str(y['id']) + ".sample_id" for x,y in self.properties.items()]
-			print(sql + " ".join(joins))
+			print("*************** \n")
+			#print(sql + " ".join(joins))
 
-			return list(rows.values())
+			return   list(rows.values())
 			"""
 			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
 			       SELECT  *, \
