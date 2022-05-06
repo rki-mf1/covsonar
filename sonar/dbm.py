@@ -11,6 +11,7 @@ from collections import OrderedDict, defaultdict
 from urllib.parse import quote as urlquote
 import itertools
 import logging
+import pandas as pd
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
@@ -944,9 +945,7 @@ class sonarDBManager():
 				property_vals.extend(val)
 
 		property_sqls = " INTERSECT ".join(property_sqls)
-		print("*************** \n")
-		print(property_sqls)
-		print(property_vals)
+
 		#collecting sqls for genomic profile based filtering
 		profile_sqls = []
 		profile_vals = []
@@ -961,10 +960,7 @@ class sonarDBManager():
 			profile_sqls = " UNION ".join(["SELECT * FROM (" + x + ")" for x in profile_sqls])
 		else:
 			profile_sqls = ""
-		print("*************** \n")
-		print(profile_sqls)
-		print(profile_vals)
-		# assembling compound query for sample selection
+
 		if property_sqls and profile_sqls:
 			if len(profiles) > 1:
 				sample_selection_sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
@@ -973,9 +969,8 @@ class sonarDBManager():
 		elif  property_sqls or profile_sqls:
 			sample_selection_sql = property_sqls + profile_sqls
 		else:
-			sample_selection_sql = "SELECT \"sample.id\" AS id FROM variantView"
+			sample_selection_sql = "SELECT  id FROM sample"
 
-		# assembling final sql
 		genome_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "source")]
 		if len(genome_element_condition) == 1:
 			genome_element_condition = "\"element.id\" = " + genome_element_condition[0]
@@ -997,38 +992,77 @@ class sonarDBManager():
 		else:
 			cds_element_condition = "\"element.id\" IN (" + ", ".join(cds_element_condition) + ")"
 
+		
 		# standard query
 		if format == "csv" or format == "tsv":
 
 			## select samples
 			sql = sample_selection_sql
 			sample_ids = self.cursor.execute(sql, property_vals + profile_vals).fetchall()
+			
 			if not sample_ids:
 				return []
-			s = ", ".join([str(x['id']) for x in sample_ids])
-			rows = {x['id']: {"id": x['id']} for x in sample_ids}
+			selected_sample_ids = ", ".join([str(x['id']) for x in sample_ids])
+			# rows = {x['id']: {"id": x['id']} for x in sample_ids}
+			# print(len(sample_ids))
 
 			### 
+			# Current solution:
+			# After we got the selected IDs
+			# We use two-stage query and the combine both results together to produce final result
+			# 1. Query properties
+			# 2. Query  AA/NT profile 
 			fields = ["\"sample.name\""] + ["\"" + x + "\"" for x in self.properties]
 			sql = "SELECT name as " + ", ".join(fields) + "FROM sample "
-			joins = ["LEFT JOIN (SELECT sample_id, value_" + y['datatype'] + " as " + x + " FROM sample2property WHERE property_id = " + str(y['id']) + ") as t" + str(y['id']) + " ON sample.id = t" + str(y['id']) + ".sample_id" for x,y in self.properties.items()]
-			print("*************** \n")
-			#print(sql + " ".join(joins))
 
-			return   list(rows.values())
-			"""
-			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
-			       SELECT  *, \
+			joins = ["LEFT JOIN (SELECT sample_id, value_" + y['datatype'] + " as " + x 
+					+ " FROM sample2property WHERE property_id = " + str(y['id']) + ") as t" +str(y['id']) 
+					+ " ON sample.id = t" + str(y['id'])
+					+ ".sample_id" for x,y in self.properties.items()]
+			_1_final_sql = sql + " ".join(joins) + " WHERE sample.id IN ("+selected_sample_ids+")"
+			_1_rows = self.cursor.execute(_1_final_sql).fetchall()
+
+			_2_final_sql = " SELECT name , nt_profile._profile AS nt_profile, aa_profile._profile AS aa_profile \
+					FROM \
 						    ( \
-							  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
-							  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.id\" \
+							  SELECT  \"sample.id\", group_concat(" + m + "\"variant.label\") AS _profile \
+							  FROM variantView WHERE \"sample.id\" IN ("+selected_sample_ids+") AND " + genome_element_condition + nn + " GROUP BY \"sample.id\" \
 							) nt_profile, \
 							( \
-							  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
-							  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.id\" \
-							) aa_profile \
-					FROM sample \
-					WHERE id IN ( SELECT id FROM selected_samples )"
+							  SELECT  \"sample.id\", group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS _profile \
+							  FROM variantView WHERE \"sample.id\" IN ("+selected_sample_ids+") AND " + cds_element_condition + nx + " GROUP BY \"sample.id\" \
+							) aa_profile, \
+					        sample \
+					WHERE nt_profile.\"sample.id\" = aa_profile.\"sample.id\" AND  nt_profile.\"sample.id\" = sample.id  \
+						  AND sample.id  IN (" + selected_sample_ids + ")"
+			_2_rows = self.cursor.execute(_2_final_sql).fetchall()
+			# To combine:
+			# We update list of dict (update on result from query #2)
+			# merge all results		
+			_2_rows.extend(list(map(lambda x,y: x if x.get('sample.name') != y.get('name')
+					 else 
+					 y.update( 
+					{ key: value for key, value in x.items() if (key != "sample.name")})
+					, _1_rows, _2_rows)))
+			_2_rows = list(filter(None, _2_rows))
+
+			# since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name) 
+			# at _2_rows so we can return _2_rows only a
+			return   _2_rows #  list(rows.values()) 
+			"""
+			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
+		       SELECT  *, \
+					    ( \
+						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+						) nt_profile, \
+						( \
+						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
+						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+						) aa_profile \
+				FROM sample \
+				WHERE id IN ( SELECT id FROM selected_samples )"
+
 
 			sql = "SELECT * \
 				   FROM variantView \
@@ -1041,7 +1075,6 @@ class sonarDBManager():
 		else:
 			sys.exit("error: '" + format + "' is not a valid output format")
 		return self.cursor.execute(sql, property_vals + profile_vals) #.fetchall()
-
 	# MISC
 
 	@staticmethod
