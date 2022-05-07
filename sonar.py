@@ -228,7 +228,7 @@ if __name__ == "__main__":
 	args = parse_args()
 
 	if hasattr(args, 'db') and args.db:
-		if not args.db is None and not os.path.isfile(args.db):
+		if args.tool != "setup" and not args.db is None and not os.path.isfile(args.db):
 			sys.exit("input error: database does not exist.")
 
 
@@ -242,8 +242,8 @@ if __name__ == "__main__":
 	# tool procedures
 	## setup
 	if args.tool == "setup":
-		if reference:
-			check_file(reference)
+		if args.gbk:
+			check_file(args.gbk)
 		sonarBasics.setup_db(args.db, args.auto_create, reference_gb=args.gbk, debug=debug)
 
 	## import

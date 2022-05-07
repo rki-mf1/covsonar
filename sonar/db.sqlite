@@ -228,7 +228,7 @@ SELECT
 FROM
 	sample
 LEFT JOIN sample2property ON sample.id = sample2property.sample_id
-LEFT JOIN property ON sample2property.property_id = property.id
+LEFT JOIN property ON sample2property.property_id = property.id;
 
 CREATE VIEW IF NOT EXISTS sequenceView
 AS

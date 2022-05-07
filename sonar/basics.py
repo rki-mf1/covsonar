@@ -208,9 +208,9 @@ class sonarBasics(object):
 					dbm.add_property("technology", "text", "text", "e.g., ILLUMINA")
 
 				### adding reference
-				if not reference:
-					gbk = sonarBasics.iter_genbank(sonarBasics.get_module_base("ref.gb"))
-				records = [x for x in sonarBasics.iter_genbank(gbk)]
+				if not reference_gb:
+					reference_gb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref.gb")
+				records = [x for x in sonarBasics.iter_genbank(reference_gb)]
 				ref_id = dbm.add_reference(records[0]['accession'], records[0]['description'], records[0]['organism'], 1, 1)
 
 				### adding reference molecule and elements
@@ -253,7 +253,6 @@ class sonarBasics(object):
 	def iter_genbank(fname):
 		gb_data = {}
 		for gb_record in SeqIO.parse(fname, "genbank"):
-
 			## adding general annotation
 			gb_data['accession'] = gb_record.name + "." + str(gb_record.annotations['sequence_version'])
 			gb_data['symbol'] = gb_record.annotations['symbol'] if 'symbol' in gb_record.annotations else ""
