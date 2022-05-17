@@ -104,6 +104,8 @@ def parse_args():
 	parser_match_format.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match_format.add_argument('--format', help="output format (default: tsv)", choices=["csv", "tsv", "vcf"], default="tsv")
 
+	parser_match.add_argument('--with-sublineage', metavar="STR",  help="recursively get all sublineages from a given lineage. ", type=str, default=None)
+
 	## restore parser
 	parser_restore = subparsers.add_parser('restore', parents=[ref_parser, sample_parser, general_parser], help='restore sequence(s) from the database.')
 	parser_restore.add_argument('--aligned', help="ise aligned form (deletions indicated by - and insertions by lower-case letters)", action="store_true")
@@ -435,12 +437,43 @@ if __name__ == "__main__":
 	# match
 	elif args.tool == "match":
 		props = {}
+		reserved_props = {}
+
+		## Todo: Support linage + sub lineage search 
+
 		with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
 			for pname in dbm.properties:
 				if hasattr(args, pname):
 					props[pname] = getattr(args, pname)
+			if args.with_sublineage:
+				if args.with_sublineage in dbm.properties:
+					reserved_props['with_sublineage'] = args.with_sublineage
+				else:
+					sys.exit("input error: with-sublineage value is mismatch to the available properties")
+
+
+		# for reserved keywords
+		reserved_key = ["sample"]
+		for pname in reserved_key: 
+			if hasattr(args, pname): 
+				if pname == "sample" and len(getattr(args, pname)) > 0:
+					# reserved_props[pname] = set([x.strip() for x in args.sample])
+					reserved_props = sonarBasics.set_key(reserved_props,pname,getattr(args, pname))
+					# reserved_props[pname] = getattr(args, pname)
+
+		## Support file upload
+		if args.sample_file:
+			for sample_file in args.sample_file:
+				check_file(sample_file)
+				with sonarBasics.open_file(sample_file, compressed="auto") as file:
+					for line in file:
+						reserved_props = sonarBasics.set_key(reserved_props,"sample",line.strip())
+
+		print(reserved_props)
 		format = "count" if args.count else args.format
-		sonarBasics.match(args.db, args.profile, props, outfile=args.out, debug=args.debug, format=format)
+
+		print(reserved_props)
+		sonarBasics.match(args.db,  args.profile, reserved_props, props, outfile=args.out, debug=args.debug, format=format)
 
 	# view
 	if args.tool == "view":

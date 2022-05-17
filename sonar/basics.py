@@ -331,11 +331,11 @@ class sonarBasics(object):
 
 	# matching
 	@staticmethod
-	def match(db, profiles=[], propdict={}, reference=None, outfile=None, format="csv", debug="False"):
+	def match(db, profiles=[], reserved_props_dict={}, propdict={}, reference=None, outfile=None, format="csv", debug="False"):
 		with sonarDBManager(db, debug=debug) as dbm:
 			if format == "vcf" and reference is None:
 				reference = dbm.get_default_reference_accession()
-			cursor = dbm.match(*profiles, properties=propdict, reference_accession=reference, format=format)
+			cursor = dbm.match( *profiles, reserved_props = reserved_props_dict, properties=propdict, reference_accession=reference, format=format)
 			if format == "csv" or format == "tsv":
 				tsv = True if format=="tsv" else False
 				sonarBasics.exportCSV(cursor, outfile=outfile, na="*** no match ***", tsv=tsv)
@@ -504,3 +504,13 @@ class sonarBasics(object):
 				return open(fname, mode, encoding=encoding)
 		except:
 			sys.exit("input error: " + fname + " cannot be opened.")
+	
+	@staticmethod
+	def set_key(dictionary, key, value):
+		if key not in dictionary:
+			dictionary[key] = value
+		elif type(dictionary[key]) == list:
+			dictionary[key].append(value)
+		else:
+			dictionary[key] = [dictionary[key], value]
+		return dictionary

@@ -78,6 +78,10 @@ class sonarDBManager():
 		self.__properties = False
 		self.__illegal_properties = {'molecule', }
 		self.__default_reference_id = False
+		self.__lineage_sublineage_dict = None
+		self.__rootdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+		self.lineagewithsublineages = os.path.join(self.__rootdir, "lib", "lineage.all.tsv")
+
 		self.operators = { "genuine": {
 								"=": "=",
 								">": ">",
@@ -150,6 +154,13 @@ class sonarDBManager():
 		dbver = self.get_db_version()
 		if dbver != SUPPORTED_DB_VERSION:
 			sys.exit("compatibility error: the given database is not compatible with this version of sonar (database version: " + str(dbver) + "; supported database version: " + str(SUPPORTED_DB_VERSION) +")")
+
+	@property
+	def lineage_sublineage_dict(self):
+		if not self.__lineage_sublineage_dict:
+			df = pd.read_csv(self.lineagewithsublineages, sep='\t')
+			self.__lineage_sublineage_dict = dict(zip(df.lineage, df.sublineage))
+		return self.__lineage_sublineage_dict
 
 	@property
 	def default_reference_id(self):
@@ -934,10 +945,33 @@ class sonarDBManager():
 		sql = "SELECT count(DISTINCT \"molecule.id\") AS count FROM referenceView WHERE " + condition
 		return self.cursor.execute(sql, vals).fetchone()['count']
 
-	def match(self, *profiles, properties=None, reference_accession=None, showN=False, format="csv"):
+	def match(self, *profiles, reserved_props=None, properties=None, reference_accession=None, showN=False, format="csv"):
 		#collecting sqls for metadata-based filtering
 		property_sqls = []
 		property_vals = []
+		## IF sublineage is enable
+		# Todo: include and exclude
+		if  "with_sublineage" in reserved_props:
+			_tmp_include_lin = []
+			lineage_col = reserved_props.get('with_sublineage')
+			include_lin = properties.get(lineage_col)
+			while include_lin:
+				in_lin = include_lin.pop(0)	
+				value = self.lineage_sublineage_dict.get(in_lin, 'none') # provide a default value if the key is missing:
+
+				if value != 'none':
+					_tmp_include_lin.append(in_lin)
+					_list = value.split(',')
+					for i in _list:
+						include_lin.append(i)
+							# _tmp_include_lin.append(i)
+							## if we don't find this wildcard so we discard it
+				else: # None
+					_tmp_include_lin.append(in_lin)
+			include_lin = _tmp_include_lin
+			properties[lineage_col] = include_lin
+		print(properties)
+
 		if properties:
 			for pname, vals in properties.items():
 				sql, val = self.query_metadata(pname, *vals)
@@ -961,15 +995,27 @@ class sonarDBManager():
 		else:
 			profile_sqls = ""
 
-		if property_sqls and profile_sqls:
+		if (property_sqls and profile_sqls) :
 			if len(profiles) > 1:
 				sample_selection_sql = property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
 			else:
 				sample_selection_sql = property_sqls + " INTERSECT " + profile_sqls
-		elif  property_sqls or profile_sqls:
+		elif ( property_sqls or profile_sqls ):
 			sample_selection_sql = property_sqls + profile_sqls
-		else:
-			sample_selection_sql = "SELECT  id FROM sample"
+		else: 
+			if  "sample" in reserved_props:
+				 # if 'sample' is presented we just use only samples
+				samples_condition = []
+				for pname, vals in reserved_props.items():
+					if pname == "sample": 
+						for x in vals:
+							samples_condition.append('\"' + x+'\"') 
+				sample_selection_sql = "SELECT id FROM sample WHERE name IN (" + " , ".join(samples_condition) + ")"
+			
+				property_sqls = []
+				property_vals = []
+			else:
+				sample_selection_sql = "SELECT id FROM sample"
 
 		genome_element_condition = [str(x) for x in self.get_element_ids(reference_accession, "source")]
 		if len(genome_element_condition) == 1:
@@ -991,7 +1037,6 @@ class sonarDBManager():
 			cds_element_condition = "\"element.id\" = " + cds_element_condition[0]
 		else:
 			cds_element_condition = "\"element.id\" IN (" + ", ".join(cds_element_condition) + ")"
-
 		
 		# standard query
 		if format == "csv" or format == "tsv":
@@ -1009,7 +1054,7 @@ class sonarDBManager():
 			### 
 			# Current solution:
 			# After we got the selected IDs
-			# We use two-stage query and the combine both results together to produce final result
+			# We use two-stage query and then combine both results together to produce final result
 			# 1. Query properties
 			# 2. Query  AA/NT profile 
 			fields = ["\"sample.name\""] + ["\"" + x + "\"" for x in self.properties]
@@ -1036,19 +1081,22 @@ class sonarDBManager():
 					WHERE nt_profile.\"sample.id\" = aa_profile.\"sample.id\" AND  nt_profile.\"sample.id\" = sample.id  \
 						  AND sample.id  IN (" + selected_sample_ids + ")"
 			_2_rows = self.cursor.execute(_2_final_sql).fetchall()
+
+			print(set([ x['sample.name'] for x in _1_rows ]) ^ set([ x['name'] for x in _2_rows ]))
 			# To combine:
 			# We update list of dict (update on result from query #2)
 			# merge all results		
-			_2_rows.extend(list(map(lambda x,y: x if x.get('sample.name') != y.get('name')
+			_1_rows.extend(list(map(lambda x,y: y if x.get('sample.name') != y.get('name')
 					 else 
-					 y.update( 
-					{ key: value for key, value in x.items() if (key != "sample.name")})
+					 x.update(
+					{ key: value for key, value in y.items() if (key == "nt_profile" )or key == "aa_profile"})
 					, _1_rows, _2_rows)))
-			_2_rows = list(filter(None, _2_rows))
+				
+			_1_rows = list(filter(None, _1_rows))
 
 			# since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name) 
 			# at _2_rows so we can return _2_rows only a
-			return   _2_rows #  list(rows.values()) 
+			return   _1_rows #  list(rows.values()) 
 			"""
 			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
 		       SELECT  *, \
