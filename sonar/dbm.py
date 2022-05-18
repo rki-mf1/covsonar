@@ -949,25 +949,37 @@ class sonarDBManager():
 		#collecting sqls for metadata-based filtering
 		property_sqls = []
 		property_vals = []
-		## IF sublineage is enable
-		# Todo: include and exclude
+		## IF sublineage search is enable
+		## support: include and exclude
 		if  "with_sublineage" in reserved_props:
 			_tmp_include_lin = []
 			lineage_col = reserved_props.get('with_sublineage')
 			include_lin = properties.get(lineage_col)
+			negate = False
 			while include_lin:
 				in_lin = include_lin.pop(0)	
+				if in_lin.startswith("^"):
+					in_lin = in_lin[1:]
+					negate = True
 				value = self.lineage_sublineage_dict.get(in_lin, 'none') # provide a default value if the key is missing:
-
 				if value != 'none':
+					if negate: 
+						in_lin = "^"+in_lin
 					_tmp_include_lin.append(in_lin)
+
 					_list = value.split(',')
 					for i in _list:
+						if negate: # all sublineage should add not^
+							i = "^"+i
 						include_lin.append(i)
 							# _tmp_include_lin.append(i)
 							## if we don't find this wildcard so we discard it
-				else: # None
+				else: # None (no child)
+					if negate:
+						in_lin = "^"+in_lin
 					_tmp_include_lin.append(in_lin)
+				negate = False
+				
 			include_lin = _tmp_include_lin
 			properties[lineage_col] = include_lin
 		print(properties)

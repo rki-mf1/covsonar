@@ -9,7 +9,7 @@ import csv
 import argparse
 import gzip
 import lzma
-from sonar import sonarBasics, sonarDBManager, sonarCache, sonarLinmgr
+from sonar import sonarBasics, sonarDBManager, sonarCache, sonarLinmgr, sonarAligner
 from Bio import SeqIO
 from tempfile import mkstemp, mkdtemp
 from collections import defaultdict
@@ -20,6 +20,7 @@ import time
 import shutil
 from textwrap import fill
 from tabulate import tabulate
+from mpire import WorkerPool
 
 class arg_namespace(object):
     pass
@@ -193,13 +194,6 @@ class sonar():
 				spacer = " " * (maxlen-len(field))
 				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
-	def get_db_size(self, decimal_places=3):
-		size = os.path.getsize(self.dbfile)
-		for unit in ['B','KiB','MiB','GiB','TiB']:
-			if size < 1024.0:
-				break
-			size /= 1024.0
-		return f"{size:.{decimal_places}f}{unit}"
 
 def process_update_expressions(expr):
 	allowed = {"accession": "accession", "lineage": "lineageCol",
@@ -439,8 +433,6 @@ if __name__ == "__main__":
 		props = {}
 		reserved_props = {}
 
-		## Todo: Support linage + sub lineage search 
-
 		with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
 			for pname in dbm.properties:
 				if hasattr(args, pname):
@@ -450,7 +442,6 @@ if __name__ == "__main__":
 					reserved_props['with_sublineage'] = args.with_sublineage
 				else:
 					sys.exit("input error: with-sublineage value is mismatch to the available properties")
-
 
 		# for reserved keywords
 		reserved_key = ["sample"]
@@ -468,16 +459,9 @@ if __name__ == "__main__":
 				with sonarBasics.open_file(sample_file, compressed="auto") as file:
 					for line in file:
 						reserved_props = sonarBasics.set_key(reserved_props,"sample",line.strip())
-
-		print(reserved_props)
 		format = "count" if args.count else args.format
 
-		print(reserved_props)
 		sonarBasics.match(args.db,  args.profile, reserved_props, props, outfile=args.out, debug=args.debug, format=format)
-
-	# view
-	if args.tool == "view":
-		snr.view(args.acc)
 
 	# optimize
 	if args.tool == "optimize":
