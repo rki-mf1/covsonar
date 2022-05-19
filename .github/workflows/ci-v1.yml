@@ -1,4 +1,4 @@
-name: covSonar CI V.1X
+name: Test covSonar CI V.1X in Linux env.
 
 on:
   push:
