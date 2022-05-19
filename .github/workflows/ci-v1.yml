@@ -1,0 +1,18 @@
+name: Test covSonar CI V.1X in Linux env.
+
+on:
+  push:
+    branches: [ master, dev/fix1 ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@v2.1.1
+    - name: Test with test.sh script
+      run: ./test.sh
