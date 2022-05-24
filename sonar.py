@@ -35,7 +35,7 @@ def parse_args():
 	# preparations
 	user_namespace = arg_namespace()
 	parser = argparse.ArgumentParser(prog="sonar.py", description="covSonar " + VERSION)
-	subparsers = parser.add_subparsers(help='detect, store, and screen for mutations in SARS-CoV-2 genomic sequences')
+	subparsers = parser.add_subparsers(help='detect, store, and screen for mutations in genomic sequences')
 	subparsers.dest = 'tool'
 	subparsers.required = True
 
@@ -70,7 +70,7 @@ def parse_args():
 	# main parser
 	## setup parser
 	parser_setup = subparsers.add_parser('setup', parents=[general_parser], help='Setup a new database.')
-	parser_setup.add_argument('-a','--auto_create', help="Auto create important properties", action="store_true")
+	parser_setup.add_argument('-a','--auto-create', help="Auto create important properties", action="store_true")
 	parser_setup.add_argument('--gbk', metavar="FILE", help="genbank file of the reference genome (default MN908947.3 is used as reference)", type=str, default=None)
 
 	## import parser
@@ -124,7 +124,7 @@ def parse_args():
 	parser_opt = subparsers.add_parser('db-upgrade', parents=[general_parser], help='upgrade a database to the latest version')
 
 	## update-lineage-info parser
-	parser_update_anno = subparsers.add_parser('update-lineage-info', help='dowload latest lineage information')
+	parser_update_anno = subparsers.add_parser('update-lineage-info', help='download latest lineage information')
 
 	# version parser
 	parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + VERSION, help="Show program's version number and exit.")
@@ -234,6 +234,14 @@ if __name__ == "__main__":
 	else:
 		debug = False
 
+	
+	# check_db_compatibility
+	if args.tool == "db-upgrade":
+		input("Warning: Backup db file before upgrading, Press Enter to continue...")
+		sonarDBManager.upgrade_db(args.db)
+	else:
+		with sonarDBManager(args.db, readonly=True) as dbm:
+			dbm.check_db_compatibility()
 
 	# tool procedures
 	## setup
@@ -419,15 +427,6 @@ if __name__ == "__main__":
 	elif args.tool == "info":
 		sonarBasics.show_db_info(args.db)
 
-	# if Upgrade
-	#if args.tool == "db-upgrade":
-	#	input("Warning: Backup db file before upgrading, Press Enter to continue...")
-	#	sonarDBManager.upgrade_db(args.db)
-	#else:
-	#	with sonarDBManager(args.db, readonly=True) as dbm:
-	#		dbm.check_db_compatibility()
-
-
 	# match
 	elif args.tool == "match":
 		props = {}
@@ -468,7 +467,7 @@ if __name__ == "__main__":
 		with sonarDBManager(args.db, debug=args.debug) as dbm:
 			dbm.optimize(args.db)
 
-	# optimize
+	# dev
 	if args.tool == "dev":
 		print("***dev mode***")
 		with sonarDBManager(args.db, debug=debug) as dbm:

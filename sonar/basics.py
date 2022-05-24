@@ -190,22 +190,21 @@ class sonarBasics(object):
 				### adding pre-defined sample properties
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
-				dbm.add_property("nuc_profile", "string", "string", "stores the nucleotide level profiles")
-				dbm.add_property("aa_profile", "string", "string", "stores the aa level profiles")
-				dbm.add_property("nuc_n_profile", "string", "string", "stores the aa level profiles")
-				dbm.add_property("aa_n_profile", "string", "string", "stores the aa level profiles")
+				#dbm.add_property("nuc_profile", "string", "string", "stores the nucleotide level profiles")
+				#dbm.add_property("aa_profile", "string", "string", "stores the aa level profiles")
+				#dbm.add_property("nuc_n_profile", "string", "string", "stores the aa level profiles")
+				#dbm.add_property("aa_n_profile", "string", "string", "stores the aa level profiles")
 
-				### if enable, create important properties
+				### if enable, create PREDEFINED properties
 				if auto_create:
 					dbm.add_property("DATE_DRAW", "date", "date", "Sampling date")
-					dbm.add_property("PROCESSING_DATE ", "date", "date", "Submission date")
-					dbm.add_property("country", "text", "text", "Country where a sample belongs to")
-					dbm.add_property("host", "text", "text", "e.g., HUMAN")
-					dbm.add_property("collection", "text", "text", "e.g., DESH_STICHPROBE")
-					dbm.add_property("zip", "text", "text", "e.g., 33602")
-					dbm.add_property("lab", "text", "text", "e.g., 11069")
-					dbm.add_property("lineage", "text", "text", "e.g., BA.2 or B.1.1.7")
-					dbm.add_property("technology", "text", "text", "e.g., ILLUMINA")
+					dbm.add_property("PROCESSING_DATE", "date", "date", "Submission/Processing date")
+					dbm.add_property("COUNTRY", "text", "text", "Country where a sample belongs to")
+					dbm.add_property("HOST", "text", "text", "e.g., HUMAN")
+					dbm.add_property("ZIP", "text", "text", "zip code e.g., 33602")
+					dbm.add_property("LAB", "text", "text", "lab id e.g., 11069")
+					dbm.add_property("LINEAGE", "text", "text", "e.g., BA.2 or B.1.1.7")
+					dbm.add_property("TECHNOLOGY", "text", "text", "e.g., ILLUMINA")
 
 				### adding reference
 				if not reference_gb:
@@ -388,7 +387,7 @@ class sonarBasics(object):
 			print("database version:          ", dbm.get_db_version())
 			print("database size:             ", dbm.get_db_size())
 			print("unique sequences:          ", dbm.count_sequences())
-			print("Sample properties          ", dbm.get_earliest_import())
+			#print("Sample properties          ", dbm.get_earliest_import())
 			#print("latest genome import:      ", dbm.get_latest_import())
 			#print("earliest sampling date:    ", dbm.get_earliest_date())
 			#print("latest sampling date:      ", dbm.get_latest_date())
