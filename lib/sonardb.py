@@ -1717,7 +1717,6 @@ class sonarDBManager():
 					profile_clause[-1] = "(" + " AND ".join(profile_clause[-1]) + ")"
 				else:
 					profile_clause[-1] = profile_clause[-1][0]
-
 			if len(profile_clause) > 1:
 				where_clause.append("(" + " OR ".join(profile_clause) + ")")
 			else:
@@ -2704,7 +2703,25 @@ class sonarDB(object):
 		for var in profile:
 			key = "dna" if self.isdnavar(var) else "aa"
 			extended_profile[key].extend([v for v in self.pinpoint_mutation(var, self.codedict[key]['code'])])
-		return extended_profile
+		return extended_profile 
+
+	def _fix_X_N_search(self, _profiles):
+		temp_include_profiles = []
+		for _list_var in _profiles:
+			for var in _list_var:
+				if (var[-1].lower() == 'x') and not self.isdnavar(var):
+					for v in self.pinpoint_mutation(var, self.codedict["aa"]['code']):
+						temp_include_profiles.append([v])
+
+				elif(var[-1].lower() == 'n') and self.isdnavar(var):
+					for v in self.pinpoint_mutation(var, self.codedict["dna"]['code']):
+						temp_include_profiles.append([v])
+
+		_profiles.extend(temp_include_profiles)
+		_profiles = [list(x) for x in set(tuple(x) for x in _profiles)]
+		#print("After update")
+		#print(_profiles)
+		return _profiles
 
 
 	def match(self,
@@ -2850,13 +2867,14 @@ class sonarDB(object):
 			sys.exit("input error: matching a given software version needs a software defined.")
 
 		# adding conditions of profiles to include to where clause
-		#print(include_profiles)
+		# print(include_profiles)
 		if include_profiles:
-			include_profiles = [ self.make_profile_explicit(x) for x in include_profiles ]
+			include_profiles = self._fix_X_N_search(include_profiles)
+			include_profiles = [ self.make_profile_explicit(x) for x in include_profiles ] # Fix here
 		# adding conditions of profiles to exclude to where clause
 		if exclude_profiles:
+			exclude_profiles = self._fix_X_N_search(exclude_profiles)
 			exclude_profiles = [ self.make_profile_explicit(x) for x in exclude_profiles ]
-		#print(include_profiles)
 		# adding accession, lineage, zips, and dates based conditions
 		include_acc = [x for x in accessions if not x.startswith("^")]
 		exclude_acc = [x[1:] for x in accessions if x.startswith("^")]
@@ -2967,6 +2985,8 @@ class sonarDB(object):
 
 
 				include_lin = _tmp_include_lin
+			#print(include_profiles)
+			#print(include_lin)
 
 			########################
 			rows = dbm.match(
