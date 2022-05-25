@@ -235,6 +235,7 @@ class sonarBasics(object):
 						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], elem['strand'], elem['sequence'], 0, gene_ids[elem['gene']], elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(cid, translation_table=1):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (cds)")
+				print("Success: Database was successfully installed")
 
 	# DATA IMPORT
 	## genbank handling handling
@@ -377,7 +378,8 @@ class sonarBasics(object):
 					else:
 						records.append(">" + sample + " [molecule=" + molecules[vardata['element.id']]['mol'] + "]")
 					records.append(prefixes[element_id] + "".join(molecules[vardata['element.id']]['seq']))
-				handle.write("\n".join(records) + "\n")
+				if(len(records)>0):
+					handle.write("\n".join(records) + "\n")
 
 	@staticmethod
 	def show_db_info(db):
@@ -402,19 +404,28 @@ class sonarBasics(object):
 		logging.warning("getting profile data")
 		logging.warning("processing profile data")
 		for row in cursor:
-			samples.add(row['sample.name'])
+
+			samples.add(row['samples'])
 			if row["element.type"] == "cds":
-				aa_profiles[row['sample.name']].append((row['element.id'], row['variant.start'], row['element.symbol'] + ":" + row['variant.label']))
+				aa_profiles[row['samples']].append((row['element.id'], row['variant.start'], row['element.symbol'] + ":" + row['variant.label']))
 			else:
-				nuc_profiles[row['sample.name']].append((row['element.id'], row['variant.start'], row['variant.label']))
+				nuc_profiles[row['samples']].append((row['element.id'], row['variant.start'], row['variant.label']))
 		out = []
+		print(len(samples))
+		for sample in sorted(samples):
+			print(sorted(nuc_profiles[sample], key=lambda x: (x[0], x[1])))
+
+
 		logging.warning("assembling profile data")
 		for sample in sorted(samples):
+			print(sample)
 			out.append({
 				"sample.name": sample,
 				"nuc_profile": " ".join(sorted(nuc_profiles[sample], key=lambda x: (x[0], x[1]))),
 				"aa_profile": " ".join(sorted(aa_profiles[sample], key=lambda x: (x[0], x[1])))
+
 			})
+		print(out)
 		return out
 
 	## csv
@@ -436,8 +447,9 @@ class sonarBasics(object):
 		records = collections.OrderedDict()
 		prev_sample = None
 		all_samples = set()
-		for row in sonarBasics.iter_formatted_match(cursor):
+		for row in cursor.fetchall(): # sonarBasics.iter_formatted_match(cursor):
 			chrom, pos, ref, alt, samples = row['molecule.accession'], row['variant.start'], row['variant.ref'], row['variant.alt'], row['samples']
+			print(samples)
 			if chrom not in records:
 				records[chrom] = collections.OrderedDict()
 			if pos not in records[chrom]:
@@ -446,7 +458,7 @@ class sonarBasics(object):
 				records[chrom][pos][ref] = {}
 			records[chrom][pos][ref][alt] = set(samples.split("\t"))
 			all_samples.update(samples.split("\t"))
-
+		print(all_samples)
 		if len(records) != 0:
 			all_samples = sorted(all_samples)
 			if outfile is None:
@@ -458,7 +470,7 @@ class sonarBasics(object):
 
 			# vcf header
 			handle.write("##fileformat=VCFv4.2\n")
-			handle.write("##poweredby=CovSonar\n")
+			handle.write("##poweredby=covSonar2\n")
 			handle.write("##reference=" + reference + "\n")
 			handle.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\"\n")
 			handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t" + "\t".join(all_samples)+ "\n")

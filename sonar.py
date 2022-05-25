@@ -226,6 +226,7 @@ if __name__ == "__main__":
 	if hasattr(args, 'db') and args.db:
 		if args.tool != "setup" and not args.db is None and not os.path.isfile(args.db):
 			sys.exit("input error: database does not exist.")
+			# check_db_compatibility
 
 
 	# set debugging mode
@@ -234,24 +235,23 @@ if __name__ == "__main__":
 	else:
 		debug = False
 
-	
-	# check_db_compatibility
-	if args.tool == "db-upgrade":
+
+
+	# tool procedures
+	## setup, db-upgrade
+	if args.tool == "setup":
+		if args.gbk:
+			check_file(args.gbk)
+		sonarBasics.setup_db(args.db, args.auto_create, reference_gb=args.gbk, debug=debug)
+	elif args.tool == "db-upgrade":
 		input("Warning: Backup db file before upgrading, Press Enter to continue...")
 		sonarDBManager.upgrade_db(args.db)
 	else:
 		with sonarDBManager(args.db, readonly=True) as dbm:
 			dbm.check_db_compatibility()
-
-	# tool procedures
-	## setup
-	if args.tool == "setup":
-		if args.gbk:
-			check_file(args.gbk)
-		sonarBasics.setup_db(args.db, args.auto_create, reference_gb=args.gbk, debug=debug)
-
+	## other than the above
 	## import
-	elif args.tool == "import":
+	if args.tool == "import":
 		if args.tsv is None and args.fasta is None:
 			print("Nothing to import.")
 			exit(0)
@@ -407,9 +407,9 @@ if __name__ == "__main__":
 	# restore
 	elif args.tool == "restore":
 		samples = set([x.strip() for x in args.sample])
-		for sample_file in args.sample_file:
-			check_file(sample_file)
-			with sonarBasics.open_file(args.file, compressed="auto") as handle:
+		for file in args.sample_file:
+			check_file(file)
+			with sonarBasics.open_file(file, compressed="auto") as handle:
 				for line in handle:
 					samples.add(line.strip())
 		if len(samples) == 0:

@@ -114,14 +114,102 @@ Do you really want to delete this property? [YES/no]: YES
 
 ### 3.3 Adding genomes and meta information to the database (import)
 
+Add sequence with meta information 
+
+```sh
+./sonar.py import --db test.db --fasta valid.fasta --tsv day.tsv --threads 64 --cache tmp_cache --cols sample=IMS_ID
+```
+
+Update more
+
+example:
+```sh
+
+./sonar.py import --db test.db --fasta valid.fasta --tsv day.tsv --threads 64 --cache tmp_cache --cols sample=IMS_ID
+
+./sonar.py import --db test.db --fasta valid.fasta --tsv day.tsv --threads 64 --cache tmp_cache --cols sample=IMS_ID
+```
+
+
+`sample` 
 
 ### 3.4 Query genome sequences based on profiles (match)
 
+Genomic profiles can be defined to align genomes. For this purpose, the variants related to the complete genome of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) must be expressed as follows:
+
+| type       | nucleotide level                                                  | amino acid level              |
+|-----------|-------------------------------------------------------------------|-------------------------------|
+| SNP       | ref_nuc _followed by_ ref_pos _followed by_ alt_nuc (e.g. A3451T) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aa (e.g. S:N501Y) |
+| deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) | 
+| insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |  
+
+The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `--profile`, multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `--profile` options. As an example, `--profile S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `--profile S:N501Y --profile S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option **^** profiles can be defined that have not to be present in the matched genomes. 
 
 
-####  Export DB to VCF file
+There are additional options to adjust the matching.
+
+| option             | description                                                            |
+|--------------------|------------------------------------------------------------------------|
+| --count            | count matching genomes only                                            |
 
 
+example;
+```sh
+./sonar.py match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
+
+# matching B.1.1.7 genomes in DB 'test.db' that share an additional "Erik" mutation 
+./sonar.py match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
+
+# as before but matching genomes are counted only
+./sonar.py match --profile S:E484K --LINEAGE B.1.1.7 --count --db test.db
+
+# matching genomes in DB 'test.db' sharing the "Nelly" mutation
+# and that were sampled in 2020
+./sonar.py match --profile S:N501Y  --DATE 2020-01-01:2020-12-31 --db test.db
+
+# matching genomes in DB 'mydb' sharing the "Nelly" and the "Erik" mutation but not
+# belonging to the B.1.1.7 lineage
+./sonar.py match -profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db
+```
+
+**Export to CSV/TSV/VCF file**
+
+covSonar can return results in different formats: `--format ["csv", "tsv", "vcf"]`
+
+```sh
+# example command
+./sonar.py match --profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db --format csv -o out.csv
+
+# in vcf format
+./sonar.py match -i S:N501Y S:E484K --lineage Q.1 --db test.db --format vcf -o out.vcf
+
+# example of --sample-file 
+./sonar.py match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
+```
+
+
+
+#### <u>Parent-Child relationship</u>
+
+> ⚠️ This function we only test on SARS-CoV-2
+
+If we want to search all sublineages with a given lineage, covSonar offers `--with-sublineage PROP_COLUMN` (PROP_COLUMN  means the property name that we added to our database).
+
+```sh
+./sonar.py match --profle S:E484K --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count --db test.db --debug
+```
+This query will return results ('B.1.1.7', 'Q.4', 'Q.5', 'Q.3', 'Q.6', 'Q.1', 'Q.7', 'Q.2', 'Q.8').
+
+By default, we use SARS-CoV-2 lineages for this search and the file name must be `lineage.all.tsv`.
+
+**lineage-update function for SARS-CoV-2 (COVID-19) ❗**
+
+Run `update-lineage-info` flag, it will download the latest version of lineages from https://github.com/cov-lineages/pango-designation/ and install it in `lib/lineage.all.tsv`
+
+```sh
+# example command
+./sonar.py update-lineage-info
+```
 
 ### 3.5 Show infos about the used sonar system and database (info)
 
@@ -131,19 +219,18 @@ Detailed infos about the used sonar system (e.g. version, reference,  number of 
 # Show infos about the used sonar system and database 'test.db'
 ./sonar.py info --db test.db 
 ```
+
 ### 3.6 Restore genome sequences from the database (restore)
 Genome sequences can be restored from the database based on their accessions.
 The restored sequences are combined with their original FASTA header and  shown on the screen. The screen output can be redirected to a file easily by using `>`.
 
 ```sh
-# activating conda environment if built and not active yet (see section 2)
-conda activate sonar
 # Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the 
-# database 'mydb' and write these to a fasta file named 'restored.fasta'
-path/to/covsonar/sonar.py restore --acc mygenome1 mygenome2 --db mydb > restored.fasta
+# database 'test.db' and write these to a fasta file named 'restored.fasta'
+./sonar.py restore --sample mygenome1 mygenome2 --db test.db > restored.fasta
 # as before, but consider all accessions from 'accessions.txt' (the file has to
 # contain one accession per line) 
-path/to/covsonar/sonar.py restore --file accessions.txt --db mydb > restored.fasta
+./sonar.py restore --sample-file accessions.txt --db test.db > restored.fasta
 ```
 
 ### 3.7 Database management (db-upgrade, optimize)
@@ -176,15 +263,6 @@ Success: Database upgrade was successfully completed
 ```
 ⚠️ Warning: Backup the db file before upgrade.
 
-
-#### lineage-update function
-
-Run `update-lineage-info` flag, it will download the latest version of lineages from https://github.com/cov-lineages/pango-designation/ and install in `lib/lineage.all.tsv`
-
-```sh
-# example command
-./sonar.py update-lineage-info
-```
 
 ## How to contribute 🏗️ 
 

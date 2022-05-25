@@ -425,7 +425,10 @@ class sonarDBManager():
 	def get_alignment_data(self, sample_name, reference_accession=None):
 		if reference_accession is None:
 			sql = "SELECT \"reference.accession\" as acc FROM alignmentView WHERE \"sample.name\" = ? LIMIT 1"
-			reference_accession = self.cursor.execute(sql, [sample_name]).fetchone()['acc']
+			reference_accession = self.cursor.execute(sql, [sample_name]).fetchone()
+			if ( reference_accession is None ):
+				return ""
+			reference_accession = reference_accession['acc']
 		sql = "SELECT \"element.sequence\", \"element.symbol\", \"element.id\" FROM alignmentView WHERE \"sample.name\" = ? AND \"reference.accession\" = ? "
 		return self.cursor.execute(sql, [sample_name, reference_accession])
 
@@ -982,7 +985,7 @@ class sonarDBManager():
 				
 			include_lin = _tmp_include_lin
 			properties[lineage_col] = include_lin
-		print(properties)
+		# print(properties)
 
 		if properties:
 			for pname, vals in properties.items():
@@ -1094,7 +1097,7 @@ class sonarDBManager():
 						  AND sample.id  IN (" + selected_sample_ids + ")"
 			_2_rows = self.cursor.execute(_2_final_sql).fetchall()
 
-			print(set([ x['sample.name'] for x in _1_rows ]) ^ set([ x['name'] for x in _2_rows ]))
+			# print(set([ x['sample.name'] for x in _1_rows ]) ^ set([ x['name'] for x in _2_rows ]))
 			# To combine:
 			# We update list of dict (update on result from query #2)
 			# merge all results		
@@ -1131,10 +1134,10 @@ class sonarDBManager():
 		elif format == "count":
 			sql = "SELECT count(DISTINCT id) as count FROM (" + sample_selection_sql + ")"
 		elif format == "vcf":
-			sql = "SELECT \"molecule.accession\", \"variant.start\", \"variant.ref\", \"variant.alt\", group_concat(\"sample.name\") as samples FROM variantView WHERE \"sample.id\" IN (" + sample_selection_sql + ") AND " + genome_element_condition + nn + "GROUP BY \"molecule.accession\", \"variant.start\", \"variant.ref\", \"variant.alt\" ORDER BY \"molecule.accession\", \"variant.start\""
+			sql = "SELECT \"element.id\",  \"element.type\", \"molecule.accession\", \"variant.start\", \"variant.ref\", \"variant.alt\", \"variant.label\", group_concat(\"sample.name\") as samples FROM variantView WHERE \"sample.id\" IN (" + sample_selection_sql + ") AND " + genome_element_condition + nn + "GROUP BY \"molecule.accession\", \"variant.start\", \"variant.ref\", \"variant.alt\" ORDER BY \"molecule.accession\", \"variant.start\""
 		else:
 			sys.exit("error: '" + format + "' is not a valid output format")
-		return self.cursor.execute(sql, property_vals + profile_vals) #.fetchall()
+		return self.cursor.execute(sql, property_vals + profile_vals)# .fetchall()
 	# MISC
 
 	@staticmethod
