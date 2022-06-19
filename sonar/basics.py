@@ -14,7 +14,6 @@ from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 from Bio.Emboss.Applications import StretcherCommandline
 import pickle
-from tqdm import tqdm
 import tempfile
 import itertools
 from contextlib import ExitStack
@@ -381,6 +380,15 @@ class sonarBasics(object):
 				if(len(records)>0):
 					handle.write("\n".join(records) + "\n")
 
+	# restore
+	@staticmethod
+	def delete(db, *samples, debug):
+		with sonarDBManager(db, readonly=False, debug=debug) as dbm:
+			before = dbm.count_samples()
+			dbm.delete_samples(*samples)
+			after = dbm.count_samples()
+			print(before-after, "of", len(samples), "samples found and deleted.", after, "samples remain in the database.")
+
 	@staticmethod
 	def show_db_info(db):
 		with sonarDBManager(db, readonly=True) as dbm:
@@ -515,7 +523,7 @@ class sonarBasics(object):
 				return open(fname, mode, encoding=encoding)
 		except:
 			sys.exit("input error: " + fname + " cannot be opened.")
-	
+
 	@staticmethod
 	def set_key(dictionary, key, value):
 		if key not in dictionary:

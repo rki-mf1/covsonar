@@ -23,6 +23,7 @@ from pickle import load as load_pickle
 import gzip
 import lzma
 import pprint
+from collections import defaultdict
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -30,13 +31,14 @@ class sonarCache():
 	"""
 
 	"""
-	def __init__(self, db=None, outdir=None, refacc=None, logfile= None, allow_updates=True, ignore_errors=False, temp=False, debug=False):
+	def __init__(self, db=None, outdir=None, refacc=None, logfile= None, allow_updates=True, ignore_errors=False, temp=False, debug=False, disable_progress=False):
 		self.db = db
 		self.allow_updates = allow_updates
 		self.debug = debug
 		self.refacc = refacc
 		self.temp = temp
 		self.ignore_errors = ignore_errors
+		self.disable_progress = disable_progress
 
 		with sonarDBManager(self.db, debug=self.debug) as dbm:
 			self.refmols = dbm.get_molecule_data("\"molecule.accession\"", "\"molecule.id\"", "\"molecule.standard\"" , "\"translation.id\"", reference_accession=self.refacc)
@@ -63,6 +65,7 @@ class sonarCache():
 		os.makedirs(self.var_dir, exist_ok=True)
 		os.makedirs(self.sample_dir, exist_ok=True)
 		self._samplefiles = set()
+		self._samplefiles_to_profile = set()
 		self._refs = set()
 		self._lifts = set()
 		self._tt = set()
@@ -182,19 +185,19 @@ class sonarCache():
 			"tt_file": ttfile,
 			"algn_file": algnfile,
 			"var_file": varfile,
-			"lift_file": liftfile
+			"lift_file": liftfile,
+			"properties": properties
 			}
 		fname = self.get_sample_fname(name) # full path
-		if os.path.isfile(fname):
-			if self.sample_collision(fname, data):
-				sys.exit("sample data collision: data differs for sample " + name + " (" + header + ").")
-		else:
-			try:
-				self.write_pickle(fname, data)
-			except:
-				os.makedirs(os.path.dirname(fname))
-				self.write_pickle(fname, data)
+		try:
+			self.write_pickle(fname, data)
+		except OSError:
+			os.makedirs(os.path.dirname(fname), exist_ok=True)
+			self.write_pickle(fname, data)
+
 		self._samplefiles.add(fname)
+		if algnid is None:
+			self._samplefiles_to_profile.add(fname)
 		return fname
 
 	def iter_samples(self):
@@ -210,8 +213,8 @@ class sonarCache():
 			try:
 				with open(fname, "w") as handle:
 					handle.write(sequence)
-			except:
-				os.makedirs(os.path.dirname(fname))
+			except OSError:
+				os.makedirs(os.path.dirname(fname), exist_ok=True)
 				with open(fname, "w") as handle:
 					handle.write(sequence)
 		return fname
@@ -297,29 +300,44 @@ class sonarCache():
 		except:
 			sys.exit("input error: " + fname + " cannot be opened.")
 
+	def process_fasta_entry(self, header, seq):
+		sample_id = header.replace("\t", " ").replace("|", " ").split(" ")[0]
+		refmol = self.get_refmol(header)
+		if not refmol:
+			sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(record.description) + ").")
+		seq = sonarBasics.harmonize(seq)
+		seqhash = sonarBasics.hash(seq)
+		refmolid = self.refmols[refmol]['molecule.id']
+		return {
+			   'name': sample_id,
+			   'header': header,
+			   'seqhash': seqhash,
+			   'sequence': seq,
+			   'refmol': refmol,
+			   'refmolid': refmolid,
+			   'translation_id': self.refmols[refmol]['translation.id'],
+			   'properties': self.get_properties(header)
+			   }
+
 	def iter_fasta(self, *fnames):
 		'''
 		This function iterates over the fasta files and returns a dictionary for each record
 		'''
 		for fname in fnames:
-			with self.open_file(fname) as handle:
-				for record in SeqIO.parse(handle, "fasta"):
-					refmol = self.get_refmol(record.description)
-					if not refmol:
-						sys.exit("input error: " +  record.id + " refers to an unknown reference molecule (" + self._molregex.search(record.description) + ").")
-					refmolid = self.refmols[refmol]['molecule.id']
-					seq = sonarBasics.harmonize(record.seq)
-					seqhash = sonarBasics.hash(seq)
-					yield {
-						   'name': record.id,
-						   'header': record.description,
-						   'seqhash': seqhash,
-						   'sequence': seq,
-						   'refmol': refmol,
-						   'refmolid': refmolid,
-						   'translation_id': self.refmols[refmol]['translation.id'],
-						   'properties': self.get_properties(record.description)
-						   }
+			with self.open_file(fname) as handle, tqdm(desc="processing " + fname + "...", total=os.path.getsize(fname), unit="bytes", unit_scale=True, bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=self.disable_progress) as pbar:
+				seq = []
+				for line in handle:
+					pbar.update(len(line))
+					line = line.strip()
+					if line.startswith(">"):
+						if seq:
+							yield self.process_fasta_entry(header, "".join(seq))
+							seq = []
+						header = line[1:]
+					else:
+						seq.append(line)
+				if seq:
+					yield self.process_fasta_entry(header, "".join(seq))
 
 	def get_refmol(self, fasta_header):
 		mol = self._molregex.search(fasta_header)
@@ -377,23 +395,28 @@ class sonarCache():
 	def get_properties(self, fasta_header):
 		return { x.group(1): x.group(2) for x in self._propregex.finditer(fasta_header) }
 
-	def add_fasta(self, *fnames):
-		with sonarDBManager(self.db, debug=False) as dbm:
-			for i in tqdm(range(len(fnames))):
-				for data in self.iter_fasta(fnames[i]):
+	def add_fasta(self, *fnames, propdict=defaultdict(dict)):
+		default_properties = {x: self.properties[x]['standard'] for x in self.properties}
+		with sonarDBManager(self.db, debug=self.debug) as dbm:
+			for fname in fnames:
+				for data in self.iter_fasta(fname):
 					# check sample
-					data['sampleid'] = dbm.get_sample_id(data['name'])
+					data['sampleid'], seqhash = dbm.get_sample_data(data['name'])
 					data['sourceid'] = dbm.get_source(data['refmolid'])['id']
 
 					# check properties
 					if data['sampleid'] is None:
-						data['properties'].update({ x: self.properties[x]['standard']  for x in self.properties if not x in data['properties'] })
+						props = default_properties
+						for k, v in data['properties'].items():
+							props[k] = v
+						for k, v in propdict[data['sampleid']].items():
+							props[k] = v
+						data['properties'] = props
 					elif not self.allow_updates:
-						self.log(data['name'] + " skipped as it exists in the database and updating is disabled")
 						continue
 					else:
-						stored_properties = dbm.get_properties(data['name'])
-						data['properties'] = { x: data['properties'][x] for x in data['properties'].items() if stored_properties[x] != y }
+						for k, v in propdict[data['sampleid']].items():
+							data['properties'][k] = v
 
 					# check reference
 					refseq_id = self.get_refseq_id(data['refmol'])
@@ -412,7 +435,15 @@ class sonarCache():
 						data['liftfile'] = self.cache_lift(refseq_id, data['refmol'], self.get_refseq(data['refmol']))
 						data['algnfile'] = self.get_algn_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
 						data['varfile'] = self.get_var_fname(data['seqhash'] + "@" + self.get_refhash(data['refmol']))
+					elif data['seqhash'] != seqhash:
+						data['seqfile'] = self.cache_sequence(data['seqhash'], data['sequence'])
+						data['reffile'] = None
+						data['ttfile'] = None
+						data['liftfile'] = None
+						data['algnfile'] = None
+						data['varfile'] = None
 					else:
+						data['seqhash'] = None
 						data['seqfile'] = None
 						data['reffile'] = None
 						data['ttfile'] = None
@@ -422,15 +453,16 @@ class sonarCache():
 					del(data['sequence'])
 					self.cache_sample(**data)
 
-	def import_samples(self):
+	def import_cached_samples(self):
 		refseqs = {}
-		with sonarDBManager(self.db, debug=self.debug) as dbm:
-			for sample_data in tqdm(self.iter_samples(), total=len(self._samplefiles)):
+		with sonarDBManager(self.db, readonly=False, debug=self.debug) as dbm:
+			for sample_data in tqdm(self.iter_samples(), total=len(self._samplefiles), desc="importing samples...", unit="samples", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=self.disable_progress):
 				try:
 					# nucleotide level import
-					sampid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
-					if sample_data['algnid'] is None:
+					if not sample_data['seqhash'] is None:
+						sampleid = dbm.insert_sample(sample_data['name'], sample_data['seqhash'])
 						algnid = dbm.insert_alignment(sample_data['seqhash'], sample_data['refmolid'])
+					if not sample_data['var_file'] is None:
 						with open(sample_data['var_file'], "r") as handle:
 							for line in handle:
 								if line == "//":
@@ -439,38 +471,42 @@ class sonarCache():
 								dbm.insert_variant(algnid, vardat[4], vardat[0], vardat[3], vardat[1], vardat[2], vardat[5])
 							if line != "//":
 								sys.exit("cache error: corrupted file (" + sample_data['var_file'] + ")")
-
 					# paranoia test
-					try:
-						seq = list(refseqs[sample_data['refmolid']])
-					except:
-						refseqs[sample_data['refmolid']] = list(dbm.get_sequence(sample_data['refmolid']))
-						seq = list(refseqs[sample_data['refmolid']])
-					prefix = ""
-					for vardata in dbm.iter_dna_variants(sample_data['name'], sample_data['refmolid']):
-						if vardata['variant.alt'] == " ":
-							for i in range(vardata['variant.start'], vardata['variant.end']):
-								seq[i] = ""
-						elif vardata['variant.start'] >= 0:
-							seq[vardata['variant.start']] = vardata['variant.alt']
-						else:
-							prefix = vardata['variant.alt']
-					seq = prefix + "".join(seq)
-					with open(sample_data['seq_file'], "r") as handle:
-						orig_seq = handle.read()
-					if seq != orig_seq:
-						aligner = sonarAligner()
-						with TemporaryDirectory() as tempdir:
-							qryfile = os.path.join(tempdir, "qry")
-							reffile = os.path.join(tempdir, "ref")
-							with open(qryfile, "w") as handle:
-								handle.write(">seq\n" + seq)
-							with open(reffile, "w") as handle:
-								handle.write(">ref\n" + orig_seq)
-							qry, ref = aligner.align(qryfile, reffile)
-						with open("paranoid.alignment.fna", "w") as handle:
-							handle.write(">original_" + sample_data['name'] + "\n" + ref + "\n>restored_" + sample_data['name'] + "\n" + qry)
-						sys.exit("import error: original sequence of sample " + sample_data['name'] + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)")
+					if not sample_data['seqhash'] is None:
+						try:
+							seq = list(refseqs[sample_data['refmolid']])
+						except:
+							refseqs[sample_data['refmolid']] = list(dbm.get_sequence(sample_data['refmolid']))
+							seq = list(refseqs[sample_data['refmolid']])
+
+						prefix = ""
+						for vardata in dbm.iter_dna_variants(sample_data['name'], sample_data['refmolid']):
+							if vardata['variant.alt'] == " ":
+								for i in range(vardata['variant.start'], vardata['variant.end']):
+									seq[i] = ""
+							elif vardata['variant.start'] >= 0:
+								seq[vardata['variant.start']] = vardata['variant.alt']
+							else:
+								prefix = vardata['variant.alt']
+						seq = prefix + "".join(seq)
+
+						with open(sample_data['seq_file'], "r") as handle:
+							orig_seq = handle.read()
+
+						if seq != orig_seq:
+							aligner = sonarAligner()
+							with TemporaryDirectory() as tempdir:
+								qryfile = os.path.join(tempdir, "qry")
+								reffile = os.path.join(tempdir, "ref")
+								with open(qryfile, "w") as handle:
+									handle.write(">seq\n" + seq)
+								with open(reffile, "w") as handle:
+									handle.write(">ref\n" + orig_seq)
+								qry, ref = aligner.align(qryfile, reffile)
+							with open("paranoid.alignment.fna", "w") as handle:
+								handle.write(">original_" + sample_data['name'] + "\n" + ref + "\n>restored_" + sample_data['name'] + "\n" + qry)
+							sys.exit("import error: original sequence of sample " + sample_data['name'] + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)")
+
 				except Exception as e:
 					print("\n------- Fatal Error ---------")
 					print("\nDebugging Information")

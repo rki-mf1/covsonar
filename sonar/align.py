@@ -46,14 +46,16 @@ class sonarAligner(object):
 		with open(fname, 'rb') as handle:
 			data = pickle.load(handle, encoding="bytes")
 
-		sourceid = str(data['sourceid'])
-		if os.path.isfile(data['var_file']):
-			line = ""
+		if data['var_file'] is None:
+			return True
+		elif os.path.isfile(data['var_file']):
 			with open(data['var_file'], "r") as handle:
 				for line in handle:
 					pass
 			if line == "//":
-				return
+				return True
+
+		sourceid = str(data['sourceid'])
 		alignment = self.align(data['seq_file'], data['ref_file'])
 		nuc_vars = [x for x in self.extract_vars(*alignment, sourceid)]
 		vars = "\n".join(["\t".join(x) for x in nuc_vars])
@@ -67,10 +69,11 @@ class sonarAligner(object):
 		try:
 			with open(data['var_file'], "w") as handle:
 				handle.write(vars + "//")
-		except:
-			os.makedirs(os.path.dirname(data['var_file']))
+		except OSError:
+			os.makedirs(os.path.dirname(data['var_file']), exist_ok=True)
 			with open(data['var_file'], "w") as handle:
 				handle.write(vars + "//")
+		return True
 
 	def extract_vars(self, qry_seq, ref_seq, elemid):
 		l = len(qry_seq)

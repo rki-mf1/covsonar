@@ -66,7 +66,6 @@ def parse_args():
 	thread_parser = argparse.ArgumentParser(add_help=False)
 	thread_parser.add_argument('-t', '--threads', metavar="INT", help="number of threads to use (default: 1)", type=int, default=1)
 
-
 	# main parser
 	## setup parser
 	parser_setup = subparsers.add_parser('setup', parents=[general_parser], help='Setup a new database.')
@@ -76,13 +75,13 @@ def parse_args():
 	## import parser
 	parser_import = subparsers.add_parser('import', parents=[general_parser, thread_parser], help='Import genome sequences and sample information to the database.')
 	parser_import.add_argument('--fasta', help="fasta file containing genome sequences to import", type=str, nargs="+", default=None)
-	parser_import.add_argument('--tsv', help="tab-delimited file containing sample properties to import", type=str, default=None)
-	parser_import.add_argument('--cols', help="define column names for sample properties (if different from property name)", type=str, nargs="+", default=None)
+	parser_import.add_argument('--tsv', help="tab-delimited file containing sample properties to import", type=str, nargs="+", default=None)
+	parser_import.add_argument('--cols', help="define column names for sample properties (if different from property name)", type=str, nargs="+", default=[])
+	parser_import.add_argument('--no-autodetect', help="do not auto-detect of columns for sample properties based on property names", action="store_true")
 	parser_import.add_argument('--no-update', help="skip samples already existing in the database", action="store_true")
 	parser_import.add_argument('--cache', metavar="DIR", help="directory for chaching data (default: a temporary directory is created)", type=str, default=None)
 	parser_import_g1 = parser.add_mutually_exclusive_group()
-	parser_import_g1.add_argument('--noprogress', '-p', help="don't show progress bars while importing", action="store_true")
-	parser_import_g1.add_argument('--quiet', '-q', help="verbose any output", action="store_true")
+	parser_import_g1.add_argument('--no-progress', '-p', help="don't show progress bars while importing", action="store_true")
 
 	## view-prop parser
 	parser_viewprops= subparsers.add_parser('list-prop', parents=[general_parser], help='View sample properties added to the database.')
@@ -104,8 +103,11 @@ def parse_args():
 	parser_match_format = parser_match.add_mutually_exclusive_group()
 	parser_match_format.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match_format.add_argument('--format', help="output format (default: tsv)", choices=["csv", "tsv", "vcf"], default="tsv")
-
 	parser_match.add_argument('--with-sublineage', metavar="STR",  help="recursively get all sublineages from a given lineage. ", type=str, default=None)
+
+	## delete parser
+	parser_restore = subparsers.add_parser('delete', parents=[ref_parser, sample_parser, general_parser], help='delete one or more samples from the database.')
+	parser_restore.add_argument('--aligned', help="ise aligned form (deletions indicated by - and insertions by lower-case letters)", action="store_true")
 
 	## restore parser
 	parser_restore = subparsers.add_parser('restore', parents=[ref_parser, sample_parser, general_parser], help='restore sequence(s) from the database.')
@@ -194,27 +196,6 @@ class sonar():
 				spacer = " " * (maxlen-len(field))
 				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
-
-def process_update_expressions(expr):
-	allowed = {"accession": "accession", "lineage": "lineageCol",
-	 "date": "dateCol", "zip": "zipCol", "gisaid": "gisaidCol",
-	  "ena": "enaCol", "collection": "collectionCol", "technology": "technologyCol",
-	   "platform": "platformCol", "chemistry": "chemistryCol", "software": "softwareCol",
-	    "version": "versionCol", "material": "materialCol", "ct": "ctCol", "source": "sourceCol",
-		 "lab": "labCol", "submission_date":"submission_date"}
-	fields = {}
-	for val in expr:
-		val = val.split("=")
-		if val[0] not in allowed or len(val) == 1:
-			sys.exit("input error: " + val[0] + " is not a valid expression")
-		key = allowed[val[0]]
-		if key in fields:
-			sys.exit("input error: multiple assignments for " + val[0])
-		fields[key] = "=".join(val[1:])
-		if 'accession' not in fields:
-			sys.exit("input error: an accession column has to be defined.")
-	return fields
-
 def check_file(fname):
 	if not os.path.isfile(fname):
 		sys.exit("iput error: " + fname + " is not a valid file.")
@@ -236,7 +217,6 @@ if __name__ == "__main__":
 		debug = False
 
 
-
 	# tool procedures
 	## setup, db-upgrade
 	if args.tool == "setup":
@@ -252,82 +232,90 @@ if __name__ == "__main__":
 	## other than the above
 	## import
 	if args.tool == "import":
+		if args.no_update:
+			update = False
+			print("import mode: skipping existing samples")
+			if args.fasta is None:
+				print("Nothing to import.")
+				exit(0)
+		else :
+			update = True
+			print("import mode: updating existing samples")
+
 		if args.tsv is None and args.fasta is None:
 			print("Nothing to import.")
 			exit(0)
 
-		### checking & processing provided sample properties
-		if args.tsv:
-			with open(args.tsv) as handle:
-				headline = [x.strip() for x in handle.readline().split("\t")]
+		### prop handling
+		with sonarDBManager(args.db, readonly=True) as dbm:
+			db_properties = set(dbm.properties.keys())
+			db_properties.add('sample')
 
-			with sonarDBManager(args.db, debug=args.debug) as dbm:
-				stored_property_names = set(list(dbm.properties.keys()))
+		colnames = {} if args.no_autodetect else {x: x for x in db_properties}
+		for x in args.cols:
+			if x.count("=") != 1:
+				sys.exit("input error: " + x + " is not a valid sample property assignment.")
+			k, v = x.split("=")
+			if k not in db_properties:
+				sys.exit("input error: sample property " + k + " is unknown to the selected database. Use list-props to see all valid properties.")
+			colnames[k] = v
 
-			cols = {x: x for x in stored_property_names if x in headline}
-			cols['sample'] = 'sample'
-			print(args.cols)
-			if not args.cols is None:
-				for x in args.cols:
-					if x.count("=") != 1:
-						sys.exit("input error: " + x + " is not a valid sample property assignment.")
-					k, v = x.split("=")
-					if k not in stored_property_names and k != "sample":
-						sys.exit("input error: sample property " + k + " is unknown.")
-					cols[k] = v
+		if "sample" not in colnames:
+			sys.exit("input error: a sample column has to be assigned.")
 
-			for v in cols.values():
-				if headline.count(v) != 1:
-					sys.exit("input error: column " + v + " column is missing or ambiguous in the provided tsv file.")
+		properties = defaultdict(dict)
+		for tsv in args.tsv:
+			with open(tsv, "r") as handle, tqdm(desc="processing " + tsv + "...", total=os.path.getsize(tsv), unit="bytes", unit_scale=True, bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=args.no_progress) as pbar:
+				line = handle.readline()
+				pbar.update(len(line))
+				fields = line.strip("\r\n").split("\t")
+				tsv_cols = {}
+				print()
+				for x in sorted(colnames.keys()):
+					c = fields.count(colnames[x])
+					if c == 1:
+						tsv_cols[x] = fields.index(colnames[x])
+						print("  " + x + " <- " + colnames[x])
+					elif c > 1:
+						sys.exit("error: " + colnames[x] + " is not an unique column.")
+				if 'sample' not in tsv_cols:
+					sys.exit("error: tsv file does not contain required sample column.")
+				elif len(tsv_cols) == 1:
+					sys.exit("input error: tsv does not provide any informative column.")
+				for line in handle:
+					pbar.update(len(line))
+					fields = line.strip("\r\n").split("\t")
+					sample = fields[tsv_cols['sample']]
+					for x in tsv_cols:
+						if x == "sample":
+							continue
+						properties[sample][x] = fields[tsv_cols[x]]
 
-			cols = {x: headline.index(cols[x]) for x in cols}
-
-			if len(cols) == 1:
-				sys.exit("input error: tsv does not provide any informative column.")
-		if args.no_update:
-			args.update = False
-			print("-- No update --")
-		else :
-			args.update = True
 		### setup cache
 		temp = False if args.cache else True
-		cache = sonarCache(args.db, outdir=args.cache, logfile="import.log", allow_updates=args.update, temp=temp, debug=args.debug)
+		cache = sonarCache(args.db, outdir=args.cache, logfile="import.log", allow_updates=update, temp=temp, debug=args.debug, disable_progress=args.no_progress)
 
 		### importing sequences
-		stage = 1
 		if not args.fasta is None:
+			cache.add_fasta(*args.fasta, propdict = properties)
 
-			print("STAGE " + str(stage) + ": caching data")
-			stage += 1
-			cache.add_fasta(*args.fasta)
-
-			print("STAGE " + str(stage) + ": profiling genomes")
-			stage += 1
 			aligner = sonarAligner()
-			l = len(cache._samplefiles)
-			with WorkerPool(n_jobs=args.threads, start_method='fork') as pool:
-				results = pool.map(aligner.process_cached_sample, cache._samplefiles, iterable_len=l, n_splits=args.threads, progress_bar=True)
+			l = len(cache._samplefiles_to_profile)
+			with WorkerPool(n_jobs=args.threads, start_method='fork') as pool, tqdm(desc="profiling sequences...", total=l, unit="seqs", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=args.no_progress) as pbar:
+				for _ in pool.imap_unordered(aligner.process_cached_sample, cache._samplefiles_to_profile):
+				    pbar.update(1)
 
-			print("STAGE " + str(stage) + ": importing profiles")
-			stage += 1
-			cache.import_samples()
+			cache.import_cached_samples()
 
 		### importing properties
-		if args.tsv:
-			print("STAGE " + str(stage) + ": importing sample properties")
+		elif args.tsv:
 			with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
-					with open(args.tsv) as handle:
-						headline = handle.readline()
-						for i, line in enumerate(tqdm(handle)):
-							fields = [x.strip() for x in line.split("\t")]
-							sample_name = fields[cols['sample']]
-							sample_id = dbm.get_sample_id(sample_name)
-							if not sample_id:
-								continue
-							for property_name, col_index in cols.items():
-								if property_name == "sample":
-									continue
-								dbm.insert_property(sample_id, property_name, fields[col_index])
+				for sample_name in tqdm(properties, desc="import data ...", total=len(properties), unit="samples", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=args.no_progress):
+					sample_id = dbm.get_sample_id(sample_name)
+					if not sample_id:
+						continue
+					for property_name, value in sample.items():
+						dbm.insert_property(sample_id, property_name, fields[col_index])
 
 	## view-prop
 	elif args.tool == "list-prop":
@@ -404,6 +392,19 @@ if __name__ == "__main__":
 			else:
 				print("property not deleted.")
 
+	# delete
+	elif args.tool == "delete":
+		samples = set([x.strip() for x in args.sample])
+		for file in args.sample_file:
+			check_file(file)
+			with sonarBasics.open_file(file, compressed="auto") as handle:
+				for line in handle:
+					samples.add(line.strip())
+		if len(samples) == 0:
+			print("Nothing to delete.")
+		else:
+			sonarBasics.delete(args.db, *samples, debug=args.debug)
+
 	# restore
 	elif args.tool == "restore":
 		samples = set([x.strip() for x in args.sample])
@@ -444,8 +445,8 @@ if __name__ == "__main__":
 
 		# for reserved keywords
 		reserved_key = ["sample"]
-		for pname in reserved_key: 
-			if hasattr(args, pname): 
+		for pname in reserved_key:
+			if hasattr(args, pname):
 				if pname == "sample" and len(getattr(args, pname)) > 0:
 					# reserved_props[pname] = set([x.strip() for x in args.sample])
 					reserved_props = sonarBasics.set_key(reserved_props,pname,getattr(args, pname))

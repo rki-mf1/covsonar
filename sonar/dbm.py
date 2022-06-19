@@ -76,7 +76,7 @@ class sonarDBManager():
 		self.__uri = self.get_uri(dbfile)
 		self.debug = debug
 		self.__properties = False
-		self.__illegal_properties = {'molecule', }
+		self.__illegal_properties = { }
 		self.__default_reference_id = False
 		self.__lineage_sublineage_dict = None
 		self.__rootdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -198,8 +198,9 @@ class sonarDBManager():
 		self.cursor.execute(sql, [translation_table, codon, aa])
 
 	def add_property(self, name, datatype, querytype, description, standard=None):
-		if name == "sample":
-			sys.exit("error: 'sample' is reserved and cannot be used as property name")
+		name = name.upper()
+		if name in self.__illegal_properties:
+			sys.exit("error: '" + str(name) + "' is reserved and cannot be used as property name")
 		if not re.match("^[a-zA-Z0-9_]+$", name):
 			sys.exit("error: invalid property name (property names can contain only letters, numbers and underscores)")
 		if name in self.properties:
@@ -251,7 +252,7 @@ class sonarDBManager():
 
 	def insert_sample(self, sample_name, seqhash):
 		self.insert_sequence(seqhash)
-		sql = "INSERT OR IGNORE INTO sample (name, seqhash, datahash) VALUES(?, ?, ?);"
+		sql = "INSERT OR REPLACE INTO sample (name, seqhash, datahash) VALUES(?, ?, ?);"
 		self.cursor.execute(sql, [sample_name, seqhash, ""])
 		sql = "SELECT id FROM sample WHERE name = ?;"
 		sid = self.cursor.execute(sql, [sample_name]).fetchone()['id']
@@ -304,9 +305,9 @@ class sonarDBManager():
 
 	# DELETING DATA
 
-	def delete_sample(self, sample_name):
-		sql = "DELETE FROM sample WHERE name = ?;"
-		self.cursor.execute(sql, [sample_name])
+	def delete_samples(self, *sample_names):
+		sql = "DELETE FROM sample WHERE name IN (" + ", ".join(["?"]*len(sample_names)) + ");"
+		self.cursor.execute(sql, sample_names)
 
 	def delete_property(self, property_name):
 		sql = "DELETE FROM sample2property WHERE property_id = ?;"
@@ -324,6 +325,11 @@ class sonarDBManager():
 		sql = "SELECT id FROM sample WHERE name = ? LIMIT 1;"
 		row = self.cursor.execute(sql, [sample_name]).fetchone()
 		return row['id'] if row else None
+
+	def get_sample_data(self, sample_name):
+		sql = "SELECT id, seqhash FROM sample WHERE name = ? LIMIT 1;"
+		row = self.cursor.execute(sql, [sample_name]).fetchone()
+		return (row['id'], row['seqhash']) if row else (None, None)
 
 	def seq_exists(self, seqhash):
 		sql = "SELECT id FROM sample WHERE seqhash=? LIMIT 1;"
@@ -433,7 +439,7 @@ class sonarDBManager():
 		return self.cursor.execute(sql, [sample_name, reference_accession])
 
 	def get_alignment_id(self, seqhash, element_id):
-		sql = "SELECT id FROM alignment WHERE \"element.id\" = ? AND \"seqhash\" = ? LIMIT 1;"
+		sql = "SELECT id FROM alignment WHERE \"element_id\" = ? AND \"seqhash\" = ? LIMIT 1;"
 		row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
 		if row:
 			return row['id']
@@ -960,13 +966,13 @@ class sonarDBManager():
 			include_lin = properties.get(lineage_col)
 			negate = False
 			while include_lin:
-				in_lin = include_lin.pop(0)	
+				in_lin = include_lin.pop(0)
 				if in_lin.startswith("^"):
 					in_lin = in_lin[1:]
 					negate = True
 				value = self.lineage_sublineage_dict.get(in_lin, 'none') # provide a default value if the key is missing:
 				if value != 'none':
-					if negate: 
+					if negate:
 						in_lin = "^"+in_lin
 					_tmp_include_lin.append(in_lin)
 
@@ -982,7 +988,7 @@ class sonarDBManager():
 						in_lin = "^"+in_lin
 					_tmp_include_lin.append(in_lin)
 				negate = False
-				
+
 			include_lin = _tmp_include_lin
 			properties[lineage_col] = include_lin
 		# print(properties)
@@ -1017,16 +1023,16 @@ class sonarDBManager():
 				sample_selection_sql = property_sqls + " INTERSECT " + profile_sqls
 		elif ( property_sqls or profile_sqls ):
 			sample_selection_sql = property_sqls + profile_sqls
-		else: 
+		else:
 			if  "sample" in reserved_props:
 				 # if 'sample' is presented we just use only samples
 				samples_condition = []
 				for pname, vals in reserved_props.items():
-					if pname == "sample": 
+					if pname == "sample":
 						for x in vals:
-							samples_condition.append('\"' + x+'\"') 
+							samples_condition.append('\"' + x+'\"')
 				sample_selection_sql = "SELECT id FROM sample WHERE name IN (" + " , ".join(samples_condition) + ")"
-			
+
 				property_sqls = []
 				property_vals = []
 			else:
@@ -1052,31 +1058,31 @@ class sonarDBManager():
 			cds_element_condition = "\"element.id\" = " + cds_element_condition[0]
 		else:
 			cds_element_condition = "\"element.id\" IN (" + ", ".join(cds_element_condition) + ")"
-		
+
 		# standard query
 		if format == "csv" or format == "tsv":
 
 			## select samples
 			sql = sample_selection_sql
 			sample_ids = self.cursor.execute(sql, property_vals + profile_vals).fetchall()
-			
+
 			if not sample_ids:
 				return []
 			selected_sample_ids = ", ".join([str(x['id']) for x in sample_ids])
 			# rows = {x['id']: {"id": x['id']} for x in sample_ids}
 			# print(len(sample_ids))
 
-			### 
+			###
 			# Current solution:
 			# After we got the selected IDs
 			# We use two-stage query and then combine both results together to produce final result
 			# 1. Query properties
-			# 2. Query  AA/NT profile 
+			# 2. Query  AA/NT profile
 			fields = ["\"sample.name\""] + ["\"" + x + "\"" for x in self.properties]
 			sql = "SELECT name as " + ", ".join(fields) + "FROM sample "
 
-			joins = ["LEFT JOIN (SELECT sample_id, value_" + y['datatype'] + " as " + x 
-					+ " FROM sample2property WHERE property_id = " + str(y['id']) + ") as t" +str(y['id']) 
+			joins = ["LEFT JOIN (SELECT sample_id, value_" + y['datatype'] + " as " + x
+					+ " FROM sample2property WHERE property_id = " + str(y['id']) + ") as t" +str(y['id'])
 					+ " ON sample.id = t" + str(y['id'])
 					+ ".sample_id" for x,y in self.properties.items()]
 			_1_final_sql = sql + " ".join(joins) + " WHERE sample.id IN ("+selected_sample_ids+")"
@@ -1100,18 +1106,18 @@ class sonarDBManager():
 			# print(set([ x['sample.name'] for x in _1_rows ]) ^ set([ x['name'] for x in _2_rows ]))
 			# To combine:
 			# We update list of dict (update on result from query #2)
-			# merge all results		
+			# merge all results
 			_1_rows.extend(list(map(lambda x,y: y if x.get('sample.name') != y.get('name')
-					 else 
+					 else
 					 x.update(
 					{ key: value for key, value in y.items() if (key == "nt_profile" )or key == "aa_profile"})
 					, _1_rows, _2_rows)))
-				
+
 			_1_rows = list(filter(None, _1_rows))
 
-			# since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name) 
+			# since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name)
 			# at _2_rows so we can return _2_rows only a
-			return   _1_rows #  list(rows.values()) 
+			return   _1_rows #  list(rows.values())
 			"""
 			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
 		       SELECT  *, \
