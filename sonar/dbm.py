@@ -1086,11 +1086,12 @@ class sonarDBManager():
 					+ " ON sample.id = t" + str(y['id'])
 					+ ".sample_id" for x,y in self.properties.items()]
 			_1_final_sql = sql + " ".join(joins) + " WHERE sample.id IN ("+selected_sample_ids+")"
+			print(_1_final_sql)
 			_1_rows = self.cursor.execute(_1_final_sql).fetchall()
 
 			_2_final_sql = " SELECT name , nt_profile._profile AS nt_profile, aa_profile._profile AS aa_profile \
 					FROM \
-						    ( \
+							( \
 							  SELECT  \"sample.id\", group_concat(" + m + "\"variant.label\") AS _profile \
 							  FROM variantView WHERE \"sample.id\" IN ("+selected_sample_ids+") AND " + genome_element_condition + nn + " GROUP BY \"sample.id\" \
 							) nt_profile, \
@@ -1098,7 +1099,7 @@ class sonarDBManager():
 							  SELECT  \"sample.id\", group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS _profile \
 							  FROM variantView WHERE \"sample.id\" IN ("+selected_sample_ids+") AND " + cds_element_condition + nx + " GROUP BY \"sample.id\" \
 							) aa_profile, \
-					        sample \
+							sample \
 					WHERE nt_profile.\"sample.id\" = aa_profile.\"sample.id\" AND  nt_profile.\"sample.id\" = sample.id  \
 						  AND sample.id  IN (" + selected_sample_ids + ")"
 			_2_rows = self.cursor.execute(_2_final_sql).fetchall()
@@ -1120,8 +1121,8 @@ class sonarDBManager():
 			return   _1_rows #  list(rows.values())
 			"""
 			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
-		       SELECT  *, \
-					    ( \
+			   SELECT  *, \
+						( \
 						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
 						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
 						) nt_profile, \

@@ -314,8 +314,8 @@ if __name__ == "__main__":
 					sample_id = dbm.get_sample_id(sample_name)
 					if not sample_id:
 						continue
-					for property_name, value in sample.items():
-						dbm.insert_property(sample_id, property_name, fields[col_index])
+					for property_name, value in properties[sample_name].items():
+						dbm.insert_property(sample_id, property_name, value)
 
 	## view-prop
 	elif args.tool == "list-prop":
