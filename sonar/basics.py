@@ -189,10 +189,10 @@ class sonarBasics(object):
 				### adding pre-defined sample properties
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
-				#dbm.add_property("nuc_profile", "text", "text", "stores the nucleotide level profiles")
-				#dbm.add_property("aa_profile", "text", "text", "stores the aa level profiles")
-				#dbm.add_property("nuc_n_profile", "text", "text", "stores the aa level profiles")
-				#dbm.add_property("aa_n_profile", "text", "text", "stores the aa level profiles")
+				dbm.add_property("nuc_profile", "text", "text", "stores the nucleotide level profiles")
+				dbm.add_property("aa_profile", "text", "text", "stores the aa level profiles")
+				dbm.add_property("nuc_n_profile", "text", "text", "stores the nucleotide(with N) level profiles")
+				dbm.add_property("aa_n_profile", "text", "text", "stores the aa(with N) level profiles")
 
 				### if enable, create PREDEFINED properties
 				if auto_create:
@@ -439,15 +439,19 @@ class sonarBasics(object):
 	## csv
 	def exportCSV(cursor, outfile=None, na="*** no data ***", tsv=False):
 		i = -1
-		for i, row in enumerate(cursor):
-			if i == 0:
-				outfile = sys.stdout if outfile is None else open(outfile, "w")
-				sep = "\t" if tsv else ","
-				writer = csv.DictWriter(outfile, row.keys(), delimiter=sep, lineterminator=os.linesep)
-				writer.writeheader()
-			writer.writerow(row)
-		if i == -1:
-			print(na)
+		try:
+			for i, row in enumerate(cursor):
+				if i == 0:
+					outfile = sys.stdout if outfile is None else open(outfile, "w")
+					sep = "\t" if tsv else ","
+					writer = csv.DictWriter(outfile, row.keys(), delimiter=sep, lineterminator=os.linesep) #  extrasaction='ignore',
+					writer.writeheader()
+				writer.writerow(row)
+			if i == -1:
+				print(na)
+		except:
+			print("An exception occurred", row)
+			raise
 
 	## vcf
 	def exportVCF(cursor, reference, outfile=None, na="*** no match ***"):

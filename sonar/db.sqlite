@@ -310,6 +310,12 @@ LEFT JOIN element ON variant.element_id = element.id
 LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
 
+CREATE TABLE "lineages" (
+	"lineage"	TEXT,
+	"sublineage"	TEXT,
+	PRIMARY KEY("lineage")
+);
+
 --
 -- TRIGGER
 --

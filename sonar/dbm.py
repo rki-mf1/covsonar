@@ -158,7 +158,7 @@ class sonarDBManager():
 	@property
 	def lineage_sublineage_dict(self):
 		if not self.__lineage_sublineage_dict:
-			df = pd.read_csv(self.lineagewithsublineages, sep='\t')
+			df = pd.read_sql('SELECT * FROM lineages', self.connection) # pd.read_csv(self.lineagewithsublineages, sep='\t')
 			self.__lineage_sublineage_dict = dict(zip(df.lineage, df.sublineage))
 		return self.__lineage_sublineage_dict
 
@@ -243,7 +243,9 @@ class sonarDBManager():
 
 	def insert_property(self, sample_id, property_name, property_value):
 		sql = "INSERT OR REPLACE INTO sample2property (sample_id, property_id, value_" + self.properties[property_name]['datatype'] + ") VALUES(?, ?, ?);"
+		# print([sample_id, self.properties[property_name]['id'], property_value])
 		self.cursor.execute(sql, [sample_id, self.properties[property_name]['id'], property_value])
+		return
 
 	def insert_sequence(self, seqhash):
 		sql = "INSERT OR IGNORE INTO sequence (seqhash) VALUES(?);"
@@ -582,6 +584,21 @@ class sonarDBManager():
 		if translation_table is None:
 			return str(feat.extract(sequence))
 		return str(Seq(feat.extract(sequence)).translate(table=translation_table, stop_symbol=""))
+
+	# Add/Update lineages into Table 
+	def add_update_lineage(self, _df):
+		print('Prepare:', len(_df))
+
+		#_df.to_sql(name='lineages', con = self.connection, if_exists='replace',
+		#			 index=False) 
+		sql = "INSERT OR REPLACE INTO lineages (lineage, sublineage) VALUES(?, ?);"
+		for ind in _df.index:
+			self.cursor.execute(sql, (_df['lineage'][ind], _df['sublineage'][ind]) )
+		#self.commit()
+		#sql = "INSERT OR REPLACE INTO sample2property (sample_id, property_id, value_" + self.properties[property_name]['datatype'] + ") VALUES(?, ?, ?);"
+		#print([sample_id, self.properties[property_name]['id'], property_value])
+		#self.cursor.execute(sql, [sample_id, self.properties[property_name]['id'], property_value])
+
 
 	# MATCHING PROFILES
 	def get_operator(self, val):
@@ -961,7 +978,7 @@ class sonarDBManager():
 		## IF sublineage search is enable
 		## support: include and exclude
 		if  "with_sublineage" in reserved_props:
-			_tmp_include_lin = []
+			_tmp_include_lin = [] # used to keep all lienages after search. 
 			lineage_col = reserved_props.get('with_sublineage')
 			include_lin = properties.get(lineage_col)
 			negate = False
@@ -971,6 +988,7 @@ class sonarDBManager():
 					in_lin = in_lin[1:]
 					negate = True
 				value = self.lineage_sublineage_dict.get(in_lin, 'none') # provide a default value if the key is missing:
+				# print(value)
 				if value != 'none':
 					if negate:
 						in_lin = "^"+in_lin
@@ -980,7 +998,7 @@ class sonarDBManager():
 					for i in _list:
 						if negate: # all sublineage should add not^
 							i = "^"+i
-						include_lin.append(i)
+						include_lin.append(i) # add more lineage to find in next round.
 							# _tmp_include_lin.append(i)
 							## if we don't find this wildcard so we discard it
 				else: # None (no child)
@@ -1086,10 +1104,10 @@ class sonarDBManager():
 					+ " ON sample.id = t" + str(y['id'])
 					+ ".sample_id" for x,y in self.properties.items()]
 			_1_final_sql = sql + " ".join(joins) + " WHERE sample.id IN ("+selected_sample_ids+")"
-			print(_1_final_sql)
+			# print(_1_final_sql)
 			_1_rows = self.cursor.execute(_1_final_sql).fetchall()
 
-			_2_final_sql = " SELECT name , nt_profile._profile AS nt_profile, aa_profile._profile AS aa_profile \
+			_2_final_sql = " SELECT name AS 'sample.name'  , nt_profile._profile AS nuc_profile, aa_profile._profile AS aa_profile \
 					FROM \
 							( \
 							  SELECT  \"sample.id\", group_concat(" + m + "\"variant.label\") AS _profile \
@@ -1108,16 +1126,16 @@ class sonarDBManager():
 			# To combine:
 			# We update list of dict (update on result from query #2)
 			# merge all results
-			_1_rows.extend(list(map(lambda x,y: y if x.get('sample.name') != y.get('name')
+			_1_rows.extend(list(map(lambda x,y: y if x.get('sample.name') != y.get('sample.name')
 					 else
 					 x.update(
-					{ key: value for key, value in y.items() if (key == "nt_profile" )or key == "aa_profile"})
+					{ key: value for key, value in y.items() if (key == "nuc_profile") or (key == "aa_profile") })
 					, _1_rows, _2_rows)))
 
 			_1_rows = list(filter(None, _1_rows))
-
+			#  print(_1_rows)
 			# since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name)
-			# at _2_rows so we can return _2_rows only a
+			# at _1_rows so we can return _1_rows only a
 			return   _1_rows #  list(rows.values())
 			"""
 			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \

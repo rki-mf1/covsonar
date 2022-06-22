@@ -126,7 +126,7 @@ def parse_args():
 	parser_opt = subparsers.add_parser('db-upgrade', parents=[general_parser], help='upgrade a database to the latest version')
 
 	## update-lineage-info parser
-	parser_update_anno = subparsers.add_parser('update-lineage-info', help='download latest lineage information')
+	parser_update_anno = subparsers.add_parser('update-lineage-info', parents=[general_parser], help='download latest lineage information')
 
 	# version parser
 	parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + VERSION, help="Show program's version number and exit.")
@@ -304,11 +304,11 @@ if __name__ == "__main__":
 			with WorkerPool(n_jobs=args.threads, start_method='fork') as pool, tqdm(desc="profiling sequences...", total=l, unit="seqs", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=args.no_progress) as pbar:
 				for _ in pool.imap_unordered(aligner.process_cached_sample, cache._samplefiles_to_profile):
 				    pbar.update(1)
-
+			
 			cache.import_cached_samples()
 
 		### importing properties
-		elif args.tsv:
+		if args.tsv:
 			with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
 				for sample_name in tqdm(properties, desc="import data ...", total=len(properties), unit="samples", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=args.no_progress):
 					sample_id = dbm.get_sample_id(sample_name)
@@ -420,9 +420,16 @@ if __name__ == "__main__":
 
 	# update-lineage-info
 	elif args.tool == "update-lineage-info":
+		print('Start to update parent-child relationship')
 		fname = os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__))), "lineage.all.tsv")
-		obj = sonarLinmgr()
-		obj.update_lineage_data(fname)
+		#obj = sonarLinmgr()
+		#lin_df = obj.update_lineage_data(fname)
+		with sonarLinmgr() as obj: 
+			lin_df = obj.update_lineage_data(fname)
+
+		with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
+			dbm.add_update_lineage(lin_df)
+			print('Update has been successfully')
 
 	# info
 	elif args.tool == "info":

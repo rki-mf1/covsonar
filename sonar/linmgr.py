@@ -9,6 +9,7 @@ import pandas as pd
 from tempfile import mkdtemp
 import json
 import requests
+import shutil
 
 class Aliasor:
 	def __init__(self, alias_file):
@@ -42,14 +43,18 @@ class Aliasor:
 
 class sonarLinmgr:
 	def __init__(self, tmpdir=None):
-		self._tmpdir = mkdtemp(prefix=".tmp_")
+		self._tmpdir = mkdtemp(prefix=".tmp_sonarLinmgr_")
 		self._linurl = 'https://raw.githubusercontent.com/cov-lineages/pango-designation/master/lineages.csv'
 		self._aliurl = 'https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json'
 		self.lineage_file = os.path.join(self._tmpdir, 'lineages.csv')
 		self.alias_file = os.path.join(self._tmpdir, 'alias.json')
 
+	def __enter__(self):
+		return self
+
 	def __exit__(self, exc_type, exc_value, exc_traceback):
-		shutil.rmtree(self.self._tmpdir)
+		# print('Clean env.')
+		shutil.rmtree(self._tmpdir)
 
 	#download
 	def download_lineage_data(self):
@@ -70,6 +75,17 @@ class sonarLinmgr:
 		return "".join(items)
 
 	def process_lineage_data(self, output_file):
+		# handle duplicate values
+		with open(self.alias_file) as f:
+			# load json objects to dictionaries
+			data_dict = json.load(f)
+		for k, v in data_dict.items():
+			if type(v) is list:
+				data_dict[k] = list(set(v))
+		# rewrite the json
+		with open(self.alias_file ,'w') as nf:
+			json.dump(data_dict, nf)
+
 		aliasor = Aliasor(self.alias_file)
 		df_lineages = pd.read_csv(self.lineage_file)
 		lineages = df_lineages.lineage.unique()
@@ -92,8 +108,10 @@ class sonarLinmgr:
 			else:
 				datadict.append({'lineage': _id, 'sublineage': 'none'})
 
-		pd.DataFrame(datadict).to_csv(output_file, sep="	", index=False)
+		return pd.DataFrame(datadict) # pd.DataFrame(datadict).to_csv(output_file, sep="	", index=False)
 
 	def update_lineage_data(self, output_file):
 		self.download_lineage_data()
-		self.process_lineage_data(output_file)
+		df = self.process_lineage_data(output_file)
+		return df
+		
