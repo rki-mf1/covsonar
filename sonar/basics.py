@@ -192,7 +192,7 @@ class sonarBasics(object):
 				dbm.add_property("nuc_profile", "text", "text", "stores the nucleotide level profiles")
 				dbm.add_property("aa_profile", "text", "text", "stores the aa level profiles")
 				dbm.add_property("nuc_n_profile", "text", "text", "stores the nucleotide(with N) level profiles")
-				dbm.add_property("aa_n_profile", "text", "text", "stores the aa(with N) level profiles")
+				dbm.add_property("aa_x_profile", "text", "text", "stores the aa(with X) level profiles")
 
 				### if enable, create PREDEFINED properties
 				if auto_create:

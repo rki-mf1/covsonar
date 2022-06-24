@@ -1104,10 +1104,9 @@ class sonarDBManager():
 					+ " ON sample.id = t" + str(y['id'])
 					+ ".sample_id" for x,y in self.properties.items()]
 			_1_final_sql = sql + " ".join(joins) + " WHERE sample.id IN ("+selected_sample_ids+")"
-			# print(_1_final_sql)
+			#print(_1_final_sql)
 			_1_rows = self.cursor.execute(_1_final_sql).fetchall()
-
-			_2_final_sql = " SELECT name AS 'sample.name'  , nt_profile._profile AS nuc_profile, aa_profile._profile AS aa_profile \
+			_2_final_sql = " SELECT name AS 'sample.name'  , nt_profile._profile AS NUC_PROFILE, aa_profile._profile AS AA_PROFILE \
 					FROM \
 							( \
 							  SELECT  \"sample.id\", group_concat(" + m + "\"variant.label\") AS _profile \
@@ -1121,19 +1120,21 @@ class sonarDBManager():
 					WHERE nt_profile.\"sample.id\" = aa_profile.\"sample.id\" AND  nt_profile.\"sample.id\" = sample.id  \
 						  AND sample.id  IN (" + selected_sample_ids + ")"
 			_2_rows = self.cursor.execute(_2_final_sql).fetchall()
-
+			if(len(_1_rows) != len(_2_rows)):
+				print("WARNING: There are something error between query")
 			# print(set([ x['sample.name'] for x in _1_rows ]) ^ set([ x['name'] for x in _2_rows ]))
 			# To combine:
 			# We update list of dict (update on result from query #2)
 			# merge all results
-			_1_rows.extend(list(map(lambda x,y: y if x.get('sample.name') != y.get('sample.name')
-					 else
-					 x.update(
-					{ key: value for key, value in y.items() if (key == "nuc_profile") or (key == "aa_profile") })
-					, _1_rows, _2_rows)))
+			_1_rows.extend(
+					list(
+						map(lambda x,y:  x.update({ key: value for key, value in y.items() if (key == "NUC_PROFILE") or (key == "AA_PROFILE") }) 
+						if x.get('sample.name') == y.get('sample.name') else None
+						, _1_rows, _2_rows )
+					))
 
 			_1_rows = list(filter(None, _1_rows))
-			#  print(_1_rows)
+
 			# since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name)
 			# at _1_rows so we can return _1_rows only a
 			return   _1_rows #  list(rows.values())
