@@ -178,7 +178,7 @@ class sonarBasics(object):
 		return os.path.join(os.path.dirname(os.path.realpath(__file__)), *join_with)
 
 	@staticmethod
-	def setup_db(fname, auto_create=False, default_setup=True, reference_gb=None, debug=False):
+	def setup_db(fname, auto_create=False, default_setup=True, reference_gb=None, debug=False, quiet=False):
 		if os.path.isfile(fname):
 			sys.exit("setup error: " + fname + " does already exist.")
 		sonarDBManager.setup(fname, debug=debug)
@@ -234,7 +234,8 @@ class sonarBasics(object):
 						cid = dbm.insert_element(mol_id, "cds", elem['accession'], elem['symbol'], elem['description'], elem['start'], elem['end'], elem['strand'], elem['sequence'], 0, gene_ids[elem['gene']], elem['parts'])
 						if elem['sequence'] != dbm.extract_sequence(cid, translation_table=1):
 							sys.exit("genbank error: could not recover sequence of '" + elem['accession'] + "' (cds)")
-				print("Success: Database was successfully installed")
+				if not quiet:
+					print("Success: Database was successfully installed")
 
 	# DATA IMPORT
 	## genbank handling handling
