@@ -980,13 +980,27 @@ class sonarDBManager():
 		if  "with_sublineage" in reserved_props:
 			_tmp_include_lin = [] # used to keep all lienages after search. 
 			lineage_col = reserved_props.get('with_sublineage')
-			include_lin = properties.get(lineage_col)
+			include_lin = properties.get(lineage_col) # get list of given lineages
 			negate = False
+			print(include_lin)
 			while include_lin:
 				in_lin = include_lin.pop(0)
+				
 				if in_lin.startswith("^"):
 					in_lin = in_lin[1:]
 					negate = True
+
+				# have wildcard in string which mean we have to find all lineage from wildcard query
+				# then we used the wildcard query result to find all sublineages agian.
+				if '%' in in_lin: 
+					_tobeadded_lin = self.get_list_of_lineages(in_lin)
+					for i in _tobeadded_lin:
+
+						# if i != in_lin: # we dont need to add same lineage agian,so we skip for the duplicate lineage. 
+						if negate: # all lineage should add not ^
+							i = "^"+i
+						include_lin.append(i) # add more lineage to find in next round.
+				
 				value = self.lineage_sublineage_dict.get(in_lin, 'none') # provide a default value if the key is missing:
 				# print(value)
 				if value != 'none':
@@ -1164,6 +1178,13 @@ class sonarDBManager():
 		else:
 			sys.exit("error: '" + format + "' is not a valid output format")
 		return self.cursor.execute(sql, property_vals + profile_vals)# .fetchall()
+	
+	def get_list_of_lineages(self, lineage):
+		sql = "SELECT DISTINCT lineage FROM lineages WHERE lineage LIKE '"+lineage+"';" 
+		rows = self.cursor.execute(sql).fetchall()
+		result = [i['lineage'] for i in rows]
+		return  result
+	
 	# MISC
 
 	@staticmethod
