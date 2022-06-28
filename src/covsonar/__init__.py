@@ -1,5 +1,18 @@
-from .dbm import sonarDBManager
-from .align import sonarAligner
-from .basics import sonarBasics
-from .cache import sonarCache
-from .linmgr import sonarLinmgr
+# Determine version using pyproject.toml file
+try:
+    from importlib.metadata import version, PackageNotFoundError  # type: ignore
+except ImportError:  # pragma: no cover
+    from importlib_metadata import version, PackageNotFoundError  # type: ignore
+
+
+try:
+    __version__ = version(__name__)
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "unknown"
+
+
+from covsonar.dbm import sonarDBManager
+from covsonar.align import sonarAligner
+from covsonar.basics import sonarBasics
+from covsonar.cache import sonarCache
+from covsonar.linmgr import sonarLinmgr

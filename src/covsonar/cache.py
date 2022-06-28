@@ -9,7 +9,7 @@ import sys
 import argparse
 import base64
 import pickle
-from sonar import sonarBasics, sonarDBManager, sonarAligner
+from . import sonarBasics, sonarDBManager, sonarAligner
 import hashlib
 import yaml
 from Bio import SeqIO

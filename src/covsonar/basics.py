@@ -17,7 +17,8 @@ import pickle
 import tempfile
 import itertools
 from contextlib import ExitStack
-from sonar import sonarDBManager, sonarAligner
+from . import sonarDBManager, sonarAligner
+from . import __version__
 import csv
 from tabulate import tabulate
 from textwrap import fill
@@ -168,8 +169,7 @@ class sonarBasics(object):
 
 	@staticmethod
 	def get_version():
-		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", ".version"), "r") as handle:
-			return handle.read().strip()
+		return __version__
 
 	# DB MAINTENANCE
 

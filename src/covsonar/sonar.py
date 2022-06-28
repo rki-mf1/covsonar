@@ -9,7 +9,7 @@ import csv
 import argparse
 import gzip
 import lzma
-from sonar import sonarBasics, sonarDBManager, sonarCache, sonarLinmgr, sonarAligner
+from . import sonarBasics, sonarDBManager, sonarCache, sonarLinmgr, sonarAligner
 from Bio import SeqIO
 from tempfile import mkstemp, mkdtemp
 from collections import defaultdict
