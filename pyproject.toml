@@ -2,7 +2,8 @@
 name = "covsonar"
 version = "2.0.0"
 description = "A database-driven system for handling genomic sequences and screening genomic profiles."
-authors = ["Stephan Fuchs <FuchsS@rki.de", "Kunaphas Kongkitimanon <KongkitimanonK@rki.de>", "Matthew Huska <HuskaM@rki.de>"]
+authors = ["Stephan Fuchs <FuchsS@rki.de>", "Kunaphas Kongkitimanon <KongkitimanonK@rki.de>", "Matthew Huska <HuskaM@rki.de>"]
+license = "GPL3"
 readme = "README.md"
 homepage = "https://github.com/rki-mf1/covsonar"
 repository = "https://github.com/rki-mf1/covsonar"
@@ -18,6 +19,9 @@ mpire = "~2.3.3"
 pandas = "~1.4.0"
 
 [tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+sonar = "covsonar.sonar:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

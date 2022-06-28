@@ -200,7 +200,8 @@ def check_file(fname):
 	if not os.path.isfile(fname):
 		sys.exit("iput error: " + fname + " is not a valid file.")
 
-if __name__ == "__main__":
+
+def main():
 	# process arguments
 	args = parse_args()
 
@@ -481,3 +482,8 @@ if __name__ == "__main__":
 		with sonarDBManager(args.db, debug=debug) as dbm:
 			for feature in dbm.get_annotation():
 				print(())
+
+
+if __name__ == "__main__":
+	main()
+
