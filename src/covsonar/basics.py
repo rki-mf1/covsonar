@@ -29,34 +29,36 @@ import sqlite3
 import collections
 import logging
 
+
 class Aliasor:
-    def __init__(self, alias_file):
-        aliases = pd.read_json(alias_file)
-        self.alias_dict = {x: x if x.startswith("X") else aliases[x][0] for x in aliases.columns}
-        self.alias_dict['A'] = 'A'
-        self.alias_dict['B'] = 'B'
-        self.realias_dict = {v: k for k, v in self.alias_dict.items()}
+	def __init__(self, alias_file):
+		aliases = pd.read_json(alias_file)
+		self.alias_dict = {x: x if x.startswith("X") else aliases[x][0] for x in aliases.columns}
+		self.alias_dict['A'] = 'A'
+		self.alias_dict['B'] = 'B'
+		self.realias_dict = {v: k for k, v in self.alias_dict.items()}
 
-    def compress(self, name):
-        name_split = name.split('.')
-        if len(name_split) < 5:
-            return name
-        letter = self.realias_dict[".".join(name_split[0:4])]
-        if len(name_split) == 5:
-            return letter + '.' + name_split[4]
-        else:
-            return letter + '.' + ".".join(name_split[4:])
+	def compress(self, name):
+		name_split = name.split('.')
+		if len(name_split) < 5:
+			return name
+		letter = self.realias_dict[".".join(name_split[0:4])]
+		if len(name_split) == 5:
+			return letter + '.' + name_split[4]
+		else:
+			return letter + '.' + ".".join(name_split[4:])
 
-    def uncompress(self, name):
-        name_split = name.split('.')
-        letter = name_split[0]
-        unaliased = self.alias_dict[letter]
-        if len(name_split) == 1:
-            return name
-        if len(name_split) == 2:
-            return unaliased + '.' + name_split[1]
-        else:
-            return unaliased + '.' + ".".join(name_split[1:])
+	def uncompress(self, name):
+		name_split = name.split('.')
+		letter = name_split[0]
+		unaliased = self.alias_dict[letter]
+		if len(name_split) == 1:
+			return name
+		if len(name_split) == 2:
+			return unaliased + '.' + name_split[1]
+		else:
+			return unaliased + '.' + ".".join(name_split[1:])
+
 
 # CLASS
 class sonarBasics(object):
@@ -207,7 +209,7 @@ class sonarBasics(object):
 
 				### adding reference
 				if not reference_gb:
-					reference_gb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref.gb")
+					reference_gb = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/ref.gb")
 				records = [x for x in sonarBasics.iter_genbank(reference_gb)]
 				ref_id = dbm.add_reference(records[0]['accession'], records[0]['description'], records[0]['organism'], 1, 1)
 
@@ -313,7 +315,6 @@ class sonarBasics(object):
 						"parts": sonarBasics.process_segments(feat.location.parts, True)
 					})
 			yield gb_data
-
 
 	## seq handling
 	@staticmethod
@@ -422,7 +423,6 @@ class sonarBasics(object):
 		print(len(samples))
 		for sample in sorted(samples):
 			print(sorted(nuc_profiles[sample], key=lambda x: (x[0], x[1])))
-
 
 		logging.warning("assembling profile data")
 		for sample in sorted(samples):

@@ -28,9 +28,11 @@ import csv
 from time import sleep
 from contextlib import ExitStack
 from more_itertools import consecutive_groups, split_when
+from . import __version__
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 3
+
 
 class sonarTimeout():
 	"""
@@ -2527,8 +2529,7 @@ class sonarDB(object):
 
 	@staticmethod
 	def get_version():
-		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
-			return handle.read().strip()
+		return __version__
 
 class sonarCache():
 	"""

@@ -22,10 +22,12 @@ from textwrap import fill
 from tabulate import tabulate
 from mpire import WorkerPool
 
-class arg_namespace(object):
-    pass
 
-def parse_args():
+class arg_namespace(object):
+	pass
+
+
+def parse_args(args):
 	'''
 	setting and handling command line arguments
 	'''
@@ -34,7 +36,7 @@ def parse_args():
 
 	# preparations
 	user_namespace = arg_namespace()
-	parser = argparse.ArgumentParser(prog="sonar.py", description="covSonar " + VERSION)
+	parser = argparse.ArgumentParser(prog="sonar", description="covsonar " + VERSION)
 	subparsers = parser.add_subparsers(help='detect, store, and screen for mutations in genomic sequences')
 	subparsers.dest = 'tool'
 	subparsers.required = True
@@ -129,15 +131,16 @@ def parse_args():
 	parser_update_anno = subparsers.add_parser('update-lineage-info', parents=[general_parser], help='download latest lineage information')
 
 	# version parser
-	parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + VERSION, help="Show program's version number and exit.")
+	parser.add_argument('-v', '--version', action='version', version='covsonar ' + VERSION, help="Show program's version number and exit.")
 
 	# register known arguments
-	args = parser.parse_known_args(namespace=user_namespace)
+	print(f"args before crash: {args}")
+	pargs = parser.parse_known_args(args=args, namespace=user_namespace)
 
 	# register dynamic arguments
 	## register additonal arguments from database-specific sample property names when matching genomes
-	if user_namespace.tool == "match" and hasattr(args[0], 'db'):
-		with sonarDBManager(args[0].db, readonly = True, debug=args[0].debug) as dbm:
+	if pargs[0].tool == "match" and hasattr(pargs[0], 'db'):
+		with sonarDBManager(pargs[0].db, readonly=True, debug=pargs[0].debug) as dbm:
 			for prop in dbm.properties.values():
 				if prop['datatype'] == "integer":
 					t = int
@@ -145,11 +148,12 @@ def parse_args():
 					t = float
 				else:
 					t = str
-				if(user_namespace.tool == "match"):
-					parser_match.add_argument('--' + prop['name'], type=t, nargs = '+', default=argparse.SUPPRESS)
+				if(pargs[0].tool == "match"):
+					parser_match.add_argument('--' + prop['name'], type=t, nargs='+', default=argparse.SUPPRESS)
 
 	# return
-	return parser.parse_args(namespace=user_namespace)
+	return parser.parse_args(args=args, namespace=user_namespace)
+
 
 class sonar():
 	def __init__(self, db, gff=None, debug=False):
@@ -157,7 +161,6 @@ class sonar():
 		self.db = sonardb.sonarDB(self.dbfile)
 		self.gff = gff
 		self.debug = debug
-
 
 	def show_system_info(self):
 		'''
@@ -196,27 +199,26 @@ class sonar():
 				spacer = " " * (maxlen-len(field))
 				print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
+
 def check_file(fname):
 	if not os.path.isfile(fname):
 		sys.exit("iput error: " + fname + " is not a valid file.")
 
 
-def main():
+def main(args):
 	# process arguments
-	args = parse_args()
+	#args = parse_args()
 
 	if hasattr(args, 'db') and args.db:
 		if args.tool != "setup" and not args.db is None and not os.path.isfile(args.db):
 			sys.exit("input error: database does not exist.")
 			# check_db_compatibility
 
-
 	# set debugging mode
 	if hasattr(args, 'debug') and args.debug:
 		debug = True
 	else:
 		debug = False
-
 
 	# tool procedures
 	## setup, db-upgrade
@@ -422,7 +424,7 @@ def main():
 	# update-lineage-info
 	elif args.tool == "update-lineage-info":
 		print('Start to update parent-child relationship')
-		fname = os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__))), "lineage.all.tsv")
+		fname = os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__))), "data/lineage.all.tsv")
 		#obj = sonarLinmgr()
 		#lin_df = obj.update_lineage_data(fname)
 		with sonarLinmgr() as obj: 
@@ -482,8 +484,14 @@ def main():
 		with sonarDBManager(args.db, debug=debug) as dbm:
 			for feature in dbm.get_annotation():
 				print(())
+	# Finished successfully
+	return 0
+
+
+def run():
+	parsed_args = parse_args(sys.argv[1:])
+	main(parsed_args)
 
 
 if __name__ == "__main__":
-	main()
-
+	run()

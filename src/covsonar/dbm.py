@@ -12,6 +12,7 @@ from urllib.parse import quote as urlquote
 import itertools
 import logging
 import pandas as pd
+import pkgutil
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
@@ -185,8 +186,7 @@ class sonarDBManager():
 
 	@staticmethod
 	def setup(filename, debug=False):
-		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "db.sqlite"), 'r') as handle:
-			sql = handle.read()
+		sql = pkgutil.get_data(__name__, "data/db.sqlite").decode()
 		uri = sonarDBManager.get_uri(filename)
 		with sqlite3.connect(uri + "?mode=rwc", uri = True) as con:
 			if debug:
