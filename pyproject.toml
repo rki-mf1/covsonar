@@ -19,6 +19,7 @@ mpire = "~2.3.3"
 pandas = "~1.4.0"
 
 [tool.poetry.dev-dependencies]
+pytest = "^7.1.2"
 
 [tool.poetry.scripts]
 sonar = "covsonar.sonar:main"
