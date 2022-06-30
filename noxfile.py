@@ -8,7 +8,7 @@ from nox.sessions import Session
 
 package = "covsonar"
 nox.options.sessions = "lint", "tests"
-locations = "src", "tests", "noxfile.py"
+locations = "src", "tests", "./noxfile.py"
 
 
 def install_with_constraints(session: Session, *args: str, **kwargs: Any) -> None:
