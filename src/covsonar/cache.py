@@ -46,8 +46,8 @@ class sonarCache():
 			self.default_refmol_id = [x for x in self.refmols if self.refmols[x]['molecule.id'] == 1 ][0]
 			self.sources = {x['molecule.accession']: dbm.get_source(x['molecule.id']) for x in self.refmols.values()}
 			self.properties = dbm.properties
-		self._propregex = re.compile("\[(" + "|".join(self.properties.keys()) + ")=([^\[\]=]+)\]")
-		self._molregex = re.compile("\[molecule=([^\[\]=]+)\]")
+		self._propregex = re.compile(r"\[(" + "|".join(self.properties.keys()) + r")=([^\[\]=]+)\]")
+		self._molregex = re.compile(r"\[molecule=([^\[\]=]+)\]")
 
 		self.logfile = open(logfile, "w") if logfile else None
 		self.basedir = os.path.abspath(mkdtemp(prefix=".sonarCache_")) if not outdir else os.path.abspath(outdir)
