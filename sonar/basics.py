@@ -461,7 +461,7 @@ class sonarBasics(object):
 		all_samples = set()
 		for row in cursor.fetchall(): # sonarBasics.iter_formatted_match(cursor):
 			chrom, pos, ref, alt, samples = row['molecule.accession'], row['variant.start'], row['variant.ref'], row['variant.alt'], row['samples']
-			print(samples)
+			#print(samples)
 			if chrom not in records:
 				records[chrom] = collections.OrderedDict()
 			if pos not in records[chrom]:
@@ -470,7 +470,7 @@ class sonarBasics(object):
 				records[chrom][pos][ref] = {}
 			records[chrom][pos][ref][alt] = set(samples.split("\t"))
 			all_samples.update(samples.split("\t"))
-		print(all_samples)
+		#print(all_samples)
 		if len(records) != 0:
 			all_samples = sorted(all_samples)
 			if outfile is None:
