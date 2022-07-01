@@ -493,7 +493,7 @@ class sonarCache:
     def get_properties(self, fasta_header):
         return {x.group(1): x.group(2) for x in self._propregex.finditer(fasta_header)}
 
-    def add_fasta(self, *fnames, propdict=defaultdict(dict)):
+    def add_fasta(self, *fnames, propdict=defaultdict(dict)):  # noqa: C901
         default_properties = {
             x: self.properties[x]["standard"] for x in self.properties
         }
@@ -579,7 +579,7 @@ class sonarCache:
                     del data["sequence"]
                     self.cache_sample(**data)
 
-    def import_cached_samples(self):
+    def import_cached_samples(self):  # noqa: C901
         refseqs = {}
         with sonarDBManager(self.db, readonly=False, debug=self.debug) as dbm:
             for sample_data in tqdm(

@@ -720,7 +720,7 @@ class sonarGFF(object):
         else:
             return False
 
-    def process_gff3(self, gff, fna):
+    def process_gff3(self, gff, fna):  # noqa: C901
         """
         function to parse CDS from a given GFF3 file
 
@@ -1076,7 +1076,7 @@ class sonarALIGN(object):
         """
         return sum(self._target_coords_matrix[:x])
 
-    def iter_vars(self):
+    def iter_vars(self):  # noqa: C901
         """
         function to iterate variations on nucleotide level.
 
@@ -2235,7 +2235,7 @@ class sonarDB(object):
             )
         return extended_profile
 
-    def match(
+    def match(  # noqa: C901
         self,
         include_profiles=[],
         exclude_profiles=[],
@@ -2692,7 +2692,7 @@ class sonarDB(object):
             )
         return None
 
-    def be_paranoid(self, acc, orig_seq, auto_delete=False, dbm=None):
+    def be_paranoid(self, acc, orig_seq, auto_delete=False, dbm=None):  # noqa: C901
         """
         function to compare a given sequence with the respective sequence restored
         from the SONAR database

@@ -425,7 +425,7 @@ def check_file(fname):
         sys.exit("iput error: " + fname + " is not a valid file.")
 
 
-def main(args):
+def main(args):  # noqa: C901
     # process arguments
     # args = parse_args()
 

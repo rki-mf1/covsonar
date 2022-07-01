@@ -1048,7 +1048,7 @@ class sonarDBManager:
             valueList,
         )
 
-    def query_profile(self, *vars, reference_accession=None):
+    def query_profile(self, *vars, reference_accession=None):  # noqa: C901
         iupac_nt_code = {
             "A": set("A"),
             "C": set("C"),
@@ -1240,7 +1240,7 @@ class sonarDBManager:
         )
         return self.cursor.execute(sql, vals).fetchone()["count"]
 
-    def match(
+    def match(  # noqa: 901
         self,
         *profiles,
         reserved_props=None,
@@ -1495,7 +1495,7 @@ class sonarDBManager:
 
             # since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name)
             # at _1_rows so we can return _1_rows only a
-            return _1_rows  #  list(rows.values())
+            return _1_rows  # list(rows.values())
             """
             sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
                SELECT  *, \
