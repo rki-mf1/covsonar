@@ -46,6 +46,14 @@ def black(session: Session) -> None:
 
 
 @nox.session(python="3.9")
+def zimports(session: Session) -> None:
+    """Run zimports import formatter."""
+    args = session.posargs or locations
+    install_with_constraints(session, "zimports")
+    session.run("zimports", *args)
+
+
+@nox.session(python="3.9")
 def lint(session: Session) -> None:
     """Lint using flake8."""
     args = session.posargs or locations

@@ -2,32 +2,29 @@
 # -*- coding: utf-8 -*-
 # author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
+import base64
+from collections import defaultdict
+from contextlib import ExitStack
+import csv
+import itertools
 import os
+import pickle
 import re
+import shutil
+import signal
 import sys
-import argparse
-import sqlite3
-from sqlite3 import Error
-from Bio.SeqUtils.CheckSum import seguid
-from Bio.Seq import Seq
+from tempfile import mkdtemp
+from tempfile import mkstemp
+from tempfile import TemporaryDirectory
+import traceback
+
 from Bio import SeqIO
 from Bio.Emboss.Applications import StretcherCommandline
-from packaging import version
-import shutil
-import base64
-from collections import OrderedDict, defaultdict
-import pickle
+from Bio.Seq import Seq
+from Bio.SeqUtils.CheckSum import seguid
+from more_itertools import consecutive_groups
 from tqdm import tqdm
-from urllib.parse import quote as urlquote
-from math import floor, ceil
-from tempfile import mkstemp, TemporaryDirectory, mkdtemp
-import traceback
-import itertools
-import signal
-import csv
-from time import sleep
-from contextlib import ExitStack
-from more_itertools import consecutive_groups, split_when
+
 from . import __version__
 
 # COMPATIBILITY

@@ -2,25 +2,22 @@
 # -*- coding: utf-8 -*-
 # author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-from ast import arg
+import argparse
+from collections import defaultdict
 import os
 import sys
-import csv
-import argparse
-import gzip
-import lzma
-from . import sonarBasics, sonarDBManager, sonarCache, sonarLinmgr, sonarAligner
-from Bio import SeqIO
-from tempfile import mkstemp, mkdtemp
-from collections import defaultdict
-import re
-from tqdm import tqdm
-from multiprocessing import Pool
-import time
-import shutil
+from tempfile import mkstemp
 from textwrap import fill
-from tabulate import tabulate
+
 from mpire import WorkerPool
+from tabulate import tabulate
+from tqdm import tqdm
+
+from .align import sonarAligner
+from .basics import sonarBasics
+from .cache import sonarCache
+from .dbm import sonarDBManager
+from .linmgr import sonarLinmgr
 
 
 class arg_namespace(object):

@@ -9,10 +9,3 @@ try:
     __version__ = version(__name__)
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
-
-
-from covsonar.dbm import sonarDBManager
-from covsonar.align import sonarAligner
-from covsonar.basics import sonarBasics
-from covsonar.cache import sonarCache
-from covsonar.linmgr import sonarLinmgr

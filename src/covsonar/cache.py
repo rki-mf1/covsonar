@@ -2,28 +2,29 @@
 # -*- coding: utf-8 -*-
 # author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-from importlib.resources import path
-import os
-import re
-import sys
-import argparse
 import base64
-import pickle
-from . import sonarBasics, sonarDBManager, sonarAligner
-import hashlib
-import yaml
-from Bio import SeqIO
+from collections import defaultdict
 import difflib as dl
-from math import ceil
-from tempfile import mkdtemp, TemporaryDirectory
+import gzip
+import hashlib
+import lzma
+import os
+import pickle
+from pickle import load as load_pickle
+import pprint
+import re
+import shutil
+import sys
+from tempfile import mkdtemp
+from tempfile import TemporaryDirectory
+
 import pandas as pd
 from tqdm import tqdm
-import shutil
-from pickle import load as load_pickle
-import gzip
-import lzma
-import pprint
-from collections import defaultdict
+import yaml
+
+from .align import sonarAligner
+from .basics import sonarBasics
+from .dbm import sonarDBManager
 
 pp = pprint.PrettyPrinter(indent=4)
 

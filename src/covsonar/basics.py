@@ -3,31 +3,21 @@
 # author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
 # DEPENDENCIES
+import collections
+import csv
+import gzip
+import logging
+import lzma
 import os
 import re
 import sys
-from Bio.SeqUtils.CheckSum import seguid
-from Bio.Seq import Seq
+from tempfile import mkstemp
+
 from Bio import SeqIO
-from Bio import bgzf
-from Bio.SeqRecord import SeqRecord
-from Bio.SeqFeature import SeqFeature, FeatureLocation
-from Bio.Emboss.Applications import StretcherCommandline
-import pickle
-import tempfile
-import itertools
-from contextlib import ExitStack
-from . import sonarDBManager, sonarAligner
+from Bio.SeqUtils.CheckSum import seguid
+
 from . import __version__
-import csv
-from tabulate import tabulate
-from textwrap import fill
-from tempfile import mkstemp, mkdtemp
-import gzip
-import lzma
-import sqlite3
-import collections
-import logging
+from .dbm import sonarDBManager
 
 
 class Aliasor:
@@ -477,7 +467,7 @@ class sonarBasics(object):
                 reserved_props=reserved_props_dict,
                 properties=propdict,
                 reference_accession=reference,
-                format=format
+                format=format,
             )
             if format == "csv" or format == "tsv":
                 tsv = True if format == "tsv" else False

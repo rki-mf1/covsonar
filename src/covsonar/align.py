@@ -2,17 +2,14 @@
 # -*- coding: utf-8 -*-
 # author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-# DEPENDENCIES
 import os
-import re
-import sys
 import pickle
-import subprocess
-import pandas as pd
+import sys
+
 from Bio.Emboss.Applications import StretcherCommandline
+import pandas as pd
 
 
-# CLASS
 class sonarAligner(object):
     """
     this object performs a pairwise sequence alignment and provides/stores selected

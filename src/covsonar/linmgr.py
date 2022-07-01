@@ -4,12 +4,13 @@
 # The method originally came from  https://github.com/cov-lineages/pango-designation.
 # We just adapt and change some parts to be used in covsonar, vocal etc.
 
-import os
-import pandas as pd
-from tempfile import mkdtemp
 import json
-import requests
+import os
 import shutil
+from tempfile import mkdtemp
+
+import pandas as pd
+import requests
 
 
 class Aliasor:

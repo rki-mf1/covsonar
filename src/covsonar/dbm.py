@@ -1,18 +1,18 @@
 # DEPENDENCIES
-import os
-import re
-import sys
-import sqlite3
-from Bio.Seq import Seq
-from Bio import SeqIO
-from Bio.SeqRecord import SeqRecord
-from Bio.SeqFeature import SeqFeature, FeatureLocation, CompoundLocation
-from collections import OrderedDict, defaultdict
-from urllib.parse import quote as urlquote
+from collections import defaultdict
 import itertools
 import logging
-import pandas as pd
+import os
 import pkgutil
+import re
+import sqlite3
+import sys
+from urllib.parse import quote as urlquote
+
+from Bio.Seq import Seq
+from Bio.SeqFeature import CompoundLocation
+from Bio.SeqFeature import FeatureLocation
+import pandas as pd
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
