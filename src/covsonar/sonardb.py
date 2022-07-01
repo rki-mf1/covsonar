@@ -26,6 +26,7 @@ from more_itertools import consecutive_groups
 from tqdm import tqdm
 
 from . import __version__
+from .dbm import sonarDBManager
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 3
@@ -1147,14 +1148,14 @@ class sonarALIGN(object):
         # deletions
         for match in self._gap_regex.finditer(query):
 
-            ## nucleotide level
+            # nucleotide level
             s = self.real_pos(match.start())
             e = self.real_pos(match.end())
             ref = target[match.start() : match.end()]
             fs = 1 if self.gff and self.gff.any_frameshift_by_deletion(s, e) else 0
             yield "", ref, "", self.real_pos(s), self.real_pos(e), fs
 
-            ## protein level
+            # protein level
             if self.gff:
                 for cds in self.gff.cds:
                     if cds.is_cds(s, e):
@@ -1172,7 +1173,7 @@ class sonarALIGN(object):
         # insertions
         for match in self._gap_regex.finditer(target):
 
-            ## nucleotide level
+            # nucleotide level
             s = self.real_pos(match.start())
             e = s + 1
             ref = "" if s < 0 else target[match.start()]
@@ -1184,7 +1185,7 @@ class sonarALIGN(object):
             )
             yield "", ref, alt, s, e, fs
 
-            ## protein level
+            # protein level
             if self.gff:
                 for cds in self.gff.cds:
                     if cds.is_cds(s, e):
@@ -1202,11 +1203,11 @@ class sonarALIGN(object):
             if target[x] != "-" and query[x] != "-" and target[x] != query[x]
         ]:
 
-            ## nucleotide level
+            # nucleotide level
             s = self.real_pos(i)
             yield "", target[s], query[s], s, s + 1, False
 
-            ## protein level
+            # protein level
             if self.gff:
                 for cds in self.gff.cds:
                     if cds.is_cds(s):
@@ -2353,9 +2354,6 @@ class sonarDB(object):
                 represents a matching genome and is provided as dictionary with field
                 names as keys.
         """
-
-        clause = []
-        vals = []
 
         # sanity check:
         check = []

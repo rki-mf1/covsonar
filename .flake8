@@ -1,6 +1,6 @@
 [flake8]
 select = BLK,C,E,F,I,W
-ignore = W191,E203,W503,E501
+ignore = E203,W503,E501,E741
 max-line-length = 88
 max-complexity = 10
 application-import-names = covsonar,tests

@@ -50,7 +50,7 @@ def zimports(session: Session) -> None:
     """Run zimports import formatter."""
     args = session.posargs or locations
     install_with_constraints(session, "zimports")
-    session.run("zimports", *args)
+    session.run("zimports", "-m", "covsonar,tests", *args)
 
 
 @nox.session(python="3.9")

@@ -15,6 +15,7 @@ from tempfile import mkstemp
 
 from Bio import SeqIO
 from Bio.SeqUtils.CheckSum import seguid
+import pandas as pd
 
 from . import __version__
 from .dbm import sonarDBManager
@@ -173,17 +174,17 @@ class sonarBasics(object):
         return os.path.join(os.path.dirname(os.path.realpath(__file__)), *join_with)
 
     @staticmethod
-    def setup_db(
+    def setup_db(  # noqa: C901
         fname, auto_create=False, default_setup=True, reference_gb=None, debug=False
     ):
         if os.path.isfile(fname):
             sys.exit("setup error: " + fname + " does already exist.")
         sonarDBManager.setup(fname, debug=debug)
 
-        ## loading default data
+        # loading default data
         if default_setup or auto_create:
             with sonarDBManager(fname, readonly=False, debug=debug) as dbm:
-                ### adding pre-defined sample properties
+                # adding pre-defined sample properties
                 dbm.add_property(
                     "imported",
                     "date",
@@ -218,7 +219,7 @@ class sonarBasics(object):
                     "stores the aa(with X) level profiles",
                 )
 
-                ### if enable, create PREDEFINED properties
+                # if enable, create PREDEFINED properties
                 if auto_create:
                     dbm.add_property("DATE_DRAW", "date", "date", "Sampling date")
                     dbm.add_property(
@@ -233,7 +234,7 @@ class sonarBasics(object):
                     dbm.add_property("LINEAGE", "text", "text", "e.g., BA.2 or B.1.1.7")
                     dbm.add_property("TECHNOLOGY", "text", "text", "e.g., ILLUMINA")
 
-                ### adding reference
+                # adding reference
                 if not reference_gb:
                     reference_gb = os.path.join(
                         os.path.dirname(os.path.abspath(__file__)), "data/ref.gb"
@@ -247,7 +248,7 @@ class sonarBasics(object):
                     1,
                 )
 
-                ### adding reference molecule and elements
+                # adding reference molecule and elements
                 for i, record in enumerate(records):
                     gene_ids = {}
                     s = 1 if i == 0 else 0
@@ -263,7 +264,7 @@ class sonarBasics(object):
                         s,
                     )
 
-                    #### source handling
+                    # source handling
                     source_id = dbm.insert_element(
                         mol_id,
                         "source",
@@ -284,7 +285,7 @@ class sonarBasics(object):
                             + "' (source)"
                         )
 
-                    #### gene handling
+                    # gene handling
                     for elem in record["gene"]:
                         gene_ids[elem["accession"]] = dbm.insert_element(
                             mol_id,
@@ -309,7 +310,7 @@ class sonarBasics(object):
                                 + "' (gene)"
                             )
 
-                    #### cds handling
+                    # cds handling
                     for elem in record["cds"]:
                         cid = dbm.insert_element(
                             mol_id,
@@ -336,7 +337,7 @@ class sonarBasics(object):
                 print("Success: Database was successfully installed")
 
     # DATA IMPORT
-    ## genbank handling handling
+    # genbank handling handling
     @staticmethod
     def process_segments(feat_location_parts, cds=False):
         base = 0
@@ -353,7 +354,7 @@ class sonarBasics(object):
     def iter_genbank(fname):
         gb_data = {}
         for gb_record in SeqIO.parse(fname, "genbank"):
-            ## adding general annotation
+            # adding general annotation
             gb_data["accession"] = (
                 gb_record.name + "." + str(gb_record.annotations["sequence_version"])
             )
@@ -371,7 +372,7 @@ class sonarBasics(object):
             gb_data["cds"] = []
             gb_data["source"] = None
 
-            ## adding source annotation
+            # adding source annotation
             source = [x for x in gb_record.features if x.type == "source"]
             if len(source) != 1:
                 sys.exit(
@@ -398,7 +399,7 @@ class sonarBasics(object):
                 gb_data["segment"] = feat.qualifiers["segment"][0]
 
             for feat in gb_record.features:
-                ## adding gene annotation
+                # adding gene annotation
                 if feat.type == "gene":
                     gb_data["gene"].append(
                         {
@@ -417,7 +418,7 @@ class sonarBasics(object):
                         }
                     )
 
-                ## adding cds annotation
+                # adding cds annotation
                 elif feat.type == "CDS":
                     gb_data["cds"].append(
                         {
@@ -436,7 +437,7 @@ class sonarBasics(object):
                     )
             yield gb_data
 
-    ## seq handling
+    # seq handling
     @staticmethod
     def hash(seq):
         """ """
@@ -521,10 +522,10 @@ class sonarBasics(object):
                         ] = vardata["variant.alt"]
                     else:
                         prefixes[vardata["element.id"]] = vardata["variant.alt"]
-                l = len(molecules)
+                molecules_len = len(molecules)
                 records = []
                 for element_id in molecules:
-                    if l == 1:
+                    if molecules_len == 1:
                         records.append(">" + sample)
                     else:
                         records.append(
@@ -571,7 +572,7 @@ class sonarBasics(object):
             # print("latest sampling date:      ", dbm.get_latest_date())
 
     # output
-    ## profile generation
+    # profile generation
     @staticmethod
     def iter_formatted_match(cursor):
         nuc_profiles = collections.defaultdict(list)
@@ -616,7 +617,7 @@ class sonarBasics(object):
         print(out)
         return out
 
-    ## csv
+    # csv
     def exportCSV(cursor, outfile=None, na="*** no data ***", tsv=False):
         i = -1
         try:
@@ -626,20 +627,18 @@ class sonarBasics(object):
                     sep = "\t" if tsv else ","
                     writer = csv.DictWriter(
                         outfile, row.keys(), delimiter=sep, lineterminator=os.linesep
-                    )  #  extrasaction='ignore',
+                    )  # extrasaction='ignore',
                     writer.writeheader()
                 writer.writerow(row)
             if i == -1:
                 print(na)
-        except:
+        except Exception:
             print("An exception occurred", row)
             raise
 
-    ## vcf
-    def exportVCF(cursor, reference, outfile=None, na="*** no match ***"):
-        vcfdicts = []
+    # vcf
+    def exportVCF(cursor, reference, outfile=None, na="*** no match ***"):  # noqa: C901
         records = collections.OrderedDict()
-        prev_sample = None
         all_samples = set()
         for row in cursor.fetchall():  # sonarBasics.iter_formatted_match(cursor):
             chrom, pos, ref, alt, samples = (
@@ -685,7 +684,7 @@ class sonarBasics(object):
             for chrom in records:
                 for pos in records[chrom]:
                     for ref in records[chrom][pos]:
-                        ## snps and inserts (combined output)
+                        # snps and inserts (combined output)
                         alts = [x for x in records[chrom][pos][ref].keys() if x.strip()]
                         if alts:
                             alt_samples = set()
@@ -709,7 +708,7 @@ class sonarBasics(object):
                                 ".",
                                 "GT",
                             ] + ["/".join(x) for x in zip(*gts)]
-                        ## dels (individual output)
+                        # dels (individual output)
                         for alt in [
                             x for x in records[chrom][pos][ref].keys() if not x.strip()
                         ]:
@@ -743,7 +742,7 @@ class sonarBasics(object):
                 return lzma.open(fname, mode + "t", encoding=encoding)
             else:
                 return open(fname, mode, encoding=encoding)
-        except:
+        except Exception:
             sys.exit("input error: " + fname + " cannot be opened.")
 
     @staticmethod

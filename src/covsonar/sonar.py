@@ -13,6 +13,7 @@ from mpire import WorkerPool
 from tabulate import tabulate
 from tqdm import tqdm
 
+from . import sonardb
 from .align import sonarAligner
 from .basics import sonarBasics
 from .cache import sonarCache
@@ -41,7 +42,7 @@ def parse_args(args):
     subparsers.required = True
 
     # parser components
-    ## parser component: db input
+    # parser component: db input
     general_parser = argparse.ArgumentParser(add_help=False)
     general_parser.add_argument(
         "--db", metavar="FILE", help="sonar database to use", type=str, required=True
@@ -52,7 +53,7 @@ def parse_args(args):
         action="store_true",
     )
 
-    ## parser component: output
+    # parser component: output
     output_parser = argparse.ArgumentParser(add_help=False)
     output_parser.add_argument(
         "-o",
@@ -63,7 +64,7 @@ def parse_args(args):
         default=None,
     )
 
-    ## parser component: sample input
+    # parser component: sample input
     sample_parser = argparse.ArgumentParser(add_help=False)
     sample_parser.add_argument(
         "--sample",
@@ -82,13 +83,13 @@ def parse_args(args):
         default=[],
     )
 
-    ## parser component: property name
+    # parser component: property name
     prop_parser = argparse.ArgumentParser(add_help=False)
     prop_parser.add_argument(
         "--name", metavar="STR", help="name of sample property", type=str, required=True
     )
 
-    ## parser component: reference
+    # parser component: reference
     ref_parser = argparse.ArgumentParser(add_help=False)
     ref_parser.add_argument(
         "-r",
@@ -99,7 +100,7 @@ def parse_args(args):
         default=None,
     )
 
-    ## parser component: threads
+    # parser component: threads
     thread_parser = argparse.ArgumentParser(add_help=False)
     thread_parser.add_argument(
         "-t",
@@ -111,7 +112,7 @@ def parse_args(args):
     )
 
     # main parser
-    ## setup parser
+    # setup parser
     parser_setup = subparsers.add_parser(
         "setup", parents=[general_parser], help="Setup a new database."
     )
@@ -129,7 +130,7 @@ def parse_args(args):
         default=None,
     )
 
-    ## import parser
+    # import parser
     parser_import = subparsers.add_parser(
         "import",
         parents=[general_parser, thread_parser],
@@ -181,14 +182,14 @@ def parse_args(args):
         action="store_true",
     )
 
-    ## view-prop parser
+    # view-prop parser
     parser_viewprops = subparsers.add_parser(
         "list-prop",
         parents=[general_parser],
         help="View sample properties added to the database.",
     )
 
-    ## add-prop parser
+    # add-prop parser
     parser_addprops = subparsers.add_parser(
         "add-prop",
         parents=[general_parser, prop_parser],
@@ -225,7 +226,7 @@ def parse_args(args):
         default=None,
     )
 
-    ## delete-prop parser
+    # delete-prop parser
     parser_delprops = subparsers.add_parser(
         "delete-prop",
         parents=[general_parser, prop_parser],
@@ -235,7 +236,7 @@ def parse_args(args):
         "--force", help="force property to be deleted", action="store_true"
     )
 
-    ## match parser
+    # match parser
     parser_match = subparsers.add_parser(
         "match",
         parents=[sample_parser, output_parser, general_parser],
@@ -269,7 +270,7 @@ def parse_args(args):
         default=None,
     )
 
-    ## delete parser
+    # delete parser
     parser_restore = subparsers.add_parser(
         "delete",
         parents=[ref_parser, sample_parser, general_parser],
@@ -281,7 +282,7 @@ def parse_args(args):
         action="store_true",
     )
 
-    ## restore parser
+    # restore parser
     parser_restore = subparsers.add_parser(
         "restore",
         parents=[ref_parser, sample_parser, general_parser],
@@ -293,27 +294,27 @@ def parse_args(args):
         action="store_true",
     )
 
-    ## info parser
+    # info parser
     parser_info = subparsers.add_parser(
         "info", parents=[general_parser], help="show software and database info"
     )
 
-    ## optimize parser
+    # optimize parser
     parser_opt = subparsers.add_parser(
         "optimize", parents=[general_parser], help="optimizes the database."
     )
 
-    ## dev parser
+    # dev parser
     parser_dev = subparsers.add_parser("dev", parents=[general_parser])
 
-    ## db-upgrade parser
+    # db-upgrade parser
     parser_opt = subparsers.add_parser(
         "db-upgrade",
         parents=[general_parser],
         help="upgrade a database to the latest version",
     )
 
-    ## update-lineage-info parser
+    # update-lineage-info parser
     parser_update_anno = subparsers.add_parser(
         "update-lineage-info",
         parents=[general_parser],
@@ -334,7 +335,7 @@ def parse_args(args):
     pargs = parser.parse_known_args(args=args, namespace=user_namespace)
 
     # register dynamic arguments
-    ## register additonal arguments from database-specific sample property names when matching genomes
+    # register additonal arguments from database-specific sample property names when matching genomes
     if pargs[0].tool == "match" and hasattr(pargs[0], "db"):
         with sonarDBManager(pargs[0].db, readonly=True, debug=pargs[0].debug) as dbm:
             for prop in dbm.properties.values():
@@ -429,7 +430,7 @@ def main(args):
     # args = parse_args()
 
     if hasattr(args, "db") and args.db:
-        if args.tool != "setup" and not args.db is None and not os.path.isfile(args.db):
+        if args.tool != "setup" and args.db is not None and not os.path.isfile(args.db):
             sys.exit("input error: database does not exist.")
             # check_db_compatibility
 
@@ -440,7 +441,7 @@ def main(args):
         debug = False
 
     # tool procedures
-    ## setup, db-upgrade
+    # setup, db-upgrade
     if args.tool == "setup":
         if args.gbk:
             check_file(args.gbk)
@@ -453,8 +454,8 @@ def main(args):
     else:
         with sonarDBManager(args.db, readonly=True) as dbm:
             dbm.check_db_compatibility()
-    ## other than the above
-    ## import
+    # other than the above
+    # import
     if args.tool == "import":
         if args.no_update:
             update = False
@@ -470,7 +471,7 @@ def main(args):
             print("Nothing to import.")
             exit(0)
 
-        ### prop handling
+        # prop handling
         with sonarDBManager(args.db, readonly=True) as dbm:
             db_properties = set(dbm.properties.keys())
             db_properties.add("sample")
@@ -530,7 +531,7 @@ def main(args):
                             continue
                         properties[sample][x] = fields[tsv_cols[x]]
 
-        ### setup cache
+        # setup cache
         temp = False if args.cache else True
         cache = sonarCache(
             args.db,
@@ -542,8 +543,8 @@ def main(args):
             disable_progress=args.no_progress,
         )
 
-        ### importing sequences
-        if not args.fasta is None:
+        # importing sequences
+        if args.fasta is not None:
             cache.add_fasta(*args.fasta, propdict=properties)
 
             aligner = sonarAligner()
@@ -562,7 +563,7 @@ def main(args):
 
             cache.import_cached_samples()
 
-        ### importing properties
+        # importing properties
         if args.tsv:
             with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
                 for sample_name in tqdm(
@@ -579,7 +580,7 @@ def main(args):
                     for property_name, value in properties[sample_name].items():
                         dbm.insert_property(sample_id, property_name, value)
 
-    ## view-prop
+    # view-prop
     elif args.tool == "list-prop":
         with sonarDBManager(args.db, debug=debug) as dbm:
             if not dbm.properties:
@@ -632,7 +633,7 @@ def main(args):
             print("  e.g. 2021-01-01:2021-12-31 (between 1st Jan and 31st Dec of 2021)")
             print()
 
-    ## add-prop
+    # add-prop
     elif args.tool == "add-prop":
         with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
             if args.qtype is None:
@@ -755,7 +756,7 @@ def main(args):
                     )
                     # reserved_props[pname] = getattr(args, pname)
 
-        ## Support file upload
+        # Support file upload
         if args.sample_file:
             for sample_file in args.sample_file:
                 check_file(sample_file)

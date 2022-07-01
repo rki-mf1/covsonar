@@ -86,14 +86,14 @@ class sonarAligner(object):
         return True
 
     def extract_vars(self, qry_seq, ref_seq, elemid):
-        l = len(qry_seq)
-        if l != len(ref_seq):
+        query_length = len(qry_seq)
+        if query_length != len(ref_seq):
             sys.exit("error: sequences differ in length")
         qry_seq += " "
         ref_seq += " "
         i = 0
         offset = 0
-        while i < l:
+        while i < query_length:
             # match
             if qry_seq[i] == ref_seq[i]:
                 pass
@@ -192,7 +192,7 @@ class sonarAligner(object):
                     prev_row["elemid"]
                 ), label
                 prev_row = row
-        if not prev_row is None:
+        if prev_row is not None:
             start = prev_row["aaPos"]
             end = prev_row["aaPos"] + len(prev_row["aa"])
             if end - start == 1:

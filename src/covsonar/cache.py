@@ -4,7 +4,6 @@
 
 import base64
 from collections import defaultdict
-import difflib as dl
 import gzip
 import hashlib
 import lzma
@@ -335,10 +334,10 @@ class sonarCache:
                     coords.extend(list(rng))
                 while len(coords) % 3 != 0:
                     coords.append("")
-                l = len(coords)
-                while len(seq) < l / 3:
+                coords_len = len(coords)
+                while len(seq) < coords_len / 3:
                     seq += "-"
-                while len(sequence) < l:
+                while len(sequence) < coords_len:
                     sequence += "-"
                 for i, coord in enumerate(
                     [coords[x : x + 3] for x in range(0, len(coords), 3)]
@@ -367,7 +366,7 @@ class sonarCache:
             if compressed == "xz":
                 return lzma.open(fname, mode + "t", encoding=encoding)
             return open(fname, mode, encoding=encoding)
-        except:
+        except Exception:
             sys.exit("input error: " + fname + " cannot be opened.")
 
     def process_fasta_entry(self, header, seq):
@@ -427,14 +426,14 @@ class sonarCache:
         if not mol:
             try:
                 return self.refmols[mol]["accession"]
-            except:
+            except Exception:
                 None
         return self.default_refmol_acc
 
     def get_refseq(self, refmol_acc):
         try:
             return self.sources[refmol_acc]["sequence"]
-        except:
+        except Exception:
             return None
 
     def iter_cds(self, refmol_acc):
@@ -478,7 +477,7 @@ class sonarCache:
     def get_refseq_id(self, refmol_acc):
         try:
             return self.sources[refmol_acc]["id"]
-        except:
+        except Exception:
             return None
 
     def get_refhash(self, refmol_acc):
@@ -488,7 +487,7 @@ class sonarCache:
                     self.sources[refmol_acc]["sequence"]
                 )
             return self.sources[refmol_acc]["seqhash"]
-        except:
+        except Exception:
             return None
 
     def get_properties(self, fasta_header):
@@ -625,7 +624,7 @@ class sonarCache:
                     if not sample_data["seqhash"] is None:
                         try:
                             seq = list(refseqs[sample_data["refmolid"]])
-                        except:
+                        except Exception:
                             refseqs[sample_data["refmolid"]] = list(
                                 dbm.get_sequence(sample_data["refmolid"])
                             )

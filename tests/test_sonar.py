@@ -1,5 +1,6 @@
-from covsonar import sonar
 import pytest
+
+from covsonar import sonar
 
 
 def test_help():

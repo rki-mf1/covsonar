@@ -1,4 +1,3 @@
-# DEPENDENCIES
 from collections import defaultdict
 import itertools
 import logging
@@ -17,7 +16,7 @@ import pandas as pd
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
 
-# CLASS
+
 class sonarDBManager:
     """
     This object provides a sonarDB SQLite manager handler managing connections and
@@ -182,14 +181,14 @@ class sonarDBManager:
 
     @property
     def default_reference_id(self):
-        if self.__default_reference == False:
+        if self.__default_reference is False:
             sql = "SELECT accession FROM reference WHERE standard = 1 LIMIT 1"
             self.__default_reference = self.cursor.execute(sql).fetchone()
         return self.__default_reference
 
     @property
     def properties(self):
-        if self.__properties == False:
+        if self.__properties is False:
             sql = "SELECT * FROM property"
             rows = self.cursor.execute(sql).fetchall()
             self.__properties = {} if not rows else {x["name"]: x for x in rows}
@@ -237,7 +236,7 @@ class sonarDBManager:
             self.cursor.execute(sql, [name, datatype, querytype, description, standard])
             self.__properties = False
             pid = self.properties[name]["id"]
-            if not standard is None:
+            if standard is not None:
                 sql = (
                     "INSERT INTO sample2property (property_id, value_"
                     + self.properties[name]["datatype"]
@@ -256,7 +255,7 @@ class sonarDBManager:
                 codon = "".join(codon)
                 try:
                     aa = str(Seq.translate(codon, table=translation_table))
-                except:
+                except Exception:
                     aa = ""
                 self.add_codon(translation_table, codon, aa)
 
@@ -601,23 +600,23 @@ class sonarDBManager:
         # sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\"" + condition
         sql = (
             """
-			SELECT  variant.element_id as \"element.id\",
-					variant.start as \"variant.start\",
-					variant.end as  \"variant.end\",
-					variant.ref as  \"variant.ref\",
-					variant.alt as \"variant.alt\"
-					FROM
-						( SELECT sample.seqhash
-						FROM sample
-						WHERE sample.name = ?
-						) AS sample_T
-					INNER JOIN alignment
-						ON sample_T.seqhash == alignment.seqhash
-					INNER JOIN alignment2variant
-						ON alignment.id == alignment2variant.alignment_id
-					INNER JOIN	variant
-						ON alignment2variant.variant_id == variant.id
-						WHERE  variant.element_id """
+            SELECT  variant.element_id as \"element.id\",
+                    variant.start as \"variant.start\",
+                    variant.end as  \"variant.end\",
+                    variant.ref as  \"variant.ref\",
+                    variant.alt as \"variant.alt\"
+                    FROM
+                        ( SELECT sample.seqhash
+                        FROM sample
+                        WHERE sample.name = ?
+                        ) AS sample_T
+                    INNER JOIN alignment
+                        ON sample_T.seqhash == alignment.seqhash
+                    INNER JOIN alignment2variant
+                        ON alignment.id == alignment2variant.alignment_id
+                    INNER JOIN    variant
+                        ON alignment2variant.variant_id == variant.id
+                        WHERE  variant.element_id """
             + condition
         )
 
@@ -683,7 +682,7 @@ class sonarDBManager:
             vals = [sample_name]
         properties = {}
         for row in self.cursor.execute(sql, vals):
-            if row == None:
+            if row is None:
                 return {}
             properties[row["property.name"]] = row[
                 "sample2property.value_" + row["property.datatype"]
@@ -818,15 +817,11 @@ class sonarDBManager:
         conditions = []
         vallist = []
 
-        intersect_sqls = []
-        intersect_vals = []
-        except_sqls = []
-
         for val in vals:
             val = str(val).strip()
 
             # single value
-            if not ":" in val:
+            if ":" not in val:
                 match = op1.match(val)
                 if not match:
                     sys.exit(errmsg + val + ")")
@@ -876,7 +871,7 @@ class sonarDBManager:
         for val in vals:
             val = str(val).strip()
             # single value
-            if not ":" in val:
+            if ":" not in val:
                 match = op1.match(val)
                 if not match:
                     sys.exit(errmsg + val + ")")
@@ -926,7 +921,7 @@ class sonarDBManager:
         for val in vals:
             val = str(val).strip()
             # single date
-            if not ":" in val:
+            if ":" not in val:
                 match = op1.match(val)
                 if not match:
                     sys.exit(errmsg + val + ")")
@@ -1125,7 +1120,7 @@ class sonarDBManager:
             else:
                 negate = False
 
-            ## variant typing
+            # variant typing
             if match := snv_regex.match(var):
                 snv = True
             elif match := del_regex.match(var):
@@ -1133,7 +1128,7 @@ class sonarDBManager:
             else:
                 sys.exit("input error: " + var + " is not a valid variant definition.")
 
-            ## set molecule
+            # set molecule
             if match.group(1):
                 c.append('"molecule.symbol" = ?')
                 v.append(match.group(1)[:-1])
@@ -1141,7 +1136,7 @@ class sonarDBManager:
                 c.append('"molecule.standard" = ?')
                 v.append(1)
 
-            ## set element
+            # set element
             if match.group(2):
                 c.append('"element.type" = ?')
                 v.append("cds")
@@ -1153,7 +1148,7 @@ class sonarDBManager:
                 v.append(1)
                 code = iupac_nt_code
 
-            ## snp and insert handling
+            # snp and insert handling
             if snv:
                 c.append('"variant.start" = ?')
                 v.append(int(match.group(4)) - 1)
@@ -1162,12 +1157,12 @@ class sonarDBManager:
                 c.append('"variant.ref" = ?')
                 v.append(match.group(3))
 
-                ### explicit alternate allele
+                # explicit alternate allele
                 if match.group(5).startswith("="):
                     c.append('"variant.alt" = ?')
                     v.append(match.group(5)[1:])
 
-                ### potentially ambiguous alternate snp
+                # potentially ambiguous alternate snp
                 elif len(match.group(5)) == 1:
                     l = len(code[match.group(5)])
                     if l == 1:
@@ -1177,7 +1172,7 @@ class sonarDBManager:
                         c.append('"variant.alt" IN (' + ", ".join(["?"] * l) + ")")
                         v.extend(code[match.group(5)])
 
-                ### potentially ambiguous alternate insert
+                # potentially ambiguous alternate insert
                 else:
                     a = [
                         "".join(x)
@@ -1191,7 +1186,7 @@ class sonarDBManager:
                         c.append('"variant.alt" IN (' + ", ".join(["?"] * l) + ")")
                         v.extend(a)
 
-            ## deletion handling
+            # deletion handling
             else:
                 s = match.group(3)
                 e = match.group(4)[1:]
@@ -1213,7 +1208,7 @@ class sonarDBManager:
                 c.append('"variant.alt" = ?')
                 v.append(" ")
 
-            ## assemble sub-sql
+            # assemble sub-sql
             if negate:
                 except_sqls.append(base_sql + " AND ".join(c))
                 except_vals.extend(v)
@@ -1257,8 +1252,8 @@ class sonarDBManager:
         # collecting sqls for metadata-based filtering
         property_sqls = []
         property_vals = []
-        ## IF sublineage search is enable
-        ## support: include and exclude
+        # IF sublineage search is enable
+        # support: include and exclude
         if "with_sublineage" in reserved_props:
             _tmp_include_lin = []  # used to keep all lienages after search.
             lineage_col = reserved_props.get("with_sublineage")
@@ -1298,7 +1293,7 @@ class sonarDBManager:
                             i = "^" + i
                         include_lin.append(i)  # add more lineage to find in next round.
                         # _tmp_include_lin.append(i)
-                        ## if we don't find this wildcard so we discard it
+                        # if we don't find this wildcard so we discard it
                 else:  # None (no child)
                     if negate:
                         in_lin = "^" + in_lin
@@ -1396,7 +1391,7 @@ class sonarDBManager:
         # standard query
         if format == "csv" or format == "tsv":
 
-            ## select samples
+            # select samples
             sql = sample_selection_sql
             sample_ids = self.cursor.execute(
                 sql, property_vals + profile_vals
@@ -1408,7 +1403,7 @@ class sonarDBManager:
             # rows = {x['id']: {"id": x['id']} for x in sample_ids}
             # print(len(sample_ids))
 
-            ###
+            #
             # Current solution:
             # After we got the selected IDs
             # We use two-stage query and then combine both results together to produce final result
@@ -1442,32 +1437,32 @@ class sonarDBManager:
             _1_rows = self.cursor.execute(_1_final_sql).fetchall()
             _2_final_sql = (
                 " SELECT name AS 'sample.name'  , nt_profile._profile AS NUC_PROFILE, aa_profile._profile AS AA_PROFILE \
-					FROM \
-							( \
-							  SELECT  \"sample.id\", group_concat("
+                    FROM \
+                            ( \
+                              SELECT  \"sample.id\", group_concat("
                 + m
                 + '"variant.label") AS _profile \
-							  FROM variantView WHERE "sample.id" IN ('
+                              FROM variantView WHERE "sample.id" IN ('
                 + selected_sample_ids
                 + ") AND "
                 + genome_element_condition
                 + nn
                 + ' GROUP BY "sample.id" \
-							) nt_profile, \
-							( \
-							  SELECT  "sample.id", group_concat('
+                            ) nt_profile, \
+                            ( \
+                              SELECT  "sample.id", group_concat('
                 + m
                 + '"element.symbol" || ":" || "variant.label") AS _profile \
-							  FROM variantView WHERE "sample.id" IN ('
+                              FROM variantView WHERE "sample.id" IN ('
                 + selected_sample_ids
                 + ") AND "
                 + cds_element_condition
                 + nx
                 + ' GROUP BY "sample.id" \
-							) aa_profile, \
-							sample \
-					WHERE nt_profile."sample.id" = aa_profile."sample.id" AND  nt_profile."sample.id" = sample.id  \
-						  AND sample.id  IN ('
+                            ) aa_profile, \
+                            sample \
+                    WHERE nt_profile."sample.id" = aa_profile."sample.id" AND  nt_profile."sample.id" = sample.id  \
+                          AND sample.id  IN ('
                 + selected_sample_ids
                 + ")"
             )
@@ -1502,24 +1497,24 @@ class sonarDBManager:
             # at _1_rows so we can return _1_rows only a
             return _1_rows  #  list(rows.values())
             """
-			sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
-			   SELECT  *, \
-						( \
-						  SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
-						) nt_profile, \
-						( \
-						  SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
-						  FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
-						) aa_profile \
-				FROM sample \
-				WHERE id IN ( SELECT id FROM selected_samples )"
+            sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
+               SELECT  *, \
+                        ( \
+                          SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
+                          FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+                        ) nt_profile, \
+                        ( \
+                          SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
+                          FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
+                        ) aa_profile \
+                FROM sample \
+                WHERE id IN ( SELECT id FROM selected_samples )"
 
 
-			sql = "SELECT * \
-				   FROM variantView \
-				   WHERE \"sample.id\" IN (" + sample_selection_sql + ")" # ORDER BY \"sample.id\", \"element.id\", \"variant.start\""
-			"""
+            sql = "SELECT * \
+                   FROM variantView \
+                   WHERE \"sample.id\" IN (" + sample_selection_sql + ")" # ORDER BY \"sample.id\", \"element.id\", \"variant.start\""
+            """
         elif format == "count":
             sql = (
                 "SELECT count(DISTINCT id) as count FROM (" + sample_selection_sql + ")"
