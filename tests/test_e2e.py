@@ -13,11 +13,7 @@ def split_cli(s):
 
 def run_cli(s):
     """Helper function to simulate running the command line ./sonar <args>"""
-    return sonar.main(
-        sonar.parse_args(
-            split_cli(s)
-        )
-    )
+    return sonar.main(sonar.parse_args(split_cli(s)))
 
 
 def test_help():
@@ -53,17 +49,27 @@ def test_valid_beginning(tmp_path, monkeypatch):
     run_cli(f"add-prop --db {db_path} --name DOWNLOAD_ID --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name DEMIS_ID --dtype integer --descr descr")
     run_cli(f"add-prop --db {db_path} --name RECEIVE_DATE --dtype date --descr descr")
-    run_cli(f"add-prop --db {db_path} --name PROCESSING_DATE --dtype date --descr descr")
-    run_cli(f"add-prop --db {db_path} --name PUBLICATION_STATUS --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name HASHED_SEQUENCE --dtype text --descr descr")
+    run_cli(
+        f"add-prop --db {db_path} --name PROCESSING_DATE --dtype date --descr descr"
+    )
+    run_cli(
+        f"add-prop --db {db_path} --name PUBLICATION_STATUS --dtype text --descr descr"
+    )
+    run_cli(
+        f"add-prop --db {db_path} --name HASHED_SEQUENCE --dtype text --descr descr"
+    )
     run_cli(f"add-prop --db {db_path} --name TIMESTAMP --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name STUDY --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name DOWNLOADING_TIMESTAMP --dtype text --descr descr")
+    run_cli(
+        f"add-prop --db {db_path} --name DOWNLOADING_TIMESTAMP --dtype text --descr descr"
+    )
     run_cli(f"add-prop --db {db_path} --name SENDING_LAB_PC --dtype zip --descr descr")
     run_cli(f"add-prop --db {db_path} --name DEMIS_ID_PC --dtype zip --descr descr")
     run_cli(f"add-prop --db {db_path} --name VERSION --dtype integer --descr descr")
     run_cli(f"add-prop --db {db_path} --name DESH_QC_PASSED --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name DESH_REJECTION_REASON --dtype text --descr descr")
+    run_cli(
+        f"add-prop --db {db_path} --name DESH_REJECTION_REASON --dtype text --descr descr"
+    )
     run_cli(f"add-prop --db {db_path} --name DUPLICATE_ID --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name LINEAGE --dtype text --descr descr")
 
@@ -77,5 +83,7 @@ def test_valid_end(tmp_path, monkeypatch):
     db_path = "data/test.db"
 
     run_cli(f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013")
-    run_cli(f"match --db {db_path} --DATE_DRAW 2021-11-01:2022-12-15 -o {tmp_path}/temp.tsv")
+    run_cli(
+        f"match --db {db_path} --DATE_DRAW 2021-11-01:2022-12-15 -o {tmp_path}/temp.tsv"
+    )
     run_cli(f"match --db {db_path} --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count")

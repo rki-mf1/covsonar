@@ -1,10 +1,10 @@
+import tempfile
+
+import pytest
+
 from covsonar.basics import sonarBasics
 from covsonar.dbm import sonarDBManager
-from covsonar.cache import sonarCache
-from covsonar.linmgr import sonarLinmgr
-from covsonar.align import sonarAligner
-import pytest
-import tempfile
+
 
 # PYTEST FIXTURES
 @pytest.fixture

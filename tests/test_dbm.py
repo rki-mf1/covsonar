@@ -1,5 +1,6 @@
 from Bio.Seq import Seq
 import pytest
+
 from covsonar.dbm import sonarDBManager
 
 
@@ -24,7 +25,7 @@ def test_translationtable(init_writeable_dbm):
     for codon, aa in init_writeable_dbm.get_translation_dict(1).items():
         try:
             exp = str(Seq.translate(codon, table=tt))
-        except:
+        except Exception:
             exp = ""
         assert aa == exp
 

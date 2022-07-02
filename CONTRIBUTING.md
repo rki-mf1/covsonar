@@ -4,6 +4,17 @@ In this guide you will get an overview of the contribution workflow from setting
 
 Use the table of contents icon on the top left corner of this document to get to a specific section of this guide quickly.
 
+## TLDR; I want to start hacking now!
+
+```sh
+mamba create -n covsonar-dev python=3.9 poetry fortran-compiler nox pre-commit emboss=6.6.0
+mamba activate covsonar-dev  # needs to be activated for the following commands to work
+poetry install  # install current source of covsonar and its dependencies
+poetry run covsonar <args>  # run covsonar
+nox  # run linting and pytest tests
+nox -s zimports black  # auto format imports and code
+```
+
 ## New contributor guide
 
 To get an overview of the project itself, read the [README](README.md).

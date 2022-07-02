@@ -1,7 +1,8 @@
-import os
-from covsonar.basics import sonarBasics
-import pytest
 import re
+
+import pytest
+
+from covsonar.basics import sonarBasics
 
 
 def test_setup_but_file_exists(get_tmpfile_name):
