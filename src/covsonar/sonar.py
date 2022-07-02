@@ -331,7 +331,6 @@ def parse_args(args):
     )
 
     # register known arguments
-    print(f"args before crash: {args}")
     pargs = parser.parse_known_args(args=args, namespace=user_namespace)
 
     # register dynamic arguments

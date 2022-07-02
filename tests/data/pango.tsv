@@ -1,0 +1,6 @@
+IMS_ID	lineage	conflict	ambiguity_score	scorpio_call	scorpio_support	scorpio_conflict	scorpio_notes	version	pangolin_version	scorpio_version	constellation_version	is_designated	qc_status	qc_notes	note
+IMS-10025-CVDP-00960	B.1.1.7	0.0						PUSHER-v1.11	4.1.1	0.3.17	v0.1.10	False	pass	Ambiguous_content:0.02	Usher placements: B.1.1.7(5/5)
+IMS-10087-CVDP-D484F3AD-CD8F-473C-8A5E-DB5D6A710BE5	B.1.1.7	0.0						PUSHER-v1.11	4.1.1	0.3.17	v0.1.10	False	pass	Ambiguous_content:0.02	Usher placements: B.1.1.7(2/2)
+IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95	B.1.1.7	0.0						PUSHER-v1.11	4.1.1	0.3.17	v0.1.10	False	pass	Ambiguous_content:0.02	Usher placements: B.1.1.7(4/4)
+IMS-10004-CVDP-0672526C-BAEA-4FE9-A57B-941CBCC13343	B.1.258	0.0						PUSHER-v1.11	4.1.1	0.3.17	v0.1.10	False	pass	Ambiguous_content:0.04	Usher placements: B.1.258(4/4)
+IMS-10013-CVDP-69DF29F4-D7E3-4954-94F4-65C20BE7B850	B.1.1.7	0.0						PUSHER-v1.11	4.1.1	0.3.17	v0.1.10	False	pass	Ambiguous_content:0.04	Usher placements: B.1.1.7(6/6)
