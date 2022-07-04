@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.4"
+VERSION = "1.1.5"
 import os
 from posixpath import split
 import sys
@@ -82,7 +82,7 @@ def parse_args():
 	parser_match_g2 = parser_match.add_mutually_exclusive_group()
 	parser_match_g2.add_argument('--only_frameshifts', help="show only genomes containing one or more frameshift mutations", action="store_true")
 	parser_match_g2.add_argument('--no_frameshifts', help="show only genomes containing no frameshift mutation", action="store_true")
-	parser_match_g2.add_argument('--tsv', help="use tsv instead of csv output", action="store_true")
+	parser_match.add_argument('--tsv', help="use tsv instead of csv output", action="store_true")
 	parser_match.add_argument('--debug', help="show database query for debugging", action="store_true")
 
 	#create the parser for the "restore" command

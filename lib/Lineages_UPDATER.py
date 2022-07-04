@@ -82,6 +82,18 @@ def download_source(tmp_dir):
 
 def process_lineage(alias_key_path, lineages_path, output):
     print('Calculate all lineages')
+    # handle duplicate values
+    with open(alias_key_path) as f:
+		# load json objects to dictionaries
+        data_dict = json.load(f)
+
+    for k, v in data_dict.items():
+        if type(v) is list:
+            data_dict[k] = list(set(v))
+	# rewrite the json
+    with open(alias_key_path ,'w') as nf:
+        json.dump(data_dict, nf)
+
     aliasor = Aliasor(alias_key_path)
     df_lineages = pd.read_csv(lineages_path)
     lineages = df_lineages.lineage.unique()
