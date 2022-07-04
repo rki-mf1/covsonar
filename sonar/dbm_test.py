@@ -21,8 +21,8 @@ def test_translationtable(init_writeable_dbm):
 			exp = ""
 		assert aa == exp
 
-def test_new_default_red(setup_db):
-	with sonarDBManager(setup_db, readonly=False) as dbm:
+def test_add_reference(testdb):
+	with sonarDBManager(testdb, readonly=False) as dbm:
 		dbm.add_reference("REF1", "my new reference", "virus X", 1, 1)
 		assert dbm.get_default_reference_accession() == "REF1"
 		dbm.add_reference("REF2", "my new reference", "virus X", 1, 1)

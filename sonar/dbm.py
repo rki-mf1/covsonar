@@ -35,7 +35,7 @@ class sonarDBManager():
 
 	In this example the DOCTESTDB variable store the path to a database file
 
-	>>> dbfile = getfixture('setup_testdb')
+	>>> dbfile = getfixture('setup_db')
 	>>> with sonarDBManager(dbfile) as dbm:
 	... 	pass
 
@@ -230,7 +230,7 @@ class sonarDBManager():
 		'''
 		setup database
 
-		>>> dbfile = getfixture('get_tmpfile_name')
+		>>> dbfile = getfixture('tmpfile_name')
 		>>> sonarDBManager.setup(dbfile)
 		'''
 		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "db.sqlite"), 'r') as handle:

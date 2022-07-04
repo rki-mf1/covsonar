@@ -17,7 +17,7 @@ import pickle
 import tempfile
 import itertools
 from contextlib import ExitStack
-from sonar import sonarDBManager, sonarAligner
+import sonar
 import csv
 from tabulate import tabulate
 from textwrap import fill
@@ -181,11 +181,11 @@ class sonarBasics(object):
 	def setup_db(fname, auto_create=False, default_setup=True, reference_gb=None, debug=False, quiet=False):
 		if os.path.isfile(fname):
 			sys.exit("setup error: " + fname + " does already exist.")
-		sonarDBManager.setup(fname, debug=debug)
+		sonar.sonarDBManager.setup(fname, debug=debug)
 
 		## loading default data
 		if default_setup or auto_create:
-			with sonarDBManager(fname, readonly=False, debug=debug) as dbm:
+			with sonar.sonarDBManager(fname, readonly=False, debug=debug) as dbm:
 				### adding pre-defined sample properties
 				dbm.add_property("imported", "date", "date", "date sample has been imported to the database")
 				dbm.add_property("modified", "date", "date", "date when sample data has been modified lastly")
@@ -329,10 +329,98 @@ class sonarBasics(object):
 		"""
 		return str(seq).strip().upper().replace("U", "T")
 
+
+	## importing
+
+	@staticmethod
+	def import_data(db, fasta=[], tsv=[], cols={}, cachedir = None, autodetect=False, progress=False, update=True, debug=False, quiet=False):
+		if not quiet:
+			if not update:
+				print("import mode: skipping existing samples")
+			else:
+				print("import mode: updating existing samples")
+
+		if not fasta:
+			if not tsv or not update:
+				print("Nothing to import.")
+				exit(0)
+
+		### prop handling
+		with sonar.sonarDBManager(db, readonly=True) as dbm:
+			db_properties = set(dbm.properties.keys())
+			db_properties.add('sample')
+
+		colnames = {x: x for x in db_properties} if autodetect else {}
+		for x in cols:
+			if x.count("=") != 1:
+				sys.exit("input error: " + x + " is not a valid sample property assignment.")
+			k, v = x.split("=")
+			if k not in db_properties:
+				sys.exit("input error: sample property " + k + " is unknown to the selected database. Use list-props to see all valid properties.")
+			colnames[k] = v
+
+		if "sample" not in colnames:
+			sys.exit("input error: a sample column has to be assigned.")
+
+		properties = collections.defaultdict(dict)
+		for fname in tsv:
+			with open(fname, "r") as handle, tqdm(desc="processing " + fname + "...", total=os.path.getsize(tsv), unit="bytes", unit_scale=True, bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=not progress) as pbar:
+				line = handle.readline()
+				pbar.update(len(line))
+				fields = line.strip("\r\n").split("\t")
+				tsv_cols = {}
+				if not quiet:
+					print()
+				for x in sorted(colnames.keys()):
+					c = fields.count(colnames[x])
+					if c == 1:
+						tsv_cols[x] = fields.index(colnames[x])
+						if not quiet:
+							print("  " + x + " <- " + colnames[x])
+					elif c > 1:
+						sys.exit("error: " + colnames[x] + " is not an unique column.")
+				if 'sample' not in tsv_cols:
+					sys.exit("error: tsv file does not contain required sample column.")
+				elif len(tsv_cols) == 1:
+					sys.exit("input error: tsv does not provide any informative column.")
+				for line in handle:
+					pbar.update(len(line))
+					fields = line.strip("\r\n").split("\t")
+					sample = fields[tsv_cols['sample']]
+					for x in tsv_cols:
+						if x == "sample":
+							continue
+						properties[sample][x] = fields[tsv_cols[x]]
+
+		### setup cache
+		cache = sonar.sonarCache(db, outdir=cachedir, logfile="import.log", allow_updates=update, temp=not cachedir, debug=debug, disable_progress=not progress)
+
+		### importing sequences
+		if not fasta:
+			cache.add_fasta(*fasta, propdict = properties)
+
+			aligner = sonarAligner()
+			l = len(cache._samplefiles_to_profile)
+			with WorkerPool(n_jobs=args.threads, start_method='fork') as pool, tqdm(desc="profiling sequences...", total=l, unit="seqs", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=not progress) as pbar:
+				for _ in pool.imap_unordered(aligner.process_cached_sample, cache._samplefiles_to_profile):
+				    pbar.update(1)
+
+			cache.import_cached_samples()
+
+		### importing properties
+		elif tsv:
+			with sonarDBManager(db, readonly=False, debug=debug) as dbm:
+				for sample_name in tqdm(properties, desc="import data ...", total=len(properties), unit="samples", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=not progress):
+					sample_id = dbm.get_sample_id(sample_name)
+					if not sample_id:
+						continue
+					for property_name, value in properties[sample_name].items():
+						dbm.insert_property(sample_id, property_name, value)
+
 	# matching
 	@staticmethod
 	def match(db, profiles=[], reserved_props_dict={}, propdict={}, reference=None, outfile=None, format="csv", debug="False"):
-		with sonarDBManager(db, debug=debug) as dbm:
+		with sonar.sonarDBManager(db, debug=debug) as dbm:
 			if format == "vcf" and reference is None:
 				reference = dbm.get_default_reference_accession()
 			cursor = dbm.match( *profiles, reserved_props = reserved_props_dict, properties=propdict, reference_accession=reference, format=format)
@@ -354,7 +442,7 @@ class sonarBasics(object):
 	# restore
 	@staticmethod
 	def restore(db, *samples,reference_accession=None, aligned=False, outfile=None, debug=False):
-		with sonarDBManager(db, readonly=True, debug=debug) as dbm:
+		with sonar.sonarDBManager(db, readonly=True, debug=debug) as dbm:
 			handle = sys.stdout if outfile is None else open(outfile, "w")
 			for sample in samples:
 				prefixes = collections.defaultdict(str)
@@ -384,7 +472,7 @@ class sonarBasics(object):
 	# restore
 	@staticmethod
 	def delete(db, *samples, debug):
-		with sonarDBManager(db, readonly=False, debug=debug) as dbm:
+		with sonar.sonarDBManager(db, readonly=False, debug=debug) as dbm:
 			before = dbm.count_samples()
 			dbm.delete_samples(*samples)
 			after = dbm.count_samples()
@@ -392,7 +480,7 @@ class sonarBasics(object):
 
 	@staticmethod
 	def show_db_info(db):
-		with sonarDBManager(db, readonly=True) as dbm:
+		with sonar.sonarDBManager(db, readonly=True) as dbm:
 			print("covSonar Version:          ", sonarBasics.get_version())
 			print("database path:             ", dbm.dbfile)
 			print("database version:          ", dbm.get_db_version())
