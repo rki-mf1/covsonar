@@ -2,7 +2,7 @@ name: TestPyPI
 on:
   push:
     branches:
-      - feature/packageandtest
+      - dev/cov2_mpire
 jobs:
   release:
     runs-on: ubuntu-latest
