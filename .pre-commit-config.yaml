@@ -4,7 +4,9 @@ repos:
     hooks:
     -   id: check-yaml
     -   id: end-of-file-fixer
+        exclude_types: [csv, tsv]
     -   id: trailing-whitespace
+        exclude_types: [csv, tsv]
 -   repo: local
     hooks:
     -   id: zimports
