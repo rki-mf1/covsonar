@@ -750,7 +750,6 @@ class sonarGFF(object):
         symbol_regex = re.compile("gene=([^;]+)(?:;|$)")
         locus_regex = re.compile("locus_tag=([^;]+)(?:;|$)")
         id_regex = re.compile("ID=([^;]+)(?:;|$)")
-        symbols = set()
 
         record = SeqIO.read(fna, "fasta")
         gseq = str(record.seq).upper()
@@ -1761,7 +1760,7 @@ class sonarDB(object):
             if dbm is None:
                 dbm = stack.enter_context(sonarDBManager(self.db))
             for i in tqdm(
-                range(len(fnames)), desc=msg, disable_progressbar=disable_progress
+                range(len(fnames)), desc=msg, disable_progressbar=disable_progressbar
             ):
                 self.import_genome(**self.process_fasta(fnames[i]), dbm=dbm)
 
@@ -2658,7 +2657,7 @@ class sonarDB(object):
         with ExitStack() as stack:
             if dbm is None:
                 dbm = stack.enter_context(sonarDBManager(self.db, readonly=True))
-            row = dbm.get_dna_vars(acc)
+            rows = dbm.get_dna_vars(acc)
         if rows:
             refseq = list(self.refseq)
             qryseq = refseq[:]
@@ -2927,7 +2926,7 @@ class sonarCache:
 
     @staticmethod
     def get_seqhash_from_fasta_name(fname):
-        return sonarCache.deslugify(os.path.basename(fname))[: -len(self._fasta_ext)]
+        return sonarCache.deslugify(os.path.basename(fname))
 
     def iter_fasta(self, fname):
         """

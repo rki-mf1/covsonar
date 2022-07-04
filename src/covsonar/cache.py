@@ -375,9 +375,9 @@ class sonarCache:
         if not refmol:
             sys.exit(
                 "input error: "
-                + record.id
+                + sample_id
                 + " refers to an unknown reference molecule ("
-                + self._molregex.search(record.description)
+                + refmol
                 + ")."
             )
         seq = sonarBasics.harmonize(seq)
@@ -412,10 +412,10 @@ class sonarCache:
                     pbar.update(len(line))
                     line = line.strip()
                     if line.startswith(">"):
+                        header = line[1:]
                         if seq:
                             yield self.process_fasta_entry(header, "".join(seq))
                             seq = []
-                        header = line[1:]
                     else:
                         seq.append(line)
                 if seq:
@@ -593,9 +593,9 @@ class sonarCache:
                 try:
                     # nucleotide level import
                     if not sample_data["seqhash"] is None:
-                        sampleid = dbm.insert_sample(
-                            sample_data["name"], sample_data["seqhash"]
-                        )
+                        # sampleid = dbm.insert_sample(
+                        #     sample_data["name"], sample_data["seqhash"]
+                        # )
                         algnid = dbm.insert_alignment(
                             sample_data["seqhash"], sample_data["refmolid"]
                         )

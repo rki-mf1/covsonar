@@ -183,7 +183,7 @@ def parse_args(args):
     )
 
     # view-prop parser
-    parser_viewprops = subparsers.add_parser(
+    subparsers.add_parser(
         "list-prop",
         parents=[general_parser],
         help="View sample properties added to the database.",
@@ -271,12 +271,12 @@ def parse_args(args):
     )
 
     # delete parser
-    parser_restore = subparsers.add_parser(
+    parser_delete = subparsers.add_parser(
         "delete",
         parents=[ref_parser, sample_parser, general_parser],
         help="delete one or more samples from the database.",
     )
-    parser_restore.add_argument(
+    parser_delete.add_argument(
         "--aligned",
         help="ise aligned form (deletions indicated by - and insertions by lower-case letters)",
         action="store_true",
@@ -295,27 +295,27 @@ def parse_args(args):
     )
 
     # info parser
-    parser_info = subparsers.add_parser(
+    subparsers.add_parser(
         "info", parents=[general_parser], help="show software and database info"
     )
 
     # optimize parser
-    parser_opt = subparsers.add_parser(
+    subparsers.add_parser(
         "optimize", parents=[general_parser], help="optimizes the database."
     )
 
     # dev parser
-    parser_dev = subparsers.add_parser("dev", parents=[general_parser])
+    subparsers.add_parser("dev", parents=[general_parser])
 
     # db-upgrade parser
-    parser_opt = subparsers.add_parser(
+    subparsers.add_parser(
         "db-upgrade",
         parents=[general_parser],
         help="upgrade a database to the latest version",
     )
 
     # update-lineage-info parser
-    parser_update_anno = subparsers.add_parser(
+    subparsers.add_parser(
         "update-lineage-info",
         parents=[general_parser],
         help="download latest lineage information",

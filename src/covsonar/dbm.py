@@ -576,15 +576,6 @@ class sonarDBManager:
         sql = 'SELECT "element.sequence", "element.symbol", "element.id" FROM alignmentView WHERE "sample.name" = ? AND "reference.accession" = ? '
         return self.cursor.execute(sql, [sample_name, reference_accession])
 
-    def get_alignment_id(self, seqhash, element_id):
-        sql = (
-            'SELECT id FROM alignment WHERE "element_id" = ? AND "seqhash" = ? LIMIT 1;'
-        )
-        row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
-        if row:
-            return row["id"]
-        return None
-
     def get_variant_id(self, element_id, start, end, ref, alt):
         sql = "SELECT id FROM variant WHERE element_id = ? AND start = ? AND end = ? AND ref = ? AND alt = ?;"
         row = self.cursor.execute(sql, [element_id, start, end, ref, alt]).fetchone()
