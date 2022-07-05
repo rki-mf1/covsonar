@@ -10,9 +10,9 @@ What's new in covSonar V.2
     * Performance improvements
 * Exciting new features
 	* Support multiple pathogens
-	* Flexible in adding meta information 
+	* Flexible in adding meta information
 * New database design
-	* New database schema 
+	* New database schema
     * Retrieval efficiency
 	* Significantly smaller than the previous version
 
@@ -22,11 +22,11 @@ covSonar2 has some software-environmental requirements that can most easily be m
 
 Proceed as follows to install covSonar:
 ```sh
-# download the repository to the current working directory using git 
+# download the repository to the current working directory using git
 git clone https://github.com/rki-mf1/covsonar
 # build the custom software environment using conda [recommended]
 conda env create -n sonar2 -f covsonar/sonar.env.yml
-# activate the conda evironment if built 
+# activate the conda evironment if built
 conda activate sonar2
 # testing
 ./covsonar/test.sh
@@ -34,13 +34,13 @@ conda activate sonar2
 
 ## 3. Usage
 
-In covSonar2 there are several tools that can be called via subcommands.  
+In covSonar2 there are several tools that can be called via subcommands.
 
 | subcommand | purpose                                                             |
 |------------|---------------------------------------------------------------------|
 | setup      | setup a new database.                             |
 | import     | import genome sequences and sample information to the database     |
-| list-prop  | view sample properties added to the database             | 
+| list-prop  | view sample properties added to the database             |
 | add-prop    | add a sample property to the database                    |
 | delete-prop       | delete a sample property from the database |
 | match   |  get mutations profiles for given accessions                                        |
@@ -54,9 +54,9 @@ Each tool provides a help page that can be accessed with the `-h` option.
 
 ```sh
 # display help page
-./sonar.py -h 
+./sonar.py -h
 # display help page for each tool
-./sonar.py import -h 
+./sonar.py import -h
 ```
 
 ### 3.1 Setup database (setup ⛽)
@@ -85,7 +85,7 @@ In covSonar2, users now can arbitrarily add meta information or properties into 
 
 To view the added properties, we can use the `list-prop` command to display all information.
 ```sh
-./sonar.py list-prop --db test.db 
+./sonar.py list-prop --db test.db
 ```
 
 To add more properties, we can use the `add-prop` command to add meta information into the database.
@@ -114,7 +114,7 @@ Do you really want to delete this property? [YES/no]: YES
 
 ### 3.3 Adding genomes and meta information to the database (import)
 
-Add sequence with meta information 
+Add sequence with meta information
 
 ```sh
 ./sonar.py import --db test.db --fasta valid.fasta --tsv day.tsv --threads 64 --cache tmp_cache --cols sample=IMS_ID
@@ -131,7 +131,7 @@ example:
 ```
 
 
-`sample` 
+`sample`
 
 ### 3.4 Query genome sequences based on profiles (match)
 
@@ -140,10 +140,10 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 | type       | nucleotide level                                                  | amino acid level              |
 |-----------|-------------------------------------------------------------------|-------------------------------|
 | SNP       | ref_nuc _followed by_ ref_pos _followed by_ alt_nuc (e.g. A3451T) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aa (e.g. S:N501Y) |
-| deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) | 
-| insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |  
+| deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) |
+| insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |
 
-The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `--profile`, multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `--profile` options. As an example, `--profile S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `--profile S:N501Y --profile S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option **^** profiles can be defined that have not to be present in the matched genomes. 
+The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `--profile`, multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `--profile` options. As an example, `--profile S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `--profile S:N501Y --profile S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option **^** profiles can be defined that have not to be present in the matched genomes.
 
 
 There are additional options to adjust the matching.
@@ -157,7 +157,7 @@ example;
 ```sh
 ./sonar.py match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
 
-# matching B.1.1.7 genomes in DB 'test.db' that share an additional "Erik" mutation 
+# matching B.1.1.7 genomes in DB 'test.db' that share an additional "Erik" mutation
 ./sonar.py match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
 
 # as before but matching genomes are counted only
@@ -183,7 +183,7 @@ covSonar can return results in different formats: `--format ["csv", "tsv", "vcf"
 # in vcf format
 ./sonar.py match -i S:N501Y S:E484K --lineage Q.1 --db test.db --format vcf -o out.vcf
 
-# example of --sample-file 
+# example of --sample-file
 ./sonar.py match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
 ```
 
@@ -217,7 +217,7 @@ Detailed infos about the used sonar system (e.g. version, reference,  number of 
 
 ```sh
 # Show infos about the used sonar system and database 'test.db'
-./sonar.py info --db test.db 
+./sonar.py info --db test.db
 ```
 
 ### 3.6 Restore genome sequences from the database (restore)
@@ -225,11 +225,11 @@ Genome sequences can be restored from the database based on their accessions.
 The restored sequences are combined with their original FASTA header and  shown on the screen. The screen output can be redirected to a file easily by using `>`.
 
 ```sh
-# Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the 
+# Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the
 # database 'test.db' and write these to a fasta file named 'restored.fasta'
 ./sonar.py restore --sample mygenome1 mygenome2 --db test.db > restored.fasta
 # as before, but consider all accessions from 'accessions.txt' (the file has to
-# contain one accession per line) 
+# contain one accession per line)
 ./sonar.py restore --sample-file accessions.txt --db test.db > restored.fasta
 ```
 
@@ -237,7 +237,7 @@ The restored sequences are combined with their original FASTA header and  shown 
 Sometimes you might need the `optimize` command to clean the [problems](https://www.sqlite.org/lang_vacuum.html) from database operation (e.g., unused data block or storage overhead ).
 ```sh
 # Show infos about the used sonar system
-./sonar.py optimize  --db test.db 
+./sonar.py optimize  --db test.db
 ```
 
 When the newest version of covSonar use an old database version, covSonar will return  the following error;
@@ -246,9 +246,9 @@ Compatibility error: the given database is not compatible with this version of s
 Please run 'sonar.py  db-upgrade' to upgrade database
 ```
 
-We provide our database upgrade assistant to solve the problem. 
-```bash 
-# RUN 
+We provide our database upgrade assistant to solve the problem.
+```bash
+# RUN
 ./sonar.py db-upgrade --db test.db
 
 # Output
@@ -264,7 +264,7 @@ Success: Database upgrade was successfully completed
 ⚠️ Warning: Backup the db file before upgrade.
 
 
-## How to contribute 🏗️ 
+## How to contribute 🏗️
 
 covSonar has been very carefully programmed and tested, but is still in an early stage of development. You can contribute to this project by reporting problems 🐛 or writing feature requests to the [issue section](https://github.com/rki-mf1/covsonar/issues) 👨‍💻
 
@@ -275,4 +275,3 @@ Your feedback is very welcome 👨‍🔧!
 ## Contact
 
 For business inquiries or professional support requests 🍺 please contact [Dr. Stephan Fuchs](https://www.rki.de/SharedDocs/Personen/Mitarbeiter/F/Fuchs_Stephan.html)
-

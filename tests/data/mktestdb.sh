@@ -33,4 +33,3 @@ sonar add-prop --db test.db --name DUPLICATE_ID --dtype text --descr descr
 sonar add-prop --db test.db --name LINEAGE --dtype text --descr descr
 sonar import --db test.db --tsv meta.tsv --fasta seqs.fasta.gz --cols sample=IMS_ID --cache cache --threads 1
 rm -rf cache import.log
-
