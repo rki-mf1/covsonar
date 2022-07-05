@@ -2,7 +2,7 @@ name: Release
 on:
   release:
     types: [published]
-    tags-ignore:        
+    tags-ignore:
       - '!v2.*'
 jobs:
   release:

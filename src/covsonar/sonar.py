@@ -476,59 +476,68 @@ def main(args):  # noqa: C901
             db_properties.add("sample")
 
         colnames = {} if args.no_autodetect else {x: x for x in db_properties}
-        for x in args.cols:
-            if x.count("=") != 1:
-                sys.exit(
-                    "input error: " + x + " is not a valid sample property assignment."
-                )
-            k, v = x.split("=")
-            if k not in db_properties:
-                sys.exit(
-                    "input error: sample property "
-                    + k
-                    + " is unknown to the selected database. Use list-props to see all valid properties."
-                )
-            colnames[k] = v
+        if args.cols is not None:
+            for x in args.cols:
+                if x.count("=") != 1:
+                    sys.exit(
+                        "input error: "
+                        + x
+                        + " is not a valid sample property assignment."
+                    )
+                k, v = x.split("=")
+                if k not in db_properties:
+                    sys.exit(
+                        "input error: sample property "
+                        + k
+                        + " is unknown to the selected database. Use list-props to see all valid properties."
+                    )
+                colnames[k] = v
 
-        if "sample" not in colnames:
-            sys.exit("input error: a sample column has to be assigned.")
+            if "sample" not in colnames:
+                sys.exit("input error: a sample column has to be assigned.")
 
         properties = defaultdict(dict)
-        for tsv in args.tsv:
-            with open(tsv, "r") as handle, tqdm(
-                desc="processing " + tsv + "...",
-                total=os.path.getsize(tsv),
-                unit="bytes",
-                unit_scale=True,
-                bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
-                disable=args.no_progress,
-            ) as pbar:
-                line = handle.readline()
-                pbar.update(len(line))
-                fields = line.strip("\r\n").split("\t")
-                tsv_cols = {}
-                print()
-                for x in sorted(colnames.keys()):
-                    c = fields.count(colnames[x])
-                    if c == 1:
-                        tsv_cols[x] = fields.index(colnames[x])
-                        print("  " + x + " <- " + colnames[x])
-                    elif c > 1:
-                        sys.exit("error: " + colnames[x] + " is not an unique column.")
-                if "sample" not in tsv_cols:
-                    sys.exit("error: tsv file does not contain required sample column.")
-                elif len(tsv_cols) == 1:
-                    sys.exit(
-                        "input error: tsv does not provide any informative column."
-                    )
-                for line in handle:
+
+        if args.tsv is not None:
+            for tsv in args.tsv:
+                with open(tsv, "r") as handle, tqdm(
+                    desc="processing " + tsv + "...",
+                    total=os.path.getsize(tsv),
+                    unit="bytes",
+                    unit_scale=True,
+                    bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                    disable=args.no_progress,
+                ) as pbar:
+                    line = handle.readline()
                     pbar.update(len(line))
                     fields = line.strip("\r\n").split("\t")
-                    sample = fields[tsv_cols["sample"]]
-                    for x in tsv_cols:
-                        if x == "sample":
-                            continue
-                        properties[sample][x] = fields[tsv_cols[x]]
+                    tsv_cols = {}
+                    print()
+                    for x in sorted(colnames.keys()):
+                        c = fields.count(colnames[x])
+                        if c == 1:
+                            tsv_cols[x] = fields.index(colnames[x])
+                            print("  " + x + " <- " + colnames[x])
+                        elif c > 1:
+                            sys.exit(
+                                "error: " + colnames[x] + " is not an unique column."
+                            )
+                    if "sample" not in tsv_cols:
+                        sys.exit(
+                            "error: tsv file does not contain required sample column."
+                        )
+                    elif len(tsv_cols) == 1:
+                        sys.exit(
+                            "input error: tsv does not provide any informative column."
+                        )
+                    for line in handle:
+                        pbar.update(len(line))
+                        fields = line.strip("\r\n").split("\t")
+                        sample = fields[tsv_cols["sample"]]
+                        for x in tsv_cols:
+                            if x == "sample":
+                                continue
+                            properties[sample][x] = fields[tsv_cols[x]]
 
         # setup cache
         temp = False if args.cache else True

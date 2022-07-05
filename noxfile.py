@@ -50,7 +50,7 @@ def zimports(session: Session) -> None:
     """Run zimports import formatter."""
     args = session.posargs or locations
     install_with_constraints(session, "zimports")
-    session.run("zimports", "-m", "covsonar,tests", *args)
+    session.run("zimports", "-m", "covsonar,tests", "-W", "2", *args)
 
 
 @nox.session(python="3.9")
@@ -71,7 +71,7 @@ def lint(session: Session) -> None:
     session.run("flake8", *args)
 
 
-@nox.session(python=["3.9"])
+@nox.session(python="3.9")
 def tests(session):
     args = session.posargs or ["--cov"]
     session.run("poetry", "install", "--no-dev", external=True)

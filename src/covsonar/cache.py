@@ -593,9 +593,7 @@ class sonarCache:
                 try:
                     # nucleotide level import
                     if not sample_data["seqhash"] is None:
-                        # sampleid = dbm.insert_sample(
-                        #     sample_data["name"], sample_data["seqhash"]
-                        # )
+                        dbm.insert_sample(sample_data["name"], sample_data["seqhash"])
                         algnid = dbm.insert_alignment(
                             sample_data["seqhash"], sample_data["refmolid"]
                         )
