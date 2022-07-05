@@ -29,3 +29,18 @@ def test_add_reference(testdb):
 		assert dbm.get_default_reference_accession() == "REF2"
 		dbm.add_reference("REF3", "my new reference", "virus X", 1)
 		assert dbm.get_default_reference_accession() == "REF2"
+
+def test_db_writeablity(testdb):
+	with sonarDBManager(testdb, readonly=True) as dbm:
+		with pytest.raises(SystemExit) as pytest_wrapped_e:
+			dbm.add_property("YET_ANOTHER_PROP", "text", "text", "my new prop stores text information")
+		assert pytest_wrapped_e.type == SystemExit
+		assert pytest_wrapped_e.value.code == "error: failed to insert data into sqlite table (attempt to write a readonly database)"
+	with sonarDBManager(testdb, readonly=False) as dbm:
+		dbm.add_property("YET_ANOTHER_PROP", "text", "text", "my new prop stores text information")
+		assert ("YET_ANOTHER_PROP" in dbm.properties)
+		dbm.delete_property("YET_ANOTHER_PROP")
+		assert "YET_ANOTHER_PROP" not in dbm.properties
+
+
+		

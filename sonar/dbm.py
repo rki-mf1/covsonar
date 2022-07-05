@@ -253,10 +253,11 @@ class sonarDBManager():
 
 	def add_property(self, name, datatype, querytype, description, standard=None):
 		'''
-		add codon amino acid relationship to database
+		adds a new property and returns the property id.
 
 		>>> dbm = getfixture('init_writeable_dbm')
-		>>> dbm.add_codon(11, "ATG", "M")
+		>>> id = dbm.add_property("NEW_PROP", "text", "text", "my new prop stores text information")
+		
 		'''
 		name = name.upper()
 		if name in self.__illegal_properties:
@@ -275,7 +276,7 @@ class sonarDBManager():
 				vals = [pid, standard]
 				self.cursor.execute(sql, vals)
 		except sqlite3.Error as error:
-			print("Failed to insert data into sqlite table", error)
+			sys.exit("error: failed to insert data into sqlite table (" + str(error) + ")")
 		return pid
 
 	def add_translation_table(self, translation_table):
@@ -427,7 +428,7 @@ class sonarDBManager():
 		Returns the rowid of the inserted variant.
 
 		>>> dbm = getfixture('init_writeable_dbm')
-		>>> rowid = dbm.insert_element(1, "protein", "GMOLON4_3257", "NlpD", "M23/M37 family peptidase", 5579, 6199, 1, "MKGLRSSNPKGEASD")
+		>>> rowid = dbm.insert_variant(1, 1, "A", "T", 0, 1, "A1T")
 
 		'''
 		sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, label, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?);"
@@ -442,6 +443,10 @@ class sonarDBManager():
 	def delete_samples(self, *sample_names):
 		'''
 		Deletes one or more given samples based on their names if existing.
+		
+		>>> dbm = getfixture('init_writeable_dbm')
+		>>> dbm.delete_samples("NC_045512")
+		
 		'''
 		sql = "DELETE FROM sample WHERE name IN (" + ", ".join(["?"]*len(sample_names)) + ");"
 		self.cursor.execute(sql, sample_names)
@@ -450,6 +455,10 @@ class sonarDBManager():
 		'''
 		Deletes a property all related data linked to samples based on the property name
 		from database if the property exists.
+
+		>>> dbm = getfixture('init_writeable_dbm')
+		>>> dbm.delete_property("NEW_PROP")
+		
 		'''
 		if property_name in self.properties:
 			sql = "DELETE FROM sample2property WHERE property_id = ?;"
@@ -463,6 +472,11 @@ class sonarDBManager():
 	def sample_exists(self, sample_name):
 		'''
 		Checks if a sample name exists and returns True and False, respectively.
+
+		>>> dbm = getfixture('init_readonly_dbm')
+		>>> dbm.sample_exists("seqXX")
+		False
+
 		'''
 		sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found"
 		return bool(self.cursor.execute(sql, [sample_name]).fetchone()['found'])
@@ -470,6 +484,11 @@ class sonarDBManager():
 	def get_sample_id(self, sample_name):
 		'''
 		Returns the rowid of a sample based on its name if it exists (else None is returned).
+
+		>>> dbm = getfixture('init_readonly_dbm')
+		>>> dbm.sample_exists("seq01")
+		False
+
 		'''
 		sql = "SELECT id FROM sample WHERE name = ? LIMIT 1;"
 		row = self.cursor.execute(sql, [sample_name]).fetchone()
