@@ -18,10 +18,11 @@ jobs:
         architecture: x64
     - uses: conda-incubator/setup-miniconda@v2
       with:
-        miniconda-version: "latest"
+        python-version: 3.9
+        mamba-version: "*"
         activate-environment: covsonar
-        channels: conda-forge,bioconda
-    - run: conda install emboss==6.6.0
+        channels: conda-forge,bioconda,defaults
+        channel-priority: true
     - run: pip install nox==2022.1.7
     - run: pip install poetry==1.1.13
     - run: nox
