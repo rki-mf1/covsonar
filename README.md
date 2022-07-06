@@ -16,20 +16,29 @@ What's new in covSonar V.2
     * Retrieval efficiency
 	* Significantly smaller than the previous version
 
-## 1. Prerequisites / Setup
+[![Tests Status](https://github.com/rki-mf1/covsonar/actions/workflows/tests.yml/badge.svg)](https://github.com/rki-mf1/covsonar/actions/workflows/tests.yml) [![Pre-release/Test Version](https://github.com/rki-mf1/covsonar/actions/workflows/test-pypi.yml/badge.svg)](https://github.com/rki-mf1/covsonar/actions/workflows/test-pypi.yml) [![Stable Version](https://github.com/rki-mf1/covsonar/actions/workflows/release.yml/badge.svg)](https://github.com/rki-mf1/covsonar/actions/workflows/release.yml)
 
-covSonar2 has some software-environmental requirements that can most easily be met by building a custom conda environment.
 
-Proceed as follows to install covSonar:
+## 1. Installation
+
+covSonar2 now can be easily installed by using `pip`, `conda` or `mamba`
+
+### Stable version.
+Proceed as follows to install covSonar2
 ```sh
-# download the repository to the current working directory using git
-git clone https://github.com/rki-mf1/covsonar
-# build the custom software environment using conda [recommended]
-conda env create -n sonar2 -f covsonar/sonar.env.yml
-# activate the conda evironment if built
-conda activate sonar2
-# testing
-./covsonar/test.sh
+pip install
+```
+
+```
+conda
+```
+
+### Latest features.
+
+(Nightly build, Dev.)
+
+```sh
+pip install -i https://test.pypi.org/simple/ covsonar==2.0.0a1.dev1657097995
 ```
 
 ## 3. Usage
