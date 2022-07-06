@@ -553,6 +553,16 @@ def main(args):  # noqa: C901
 
         # importing sequences
         if args.fasta is not None:
+            # This code is to work around a crash caused by the interaction between
+            # parallel processing and calculating code coverage
+            # see: https://stackoverflow.com/a/61145010
+            try:
+                from pytest_cov.embed import cleanup_on_sigterm
+            except ImportError:
+                pass
+            else:
+                cleanup_on_sigterm()
+
             cache.add_fasta(*args.fasta, propdict=properties)
 
             aligner = sonarAligner()

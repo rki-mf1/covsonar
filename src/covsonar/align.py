@@ -9,13 +9,6 @@ import sys
 from Bio.Emboss.Applications import StretcherCommandline
 import pandas as pd
 
-try:
-    from pytest_cov.embed import cleanup_on_sigterm
-except ImportError:
-    pass
-else:
-    cleanup_on_sigterm()
-
 
 class sonarAligner(object):
     """
