@@ -81,7 +81,7 @@ def test_valid_end(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
     monkeypatch.chdir(Path(__file__).parent)
 
-    db_path = "data/test.db"
+    db_path = "data/test-with-seqs.db"
 
     run_cli(f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013")
     run_cli(

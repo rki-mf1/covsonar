@@ -74,7 +74,7 @@ def lint(session: Session) -> None:
 @nox.session(python="3.9", venv_backend="mamba")
 def tests(session):
     args = session.posargs or ["--cov"]
-    session.conda_install("emboss==6.6.0", channel="bioconda")
+    session.conda_install("emboss==6.6.0", "libiconv", channel="bioconda")
     session.run("poetry", "install", "--no-dev", external=True)
     install_with_constraints(session, "coverage[toml]", "pytest", "pytest-cov")
     session.run("pytest", *args)

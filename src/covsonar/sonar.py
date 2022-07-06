@@ -21,6 +21,17 @@ from .dbm import sonarDBManager
 from .linmgr import sonarLinmgr
 
 
+# This code is to work around a crash caused by the interaction between
+# parallel processing and calculating code coverage
+# see: https://stackoverflow.com/a/61145010
+try:
+    from pytest_cov.embed import cleanup_on_sigterm
+except ImportError:
+    pass
+else:
+    cleanup_on_sigterm()
+
+
 class arg_namespace(object):
     pass
 
@@ -553,31 +564,37 @@ def main(args):  # noqa: C901
 
         # importing sequences
         if args.fasta is not None:
-            # This code is to work around a crash caused by the interaction between
-            # parallel processing and calculating code coverage
-            # see: https://stackoverflow.com/a/61145010
-            try:
-                from pytest_cov.embed import cleanup_on_sigterm
-            except ImportError:
-                pass
-            else:
-                cleanup_on_sigterm()
-
             cache.add_fasta(*args.fasta, propdict=properties)
 
             aligner = sonarAligner()
+
             l = len(cache._samplefiles_to_profile)
-            with WorkerPool(n_jobs=args.threads, start_method="fork") as pool, tqdm(
-                desc="profiling sequences...",
-                total=l,
-                unit="seqs",
-                bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
-                disable=args.no_progress,
-            ) as pbar:
-                for _ in pool.imap_unordered(
-                    aligner.process_cached_sample, cache._samplefiles_to_profile
-                ):
-                    pbar.update(1)
+            # Special case when threads == 1, because:
+            # 1) multiprocessing causes pytest-cov to crash
+            # 2) there is no advantage to multiprocessing with 1 thread
+            if args.threads == 1:
+                with tqdm(
+                    desc="profiling sequences...",
+                    total=l,
+                    unit="seqs",
+                    bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                    disable=args.no_progress,
+                ) as pbar:
+                    for samplefile in cache._samplefiles_to_profile:
+                        aligner.process_cached_sample(samplefile)
+                        pbar.update(1)
+            else:
+                with WorkerPool(n_jobs=args.threads, start_method="fork") as pool, tqdm(
+                    desc="profiling sequences...",
+                    total=l,
+                    unit="seqs",
+                    bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                    disable=args.no_progress,
+                ) as pbar:
+                    for _ in pool.imap_unordered(
+                        aligner.process_cached_sample, cache._samplefiles_to_profile
+                    ):
+                        pbar.update(1)
 
             cache.import_cached_samples()
 
