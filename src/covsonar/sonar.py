@@ -21,17 +21,6 @@ from .dbm import sonarDBManager
 from .linmgr import sonarLinmgr
 
 
-# This code is to work around a crash caused by the interaction between
-# parallel processing and calculating code coverage
-# see: https://stackoverflow.com/a/61145010
-try:
-    from pytest_cov.embed import cleanup_on_sigterm
-except ImportError:
-    pass
-else:
-    cleanup_on_sigterm()
-
-
 class arg_namespace(object):
     pass
 
