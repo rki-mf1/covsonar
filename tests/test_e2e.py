@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import shutil
 
 import pytest
 
@@ -80,10 +81,24 @@ def test_valid_end(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
     monkeypatch.chdir(Path(__file__).parent)
 
-    db_path = "data/test.db"
+    db_path = "data/test-with-seqs.db"
 
     run_cli(f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013")
     run_cli(
         f"match --db {db_path} --DATE_DRAW 2021-11-01:2022-12-15 -o {tmp_path}/temp.tsv"
     )
     run_cli(f"match --db {db_path} --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count")
+
+
+def test_import(tmp_path, monkeypatch):
+    """The test example provided by other devs, after the import command"""
+    monkeypatch.chdir(Path(__file__).parent)
+
+    db_path_orig = Path("data/test.db")
+    db_path = tmp_path / "import-test.db"
+
+    shutil.copy(db_path_orig, db_path)
+
+    run_cli(
+        f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 1"
+    )
