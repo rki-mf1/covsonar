@@ -13,6 +13,7 @@ from mpire import WorkerPool
 from tabulate import tabulate
 from tqdm import tqdm
 
+from . import logging
 from . import sonardb
 from .align import sonarAligner
 from .basics import sonarBasics
@@ -670,12 +671,12 @@ def main(args):  # noqa: C901
             if args.force:
                 decision = "YES"
             else:
-                print(
-                    "WARNING: There are",
-                    a,
-                    "samples with content for this property. Amongst those,",
-                    b,
-                    "samples do not share the default value of this property.",
+                logging.warning(
+                    "There are"
+                    " %d"
+                    " samples with content for this property. Amongst those,"
+                    " %d"
+                    " samples do not share the default value of this property." % (a, b)
                 )
                 decision = ""
                 while decision not in ("YES", "no"):
@@ -684,9 +685,9 @@ def main(args):  # noqa: C901
                     )
             if decision == "YES":
                 dbm.delete_property(args.name)
-                print("property deleted.")
+                logging.info("property deleted.")
             else:
-                print("property not deleted.")
+                logging.info("property not deleted.")
 
     # delete
     elif args.tool == "delete":
@@ -697,7 +698,7 @@ def main(args):  # noqa: C901
                 for line in handle:
                     samples.add(line.strip())
         if len(samples) == 0:
-            print("Nothing to delete.")
+            logging.info("Nothing to delete.")
         else:
             sonarBasics.delete(args.db, *samples, debug=args.debug)
 
@@ -718,7 +719,7 @@ def main(args):  # noqa: C901
 
     # update-lineage-info
     elif args.tool == "update-lineage-info":
-        print("Start to update parent-child relationship")
+        logging.info("Start to update parent-child relationship")
         fname = os.path.join(
             os.path.join(os.path.dirname(os.path.realpath(__file__))),
             "data/lineage.all.tsv",
@@ -730,7 +731,7 @@ def main(args):  # noqa: C901
 
         with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
             dbm.add_update_lineage(lin_df)
-            print("Update has been successfully")
+            logging.info("Update has been successfully")
 
     # info
     elif args.tool == "info":

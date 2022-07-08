@@ -6,7 +6,6 @@
 import collections
 import csv
 import gzip
-import logging
 import lzma
 import os
 import re
@@ -18,6 +17,7 @@ from Bio.SeqUtils.CheckSum import seguid
 import pandas as pd
 
 from . import __version__
+from . import logging
 from .dbm import sonarDBManager
 
 
@@ -161,7 +161,7 @@ class sonarBasics(object):
         self.__codedict = None
         self.__fasta_tag_regex = None
         self._covSonar_version = self.get_version()
-        logging.basicConfig(format="%(asctime)s %(message)s")
+        # logging.basicConfig(format="%(asctime)s %(message)s")
 
     @staticmethod
     def get_version():
@@ -334,7 +334,7 @@ class sonarBasics(object):
                                 + elem["accession"]
                                 + "' (cds)"
                             )
-                print("Success: Database was successfully installed")
+                logging.info("Success: Database was successfully installed")
 
     # DATA IMPORT
     # genbank handling handling
@@ -549,13 +549,10 @@ class sonarBasics(object):
             before = dbm.count_samples()
             dbm.delete_samples(*samples)
             after = dbm.count_samples()
-            print(
-                before - after,
-                "of",
-                len(samples),
-                "samples found and deleted.",
-                after,
-                "samples remain in the database.",
+            logging.info(
+                " %d of %d samples found and deleted."
+                " %d samples remain in the database."
+                % (before - after, len(samples), after)
             )
 
     @staticmethod
@@ -596,7 +593,7 @@ class sonarBasics(object):
                     (row["element.id"], row["variant.start"], row["variant.label"])
                 )
         out = []
-        print(len(samples))
+        logging.debug(len(samples))
         for sample in sorted(samples):
             print(sorted(nuc_profiles[sample], key=lambda x: (x[0], x[1])))
 
@@ -633,7 +630,7 @@ class sonarBasics(object):
             if i == -1:
                 print(na)
         except Exception:
-            print("An exception occurred", row)
+            logging.error("An exception occurred %s", row)
             raise
 
     # vcf
@@ -648,7 +645,7 @@ class sonarBasics(object):
                 row["variant.alt"],
                 row["samples"],
             )
-            print(samples)
+
             if chrom not in records:
                 records[chrom] = collections.OrderedDict()
             if pos not in records[chrom]:
@@ -657,7 +654,7 @@ class sonarBasics(object):
                 records[chrom][pos][ref] = {}
             records[chrom][pos][ref][alt] = set(samples.split("\t"))
             all_samples.update(samples.split("\t"))
-        print(all_samples)
+
         if len(records) != 0:
             all_samples = sorted(all_samples)
             if outfile is None:

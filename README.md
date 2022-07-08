@@ -235,25 +235,44 @@ covSonar can return results in different formats: `--format ["csv", "tsv", "vcf"
 
 ```sh
 # example command
-./sonar.py match --profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db --format csv -o out.csv
+sonar match --profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db --format csv -o out.csv
 
 # in vcf format
-./sonar.py match -i S:N501Y S:E484K --lineage Q.1 --db test.db --format vcf -o out.vcf
+sonar match -i S:N501Y S:E484K --lineage Q.1 --db test.db --format vcf -o out.vcf
 
 # In case we have a list of ID and it is stored in a file, so we can use --sample-file
 # tag to load and query according to the listed ID; example of --sample-file
-./sonar.py match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
+sonar match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
 ```
 
 > NOTE 📌: file has to contain one ID per line.
 
+<u>Parent-Child relationship</u>
+
+> ⚠️ WARNING: **This function currently works on SARS-CoV-2 only ❗**
+
+First, we have to run `update-lineage-info` command to download the latest version of lineages from https://github.com/cov-lineages/pango-designation/ and install it in the database
+
+```sh
+# example command
+sonar update-lineage-info
+```
+
+We want to search all sublineages with a given lineage, covSonar offers `--with-sublineage PROP_COLUMN` (PROP_COLUMN  means the property name that we added to our database).
+
+In this example; we use `LINEAGE` property to store lineage information.
+```sh
+sonar match --profile S:E484K --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count --db test.db --debug
+```
+This query will return results including 'B.1.1.7', 'Q.4', 'Q.5', 'Q.3', 'Q.6', 'Q.1', 'Q.7', 'Q.2', 'Q.8' lineages.
+
 <u>Wildcard search</u>
 
-CovSonar also supports wildcard query (symbol `%`) to handle more complexity of the query. The operator is used in a **lineage query** to search for a specified pattern in lineage. It can be used in combinations of including and excluding command, for example;
+covSonar also supports wildcard query (symbol `%`) to handle more complexity of the query. The operator is used in a **lineage query** to search for a specified pattern in lineage. It can be used in combinations of including and excluding command, for example;
 
 ```sh
 # edit command at --lineage tag
-path/to/covsonar/sonar.py match -i S:N501Y S:E484K --lineage ^B.1.1% AY.4% --db mydb > out.csv
+sonar match -i S:N501Y S:E484K --LINEAGE ^B.1.1% AY.4% --db test.db --format csv -o out.csv
 ```
 
 This query will include all lineages that start with 'AY.4'.
@@ -273,25 +292,14 @@ Here are some examples showing different queries with `%`
 | %1.1.%             | Finds any lineage that have "1.1." in any position|
 | %.1                | Finds any lineage that ends with ".1"             |
 
-<u>Parent-Child relationship</u>
-
-> ⚠️ WARNING: **This function currently works on SARS-CoV-2 only ❗**
-
-First, we have to run `update-lineage-info` command to download the latest version of lineages from https://github.com/cov-lineages/pango-designation/ and install it in the database
-
-```sh
-# example command
-sonar.py update-lineage-info
-```
-
-We want to search all sublineages with a given lineage, covSonar offers `--with-sublineage PROP_COLUMN` (PROP_COLUMN  means the property name that we added to our database).
-
-In this example; we use `LINEAGE` property to store lineage information.
-```sh
-./sonar.py match --profile S:E484K --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count --db test.db --debug
-```
-This query will return results including 'B.1.1.7', 'Q.4', 'Q.5', 'Q.3', 'Q.6', 'Q.1', 'Q.7', 'Q.2', 'Q.8' lineages.
-
+> NOTE 📌: We can also use wildcard with sublineage search. The following example shows when want to exclude all lineage B.1.617.X (X can be 1,2,3 ...) and  we also enable sublineage search, so this result in all lineage and sublineages from B.1.617.X are also filter out.
+    ```
+    sonar match --LINEAGE ^B.1.617% --with-sublineage LINEAGE --db test.db --count --debug
+    ```
+    result in
+    ```
+    NOT IN ('B.1.617.2', 'AY.94', 'AY.43.4', 'AY.39.1', 'AY.122.2', 'AY.122.6', 'AY.9.2.2', 'AY.37', 'AY.112.2', 'AY.40', 'AY.26', 'AY.5.6', 'AY.84', 'AY.28', 'AY.25.2', 'AY.91.1', 'B.1.617.3', 'AY.33', 'AY.95', 'AY.125', 'B.1.617.1', ..... etc.)
+    ```
 
 ### 2.5 Show infos about the used sonar system and database (info)
 
@@ -299,7 +307,7 @@ Detailed infos about the used sonar system (e.g. version, reference,  number of 
 
 ```sh
 # Show infos about the used sonar system and database 'test.db'
-sonar.py info --db test.db
+sonar info --db test.db
 ```
 
 ### 2.6 Restore genome sequences from the database (restore)
@@ -309,10 +317,10 @@ The restored sequences are combined with their original FASTA header and  shown 
 ```sh
 # Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the
 # database 'test.db' and write these to a fasta file named 'restored.fasta'
-sonar.py restore --sample mygenome1 mygenome2 --db test.db > restored.fasta
+sonar restore --sample mygenome1 mygenome2 --db test.db > restored.fasta
 # as before, but consider all accessions from 'accessions.txt' (the file has to
 # contain one accession per line)
-sonar.py restore --sample-file accessions.txt --db test.db > restored.fasta
+sonar restore --sample-file accessions.txt --db test.db > restored.fasta
 ```
 
 ### 2.7 Database management (db-upgrade, optimize)
@@ -330,7 +338,7 @@ Please run 'sonar  db-upgrade' to upgrade database
 We provide our database upgrade assistant to solve the problem.
 ```bash
 # RUN
-sonar.py db-upgrade --db test.db
+sonar db-upgrade --db test.db
 
 # Output
 Warning: Backup db file before upgrading, Press Enter to continue...
@@ -344,9 +352,11 @@ Success: Database upgrade was successfully completed
 ```
 ⚠️ WARNING: Backup the db file before upgrade.
 
+### 2.7 Delete sample (delete)
 
-### 2.7 Delete sample (db-upgrade, optimize)
-
+```sh
+sonar delete --db test.db --sample
+```
 
 ## How to contribute 🏗️
 
