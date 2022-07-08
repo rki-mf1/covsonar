@@ -1,6 +1,5 @@
 from collections import defaultdict
 import itertools
-import logging
 import os
 import pkgutil
 import re
@@ -12,6 +11,8 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation
 from Bio.SeqFeature import FeatureLocation
 import pandas as pd
+
+from . import logging
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
@@ -67,7 +68,7 @@ class sonarDBManager:
     def __init__(
         self, dbfile, timeout=-1, readonly=True, debug=False, autocreate=False
     ):
-        logging.basicConfig(format="%(asctime)s %(message)s")
+        # logging.basicConfig(format="%(asctime)s %(message)s")
         self.connection = None
         if not autocreate and not os.path.isfile(dbfile):
             sys.exit("database error: database does not exists")
@@ -135,7 +136,7 @@ class sonarDBManager:
             uri=True,
         )
         if self.debug:
-            con.set_trace_callback(logging.warning)
+            con.set_trace_callback(logging.debug)
         con.row_factory = self.dict_factory
         cur = con.cursor()
         return con, cur
@@ -206,7 +207,7 @@ class sonarDBManager:
         uri = sonarDBManager.get_uri(filename)
         with sqlite3.connect(uri + "?mode=rwc", uri=True) as con:
             if debug:
-                con.set_trace_callback(logging.warning)
+                con.set_trace_callback(logging.debug)
             con.executescript(sql)
 
     def add_codon(self, translation_table, codon, aa):
@@ -750,7 +751,7 @@ class sonarDBManager:
 
     # Add/Update lineages into Table
     def add_update_lineage(self, _df):
-        print("Prepare:", len(_df))
+        logging.info("Prepare: %d" % len(_df))
 
         # _df.to_sql(name='lineages', con = self.connection, if_exists='replace',
         # 			 index=False)
@@ -1250,7 +1251,7 @@ class sonarDBManager:
             lineage_col = reserved_props.get("with_sublineage")
             include_lin = properties.get(lineage_col)  # get list of given lineages
             negate = False
-            print(include_lin)
+            logging.info("sublineage search is enable on %s" % include_lin)
             while include_lin:
                 in_lin = include_lin.pop(0)
 
@@ -1293,7 +1294,8 @@ class sonarDBManager:
 
             include_lin = _tmp_include_lin
             properties[lineage_col] = include_lin
-        # print(properties)
+        if self.debug:
+            logging.debug(properties)
 
         if properties:
             for pname, vals in properties.items():
@@ -1459,7 +1461,20 @@ class sonarDBManager:
             )
             _2_rows = self.cursor.execute(_2_final_sql).fetchall()
             if len(_1_rows) != len(_2_rows):
-                print("WARNING: There are something error between query")
+                logging.warning(
+                    "covSonarBot detects something suspicious in match command."
+                )
+                logging.warning(
+                    "Mismatch records; %d and %d between meta-info and fasta"
+                    % (len(_1_rows), len(_2_rows))
+                )
+                logging.warning(
+                    "This might happen when the ID of a sample does not represent in either fasta or meta-info file, or there is no NT/AA profile in a sample"
+                )
+                logging.warning(
+                    "Please interpret result carefully, otherwise contact us"
+                )
+
             # print(set([ x['sample.name'] for x in _1_rows ]) ^ set([ x['name'] for x in _2_rows ]))
             # To combine:
             # We update list of dict (update on result from query #2)
@@ -1565,14 +1580,12 @@ class sonarDBManager:
                 cur = con.cursor()
                 current_version = cur.execute("pragma user_version").fetchone()[0]
 
-            print(
-                "Current version:",
-                current_version,
-                " Upgrade to:",
-                SUPPORTED_DB_VERSION,
+            logging.info(
+                "Current version: %d Upgrade to: %d"
+                % (current_version, SUPPORTED_DB_VERSION)
             )
             uri = "file:" + urlquote(dbfile)
-            print("Perform the Upgrade:", uri)
+            logging.info("Perform the Upgrade: %s" % uri)
             while current_version < SUPPORTED_DB_VERSION:
 
                 next_version = current_version + 1
@@ -1594,10 +1607,10 @@ class sonarDBManager:
             con.executescript("ROLLBACK")
             raise er
         except ValueError as er:
-            print(er)
+            logging.error(er)
         finally:
-            print("Database now version:", current_version)
+            logging.info("Database now version: %d" % current_version)
             if current_version == SUPPORTED_DB_VERSION:
-                print("Success: Database upgrade was successfully completed")
+                logging.info("Success: Database upgrade was successfully completed")
             else:
-                print("Error: Upgrade was not completed")
+                logging.error("Error: Upgrade was not completed")
