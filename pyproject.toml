@@ -1,0 +1,53 @@
+[tool.poetry]
+name = "covsonar"
+version = "2.0.0-alpha.1"
+description = "A database-driven system for handling genomic sequences and screening genomic profiles."
+authors = ["Stephan Fuchs <FuchsS@rki.de>", "Kunaphas Kongkitimanon <KongkitimanonK@rki.de>", "Matthew Huska <HuskaM@rki.de>"]
+license = "GPL3"
+readme = "README.md"
+homepage = "https://github.com/rki-mf1/covsonar"
+repository = "https://github.com/rki-mf1/covsonar"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+biopython = "~1.79"
+tqdm = "~4.59.0"
+more-itertools = "~8.7.0"
+pyaml = "~20.4.0"
+tabulate = "~0.8.9"
+mpire = "~2.3.3"
+pandas = "~1.4.0"
+requests = "^2.28.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.1.2"
+coverage = {extras = ["toml"], version = "^6.4.1"}
+pytest-cov = "^3.0.0"
+black = "^22.6.0"
+flake8 = "^4.0.1"
+flake8-bandit = "^3.0.0"
+flake8-black = "^0.3.3"
+flake8-bugbear = "^22.6.22"
+flake8-import-order = "^0.18.1"
+safety = "^2.0.0"
+zimports = "^0.6.0"
+
+[tool.poetry.scripts]
+sonar = "covsonar.sonar:run"
+
+[tool.coverage.paths]
+source = ["src", "*/site-packages"]
+
+[tool.coverage.run]
+branch = true
+source = ["covsonar"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.black]
+target-version = ['py39']
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

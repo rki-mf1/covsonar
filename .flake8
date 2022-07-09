@@ -1,0 +1,7 @@
+[flake8]
+select = BLK,C,E,F,I,W
+ignore = E203,W503,E501,E741
+max-line-length = 88
+max-complexity = 10
+application-import-names = covsonar,tests
+import-order-style = google

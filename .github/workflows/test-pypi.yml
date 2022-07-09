@@ -1,0 +1,31 @@
+name: TestPyPI
+on:
+  push:
+    branches:
+      - dev/cov2_mpire
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.9'
+        architecture: x64
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: 3.9
+        mamba-version: "*"
+        activate-environment: covsonar
+        channels: conda-forge,bioconda,defaults
+        channel-priority: true
+    - run: pip install nox==2022.1.7
+    - run: pip install poetry==1.1.13
+    - run: nox
+    - run: version=$(poetry version --short) && poetry version $version.dev.$(date +%s)
+    - run: poetry build
+    - run: poetry config repositories.test-pypi https://test.pypi.org/legacy/
+    - run: poetry publish --repository test-pypi --username=__token__ --password=${{ secrets.TEST_PYPI_TOKEN }}
