@@ -4,6 +4,20 @@ import tempfile
 import os
 
 # PYTEST FIXTURES
+@pytest.fixture(autouse=True)
+def mock_workerpool_imap_unordered(monkeypatch):
+    """Mock mpire's WorkerPool.imap_unordered function
+    This is necessary to work around crashes caused by trying to calculate
+    coverage with multiprocess subprocesses, and also to make the tests
+    reproducible (ordered).
+    """
+    monkeypatch.setattr(
+        "mpire.WorkerPool.imap_unordered",
+        lambda self, func, args=(), kwds={}, callback=None, error_callback=None: (
+            func(arg) for arg in args
+        ),
+    )
+
 @pytest.fixture
 def setup_db(tmpfile_name, scope="session"):
 	""" Fixture to set up a temporay session-lasting test database with test data """
@@ -25,8 +39,11 @@ def tmpfile_name(tmpdir_factory, scope="session"):
 def testdb(setup_db, scope="session"):
 	db = setup_db
 	script_dir = os.path.dirname(os.path.abspath(__file__))
-	fasta = os.path.join(script_dir, "test.fasta")
+	fasta = os.path.join(script_dir, "..", "test", "test.fasta")
 	sonarBasics.import_data(db, fasta=[fasta], tsv=[], cols={}, cachedir = None, autodetect=True, progress=False, update=True, debug=False, quiet=True)
+	with sonarDBManager(db, readonly=True) as dbm:
+			pass
+			#exit("seq count " + str(dbm.count_sequences()))
 	return db
 
 @pytest.fixture

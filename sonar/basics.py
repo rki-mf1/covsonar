@@ -27,6 +27,9 @@ import lzma
 import sqlite3
 import collections
 import logging
+from multiprocessing import Pool
+from mpire import WorkerPool
+from tqdm import tqdm
 
 class Aliasor:
     def __init__(self, alias_file):
@@ -140,30 +143,7 @@ class sonarBasics(object):
 		database that stores the profile data, the one letter code with and
 		without ambiguities
 	"""
-	def __init__(self, dbfile, translation_table = 1, debug=False):
-		self.db = os.path.abspath(dbfile) if dbfile else mkstemp()[1]
-		self.debug = debug
-		self.__moduledir = self.get_module_base()
-		self.reffna = os.path.join(self.__moduledir, "ref.fna")
-		self.refgff = os.path.join(self.__moduledir, "ref.gff3")
-		self.translation_table = translation_table
-		self.__refseq = None
-		self.__refdescr = None
-		self.__refgffObj = None
-		self.__iupac_nt_code = None
-		self.__iupac_aa_code = None
-		self.__iupac_explicit_nt_code = None
-		self.__iupac_explicit_aa_code = None
-		self.__iupac_ambig_nt_code = None
-		self.__iupac_ambig_aa_code = None
-		self.__terminal_letters_regex = re.compile("[A-Z]$")
-		self.__dna_var_regex = None
-		self.__aa_var_regex = None
-		self.__del_regex = None
-		self.__dnavar_grep_regex = None
-		self.__codedict = None
-		self.__fasta_tag_regex = None
-		self._covSonar_version = self.get_version()
+	def __init__(self):
 		logging.basicConfig(format='%(asctime)s %(message)s')
 
 	@staticmethod
@@ -333,7 +313,7 @@ class sonarBasics(object):
 	## importing
 
 	@staticmethod
-	def import_data(db, fasta=[], tsv=[], cols={}, cachedir = None, autodetect=False, progress=False, update=True, debug=False, quiet=False):
+	def import_data(db, fasta=[], tsv=[], cols={}, cachedir = None, autodetect=False, progress=False, update=True, threads=1, debug=False, quiet=False):
 		if not quiet:
 			if not update:
 				print("import mode: skipping existing samples")
@@ -396,12 +376,11 @@ class sonarBasics(object):
 		cache = sonar.sonarCache(db, outdir=cachedir, logfile="import.log", allow_updates=update, temp=not cachedir, debug=debug, disable_progress=not progress)
 
 		### importing sequences
-		if not fasta:
+		if fasta:
 			cache.add_fasta(*fasta, propdict = properties)
-
-			aligner = sonarAligner()
+			aligner = sonar.sonarAligner()
 			l = len(cache._samplefiles_to_profile)
-			with WorkerPool(n_jobs=args.threads, start_method='fork') as pool, tqdm(desc="profiling sequences...", total=l, unit="seqs", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=not progress) as pbar:
+			with WorkerPool(n_jobs=threads, start_method='fork') as pool, tqdm(desc="profiling sequences...", total=l, unit="seqs", bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]", disable=not progress) as pbar:
 				for _ in pool.imap_unordered(aligner.process_cached_sample, cache._samplefiles_to_profile):
 				    pbar.update(1)
 

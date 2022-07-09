@@ -474,8 +474,8 @@ class sonarDBManager():
 		Checks if a sample name exists and returns True and False, respectively.
 
 		>>> dbm = getfixture('init_readonly_dbm')
-		>>> dbm.sample_exists("seqXX")
-		False
+		>>> dbm.sample_exists("seq01")
+		True
 
 		'''
 		sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found"
@@ -486,14 +486,14 @@ class sonarDBManager():
 		Returns the rowid of a sample based on its name if it exists (else None is returned).
 
 		>>> dbm = getfixture('init_readonly_dbm')
-		>>> dbm.sample_exists("seq01")
-		False
+		>>> dbm.get_sample_id("seq01")
+		2
 
 		'''
 		sql = "SELECT id FROM sample WHERE name = ? LIMIT 1;"
 		row = self.cursor.execute(sql, [sample_name]).fetchone()
 		try:
-			row['id']
+			return row['id']
 		except:
 			return None
 
