@@ -667,6 +667,7 @@ class sonarCache:
                                     + sample_data["name"]
                                     + "\n"
                                     + qry
+                                    + "\n"
                                 )
                             sys.exit(
                                 "import error: original sequence of sample "

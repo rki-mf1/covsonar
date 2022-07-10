@@ -38,7 +38,7 @@ def setup_db(tmp_path_factory):
     return dbfile
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmpfile_name(tmpdir_factory):
     yield str(
         tmpdir_factory.mktemp("dbm_test").join(next(tempfile._get_candidate_names()))
@@ -49,7 +49,7 @@ def tmpfile_name(tmpdir_factory):
 def testdb(setup_db):
     db = setup_db
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    fasta = os.path.join(script_dir, "tests", "data", "test.fasta")
+    fasta = os.path.join(script_dir, "data", "test.fasta")
     sonarBasics.import_data(
         db,
         fasta=[fasta],
@@ -65,14 +65,14 @@ def testdb(setup_db):
     return db
 
 
-@pytest.fixture()
+@pytest.fixture
 def init_readonly_dbm(testdb):
     """Fixture to set up a read-only dbm object"""
     with sonarDBManager(testdb, readonly=True) as dbm:
         yield dbm
 
 
-@pytest.fixture()
+@pytest.fixture
 def init_writeable_dbm(testdb):
     """Fixture to set up a wirte-able dbm object"""
     with sonarDBManager(testdb, readonly=False) as dbm:
