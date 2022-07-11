@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
-
 from collections import defaultdict
 import itertools
 import os
@@ -29,68 +25,69 @@ class sonarDBManager:
 
     Notes
     -----
-        This object should be called using a context manager to ensure rollbacks
-        on abnormal termination.
+            This object should be called using a context manager to ensure rollbacks
+            on abnormal termination.
 
     Example
     -------
 
     In this example the DOCTESTDB variable store the path to a database file
 
-    >>> dbfile = getfixture('setup_db')
-    >>> with sonarDBManager(dbfile) as dbm:
+    >>> with sonarDBManager(DOCTESTDB) as dbm:
     ... 	pass
 
     Parameters
     ----------
 
     dbfile : str
-        define a path to an existent and valid SONAR database file. If the
-        file does not exist, a SONAR database is created.
+            define a path to a non-existent or valid SONAR database file. If the
+            file does not exist, a SONAR database is created.
     timeout : int [ -1 ]
-        define busy timeout used for the connection. Use -1 for no timeout.
+            define busy timeout. Use -1 for no timeout.
     readonly : bool [ False ]
-        set True if the connection should be read-only
+            define if the connection should be read-only
     debug : bool [ False ]
-        debug mode (print all executed sql queries)
+            debug mode (print selected sql queries)
 
     Attributes
     ----------
     dbfile : str
-        stores the path to the used SONAR database file.
+            stores the path to the used SONAR database file.
     connection : object
-        stores the SQLite3 connection
+            stores the SQLite3 connection
     cursor : method
-        stores the SQLite3 cursor
-    debug: bool
-        stores debug mode status
+            stores the SQLite3 cursor
+
+    Dev Note
+    --------
+    A database row is returned as dictionary with column name as keys. Multiple
+    rows are returned as list of those dictionaries.
 
     """
 
     def __init__(
         self, dbfile, timeout=-1, readonly=True, debug=False, autocreate=False
     ):
-        logging.basicConfig(format="%(asctime)s %(message)s")
-
-        # public attributes
+        # logging.basicConfig(format="%(asctime)s %(message)s")
         self.connection = None
+        if not autocreate and not os.path.isfile(dbfile):
+            sys.exit("database error: database does not exists")
         self.dbfile = os.path.abspath(dbfile)
         self.cursor = None
-        self.debug = debug
-
-        # private attributes
         self.__timeout = timeout
         self.__mode = "ro" if readonly else "rwc"
         self.__uri = self.get_uri(dbfile)
+        self.debug = debug
         self.__properties = False
         self.__illegal_properties = {}
-        self.__default_reference = False
+        self.__default_reference_id = False
         self.__lineage_sublineage_dict = None
         self.__rootdir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-        self.__lineagewithsublineages = os.path.join(
+        self.lineagewithsublineages = os.path.join(
             self.__rootdir, "lib", "lineage.all.tsv"
         )
-        self.__operators = {
+
+        self.operators = {
             "genuine": {
                 "=": "=",
                 ">": ">",
@@ -113,20 +110,12 @@ class sonarDBManager:
             },
         }
 
-        # checking database file
-        if not os.path.isfile(self.dbfile):
-            if not autocreate:
-                sys.exit("database error: database does not exists")
-            self.setup(self.dbfile)
-
     def __enter__(self):
-        """establish connection and start transaction when class is initialized"""
         self.connection, self.cursor = self.connect()
         self.start_transaction()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        """close connection and - if errors occured - rollback when class is exited"""
         if [exc_type, exc_value, exc_traceback].count(None) != 3:
             if self.__mode == "rwc":
                 print("rollback database", file=sys.stderr)
@@ -136,12 +125,10 @@ class sonarDBManager:
         self.close()
 
     def __del__(self):
-        """close connection when class is deleted"""
         if self.connection:
             self.close()
 
     def connect(self):
-        """connect to database"""
         con = sqlite3.connect(
             self.__uri + "?mode=" + self.__mode,
             self.__timeout,
@@ -158,36 +145,22 @@ class sonarDBManager:
         self.cursor.execute("BEGIN DEFERRED")
 
     def new_transaction(self):
-        """commit and start new transaction"""
         self.commit()
         self.start_transaction()
 
     def commit(self):
-        """commit"""
         self.connection.commit()
 
     def rollback(self):
-        """roll back"""
         self.connection.rollback()
 
     def close(self):
-        """close database connection"""
         self.connection.close()
 
     def get_db_version(self):
-        """get database version"""
         return self.cursor.execute("pragma user_version").fetchone()["user_version"]
 
     def check_db_compatibility(self):
-        """
-        checks if the version of a given database is supported.
-        Returns True or exits with error message.
-
-        >>> dbm = getfixture('init_readonly_dbm')
-        >>> dbm.check_db_compatibility()
-        True
-
-        """
         dbver = self.get_db_version()
         if dbver != SUPPORTED_DB_VERSION:
             sys.exit(
@@ -197,33 +170,25 @@ class sonarDBManager:
                 + str(SUPPORTED_DB_VERSION)
                 + ")"
             )
-        return True
 
     @property
     def lineage_sublineage_dict(self):
         if not self.__lineage_sublineage_dict:
-            df = pd.read_sql("SELECT * FROM lineages", self.connection)
+            df = pd.read_sql(
+                "SELECT * FROM lineages", self.connection
+            )  # pd.read_csv(self.lineagewithsublineages, sep='\t')
             self.__lineage_sublineage_dict = dict(zip(df.lineage, df.sublineage))
         return self.__lineage_sublineage_dict
 
     @property
-    def default_reference(self):
-        """
-        property storing accession of the standard reference
-
-        >>> dbm = getfixture('init_readonly_dbm')
-        >>> dbm.default_reference
-        'MN908947.3'
-
-        """
+    def default_reference_id(self):
         if self.__default_reference is False:
             sql = "SELECT accession FROM reference WHERE standard = 1 LIMIT 1"
-            self.__default_reference = self.cursor.execute(sql).fetchone()["accession"]
+            self.__default_reference = self.cursor.execute(sql).fetchone()
         return self.__default_reference
 
     @property
     def properties(self):
-        """property storing propertie data as dict of dict whrere key is property name"""
         if self.__properties is False:
             sql = "SELECT * FROM property"
             rows = self.cursor.execute(sql).fetchall()
@@ -234,22 +199,10 @@ class sonarDBManager:
 
     @staticmethod
     def get_uri(dbfile):
-        """
-        returns url-safe file uri as string
-
-        >>> sonarDBManager.get_uri("test.db")
-        'file:test.db'
-        """
         return "file:" + urlquote(dbfile)
 
     @staticmethod
     def setup(filename, debug=False):
-        """
-        setup database
-
-        >>> dbfile = getfixture('tmpfile_name')
-        >>> sonarDBManager.setup(dbfile)
-        """
         sql = pkgutil.get_data(__name__, "data/db.sqlite").decode()
         uri = sonarDBManager.get_uri(filename)
         with sqlite3.connect(uri + "?mode=rwc", uri=True) as con:
@@ -258,23 +211,10 @@ class sonarDBManager:
             con.executescript(sql)
 
     def add_codon(self, translation_table, codon, aa):
-        """
-        add codon amino acid relationship to database
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> dbm.add_codon(11, "ATG", "M")
-        """
         sql = "INSERT OR IGNORE INTO translation (id, codon, aa) VALUES(?, ?, ?);"
         self.cursor.execute(sql, [translation_table, codon, aa])
 
     def add_property(self, name, datatype, querytype, description, standard=None):
-        """
-        adds a new property and returns the property id.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> id = dbm.add_property("NEW_PROP", "text", "text", "my new prop stores text information")
-
-        """
         name = name.upper()
         if name in self.__illegal_properties:
             sys.exit(
@@ -306,20 +246,10 @@ class sonarDBManager:
                 vals = [pid, standard]
                 self.cursor.execute(sql, vals)
         except sqlite3.Error as error:
-            sys.exit(
-                "error: failed to insert data into sqlite table (" + str(error) + ")"
-            )
+            print("Failed to insert data into sqlite table", error)
         return pid
 
     def add_translation_table(self, translation_table):
-        """
-        add codon amino acid relationship for a given translation table to database.
-        None-sense codons including gaps are assigned to a 0-lenth string.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> dbm.add_translation_table(1)
-
-        """
         sql = "SELECT COUNT(*) FROM translation  WHERE id = ?;"
         if self.cursor.execute(sql, [translation_table]).fetchone()["COUNT(*)"] != 4096:
             for codon in itertools.product("ATGCRYSWKMBDHVN-", repeat=3):
@@ -333,15 +263,6 @@ class sonarDBManager:
     def add_reference(
         self, accession, description, organism, translation_table, standard=0
     ):
-        """
-        Adds a reference to a database and returns the assidnged row id.
-        None-sense codons including gaps are assigned to a 0-lenth string.
-        The reference is set to the default reference if standard is 1.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> rowid = dbm.add_reference("REF1", "my new reference", "virus X", 1)
-
-        """
         self.add_translation_table(translation_table)
         if standard:
             sql = "UPDATE reference SET standard = 0 WHERE standard != 0"
@@ -353,43 +274,25 @@ class sonarDBManager:
         return self.cursor.lastrowid
 
     # INSERTING DATA
+
     def insert_property(self, sample_id, property_name, property_value):
-        """
-        Inserts/Updates a property value of a given sample in the database.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> dbm.insert_property(1, "LINEAGE", "BA.5")
-
-        """
         sql = (
             "INSERT OR REPLACE INTO sample2property (sample_id, property_id, value_"
             + self.properties[property_name]["datatype"]
             + ") VALUES(?, ?, ?);"
         )
+        # print([sample_id, self.properties[property_name]['id'], property_value])
         self.cursor.execute(
             sql, [sample_id, self.properties[property_name]["id"], property_value]
         )
+        return
 
     def insert_sequence(self, seqhash):
-        """
-        inserts a sequence repesented by its hash to the database. If the hash is known it is ignored.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> dbm.insert_sequence("1a1f34ef4318911c2f98a7a1d6b7e9217c4ae1d1")
-
-        """
         sql = "INSERT OR IGNORE INTO sequence (seqhash) VALUES(?);"
         self.cursor.execute(sql, [seqhash])
+        return seqhash
 
     def insert_sample(self, sample_name, seqhash):
-        """
-        Inserts or updates a sample/genome in the database.
-        Returns the rowid.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> rowid = dbm.insert_sample("my_new_sample", "1a1f34ef4318911c2f98a7a1d6b7e9217c4ae1d1")
-
-        """
         self.insert_sequence(seqhash)
         sql = "INSERT OR REPLACE INTO sample (name, seqhash, datahash) VALUES(?, ?, ?);"
         self.cursor.execute(sql, [sample_name, seqhash, ""])
@@ -398,17 +301,9 @@ class sonarDBManager:
         for pname in self.properties:
             if not self.properties[pname]["standard"] is None:
                 self.insert_property(sid, pname, self.properties[pname]["standard"])
-        return sid
+        return
 
     def insert_alignment(self, seqhash, element_id):
-        """
-        Inserts a sequence-alignment relation insert the database if not existing.
-        Returns the rowid.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> rowid = dbm.insert_alignment("1a1f34ef4318911c2f98a7a1d6b7e9217c4ae1d1", 1)
-
-        """
         sql = (
             "INSERT OR IGNORE INTO alignment (id, seqhash, element_id) VALUES(?, ?, ?);"
         )
@@ -427,14 +322,6 @@ class sonarDBManager:
         length,
         standard=0,
     ):
-        """
-        Inserts a molecule in the database. Molecule is set the default molecule if standard is 1.
-        Returns the rowid of the inserted/updated molecule.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> rowid = dbm.insert_molecule(1, "plasmid", "CP028427.1", "pARLON1", "Gulosibacter molinativorax strain ON4 plasmid pARLON1, complete sequence", 1, 37013)
-
-        """
         if symbol.strip() == "":
             symbol = accession
         if standard:
@@ -474,15 +361,6 @@ class sonarDBManager:
         parent_id=" ",
         parts=None,
     ):
-        """
-        Inserts a element such as a source, cds or protein in the database. Molecule is set the default molecule if standard is 1.
-        If element is not linearly encoded on its molecule, list of tuples containing start and end coordinates can be provided as parts.
-        Returns the rowid of the inserted/updated molecule.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> rowid = dbm.insert_element(1, "protein", "GMOLON4_3257", "NlpD", "M23/M37 family peptidase", 5579, 6199, 1, "MKGLRSSNPKGEASD")
-
-        """
         if symbol.strip() == "":
             symbol = accession
         if standard:
@@ -509,27 +387,16 @@ class sonarDBManager:
             ],
         )
         sql = "SELECT id FROM element WHERE accession = ?"
-        eid = self.cursor.execute(sql, [accession]).fetchone()["id"]
+        mid = self.cursor.execute(sql, [accession]).fetchone()["id"]
         if parts is not None:
             for part in parts:
                 sql = "INSERT OR IGNORE INTO elempart (element_id, start, end, strand, base, segment) VALUES(?, ?, ?, ?, ?, ?);"
-                self.cursor.execute(sql, [eid] + part)
-        return eid
+                self.cursor.execute(sql, [mid] + part)
+        return mid
 
     def insert_variant(
         self, alignment_id, element_id, ref, alt, start, end, label, parent_id=""
     ):
-        """
-        Inserts a variant if it does not exist in the database. Based on the type of the element the element id refers to,
-        this variant describes a change on nucleotide (source or cds elements) or amino acid level (protein elements).
-        The parent_id is supposed to store the element id of the encoding element (the corresponding source for cds and
-        the corresponding cds for proteins, respectively).
-        Returns the rowid of the inserted variant.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> rowid = dbm.insert_variant(1, 1, "A", "T", 0, 1, "A1T")
-
-        """
         sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, label, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?);"
         self.cursor.execute(
             sql, [None, element_id, start, end, ref, alt, label, parent_id]
@@ -540,14 +407,8 @@ class sonarDBManager:
         return vid
 
     # DELETING DATA
+
     def delete_samples(self, *sample_names):
-        """
-        Deletes one or more given samples based on their names if existing.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> dbm.delete_samples("NC_045512")
-
-        """
         sql = (
             "DELETE FROM sample WHERE name IN ("
             + ", ".join(["?"] * len(sample_names))
@@ -556,83 +417,41 @@ class sonarDBManager:
         self.cursor.execute(sql, sample_names)
 
     def delete_property(self, property_name):
-        """
-        Deletes a property all related data linked to samples based on the property name
-        from database if the property exists.
-
-        >>> dbm = getfixture('init_writeable_dbm')
-        >>> dbm.delete_property("NEW_PROP")
-
-        """
-        if property_name in self.properties:
-            sql = "DELETE FROM sample2property WHERE property_id = ?;"
-            self.cursor.execute(sql, [self.properties[property_name]["id"]])
-            sql = "DELETE FROM property WHERE name = ?;"
-            self.cursor.execute(sql, [property_name])
-            del self.properties[property_name]
+        sql = "DELETE FROM sample2property WHERE property_id = ?;"
+        self.cursor.execute(sql, [self.properties[property_name]["id"]])
+        sql = "DELETE FROM property WHERE name = ?;"
+        self.cursor.execute(sql, [property_name])
 
     # SELECTING DATA
 
     def sample_exists(self, sample_name):
-        """
-        Checks if a sample name exists and returns True and False, respectively.
-
-        >>> dbm = getfixture('init_readonly_dbm')
-        >>> dbm.sample_exists("seq01")
-        True
-
-        """
         sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found"
         return bool(self.cursor.execute(sql, [sample_name]).fetchone()["found"])
 
     def get_sample_id(self, sample_name):
-        """
-        Returns the rowid of a sample based on its name if it exists (else None is returned).
-
-        >>> dbm = getfixture('init_readonly_dbm')
-        >>> id = dbm.get_sample_id("seq01")
-
-        """
         sql = "SELECT id FROM sample WHERE name = ? LIMIT 1;"
         row = self.cursor.execute(sql, [sample_name]).fetchone()
-        return None if row is None else row["id"]
+        return row["id"] if row else None
 
     def get_sample_data(self, sample_name):
-        """
-        Returns a tuple of rowid and seqhash of a sample based on its name if it exists (else a tuple of Nones is returned).
-        """
         sql = "SELECT id, seqhash FROM sample WHERE name = ? LIMIT 1;"
         row = self.cursor.execute(sql, [sample_name]).fetchone()
         return (row["id"], row["seqhash"]) if row else (None, None)
 
     def seq_exists(self, seqhash):
-        """
-        Returns a True if sequence exists in the database based on the respective seqhash (else False).
-        """
         sql = "SELECT id FROM sample WHERE seqhash=? LIMIT 1;"
         return False if self.cursor.execute(sql, [seqhash]).fetchone() is None else True
 
     def get_alignment_id(self, seqhash, element_id):
-        """
-        Returns the rowid of a sample based on the respective seqhash and element. If no
-        alignment of the given sequence to the given element has been stored None is returned.
-        """
         sql = "SELECT id FROM alignment WHERE element_id = ? AND seqhash = ? LIMIT 1;"
         row = self.cursor.execute(sql, [element_id, seqhash]).fetchone()
         return None if row is None else row["id"]
 
     def get_default_reference_accession(self):
-        """
-        Returns acession of the reference defined as default in the database.
-        """
         sql = "SELECT accession FROM reference WHERE standard=1"
         return self.cursor.execute(sql).fetchone()["accession"]
 
     def get_molecule_ids(self, reference_accession=None):
-        """
-        Returns a dictionary with accessions as keys and respective rowids as values for
-        all molecules related to a given (or the default) reference.
-        """
         if reference_accession:
             condition = '"reference.accession" = ?'
             val = [reference_accession]
@@ -650,10 +469,6 @@ class sonarDBManager:
         }
 
     def get_molecule_id(self, molecule_accession):
-        """
-        Returns the rowid of a molecule based on its accession (or None if the
-        accession does not exist).
-        """
         sql = "SELECT id FROM molecule WHERE accession = ?;"
         row = self.cursor.execute(sql, [molecule_accession]).fetchone()
         if row:
@@ -661,11 +476,6 @@ class sonarDBManager:
         return row
 
     def get_molecule_data(self, *fields, reference_accession=None):
-        """
-        Returns a dictionary with molecule accessions as keys and sub-dicts as values for all molecule
-        of a given (or the default) reference. The sub-dicts store all table field names
-        (or, alternatively, the given table field names only) as keys and the stored data as values.
-        """
         if not fields:
             fields = "*"
         elif '"molecule.accession"' not in fields:
@@ -689,11 +499,6 @@ class sonarDBManager:
         return {}
 
     def get_elements(self, molecule_id, *types):
-        """
-        Returns a dictionary with molecule accessions as keys and molecule data dicts as values for all molecule
-        of a given (or the default) reference. By providing the respective table fields the extend of data dicts can be
-        limited.
-        """
         sql = "SELECT * FROM element WHERE molecule_id = ?"
         if types:
             sql += " AND type IN (" + ", ".join(["?"] * len(types)) + ");"
@@ -769,7 +574,7 @@ class sonarDBManager:
             if reference_accession is None:
                 return ""
             reference_accession = reference_accession["acc"]
-        sql = 'SELECT "element.sequence", "element.symbol", "element.id" FROM alignmentView WHERE "sample.name" = ? AND "reference.accession" = ?'
+        sql = 'SELECT "element.sequence", "element.symbol", "element.id" FROM alignmentView WHERE "sample.name" = ? AND "reference.accession" = ? '
         return self.cursor.execute(sql, [sample_name, reference_accession])
 
     def get_variant_id(self, element_id, start, end, ref, alt):
@@ -784,8 +589,10 @@ class sonarDBManager:
             condition = " IN (" + ", ".join(["?"] * len(element_ids)) + ")"
         else:
             condition = ""
+        # sql = "SELECT \"element.id\", \"variant.start\", \"variant.end\", \"variant.ref\", \"variant.alt\" FROM variantView WHERE \"sample.name\" = ? AND \"element.id\"" + condition
         sql = (
-            """ SELECT  variant.element_id as \"element.id\",
+            """
+            SELECT  variant.element_id as \"element.id\",
                     variant.start as \"variant.start\",
                     variant.end as  \"variant.end\",
                     variant.ref as  \"variant.ref\",
@@ -799,7 +606,7 @@ class sonarDBManager:
                         ON sample_T.seqhash == alignment.seqhash
                     INNER JOIN alignment2variant
                         ON alignment.id == alignment2variant.alignment_id
-                    INNER JOIN	variant
+                    INNER JOIN    variant
                         ON alignment2variant.variant_id == variant.id
                         WHERE  variant.element_id """
             + condition
@@ -810,7 +617,7 @@ class sonarDBManager:
                 yield row
 
     def iter_profile(self, sample_name, element_id):
-        sql = 'SELECT * FROM variantView WHERE "sample.name" = ? AND "element.id" = ? ORDER BY "element.id", "variant.start"'
+        sql = 'SELECT * FROM variantView WHERE "sample.name" = ? AND "element.id" = ? ORDER BY "element.id", "variant.start";'
         for row in self.cursor.execute(sql, [sample_name, element_id]):
             yield row
 
@@ -860,7 +667,7 @@ class sonarDBManager:
 
     def get_properties(self, sample_name, property_name=None):
         if property_name:
-            sql = 'SELECT * FROM propertyView WHERE "sample.name" = ? AND property_name = ?'
+            sql = 'SELECT * FROM propertyView WHERE "sample.name" = ? AND property_name = ?;'
             vals = [sample_name, property_name]
         else:
             sql = 'SELECT * FROM propertyView WHERE "sample.name" = ?'
@@ -945,15 +752,22 @@ class sonarDBManager:
     # Add/Update lineages into Table
     def add_update_lineage(self, _df):
         logging.info("Prepare: %d" % len(_df))
+
+        # _df.to_sql(name='lineages', con = self.connection, if_exists='replace',
+        # 			 index=False)
         sql = "INSERT OR REPLACE INTO lineages (lineage, sublineage) VALUES(?, ?);"
         for ind in _df.index:
             self.cursor.execute(sql, (_df["lineage"][ind], _df["sublineage"][ind]))
+        # self.commit()
+        # sql = "INSERT OR REPLACE INTO sample2property (sample_id, property_id, value_" + self.properties[property_name]['datatype'] + ") VALUES(?, ?, ?);"
+        # print([sample_id, self.properties[property_name]['id'], property_value])
+        # self.cursor.execute(sql, [sample_id, self.properties[property_name]['id'], property_value])
 
     # MATCHING PROFILES
     def get_operator(self, val):
         if val.startswith("^"):
-            return val[1:], self.__operators["negated"]
-        return val, self.__operators["genuine"]
+            return val[1:], self.operators["negated"]
+        return val, self.operators["genuine"]
 
     def get_conditional_expr(self, field, operator, *vals):
         condlist = []
@@ -1005,9 +819,9 @@ class sonarDBManager:
                     sys.exit(errmsg + val + ")")
                 op = match.group(2) if match.group(2) else defaultop
                 operator = (
-                    self.__operators["negated"][op]
+                    self.operators["negated"][op]
                     if match.group(1)
-                    else self.__operators["genuine"][op]
+                    else self.operators["genuine"][op]
                 )
                 val = match.group(3)
                 data[operator].add(val)
@@ -1018,9 +832,9 @@ class sonarDBManager:
                 if not match:
                     sys.exit(errmsg + val + ")")
                 operator = (
-                    self.__operators["negated"]["BETWEEN"]
+                    self.operators["negated"]["BETWEEN"]
                     if match.group(1)
-                    else self.__operators["genuine"]["BETWEEN"]
+                    else self.operators["genuine"]["BETWEEN"]
                 )
                 val = (match.group(2), match.group(3))
                 data[operator].add(val)
@@ -1055,9 +869,9 @@ class sonarDBManager:
                     sys.exit(errmsg + val + ")")
                 op = match.group(2) if match.group(2) else defaultop
                 operator = (
-                    self.__operators["negated"][op]
+                    self.operators["negated"][op]
                     if match.group(1)
-                    else self.__operators["genuine"][op]
+                    else self.operators["genuine"][op]
                 )
                 val = match.group(3)
                 data[operator].add(val)
@@ -1068,9 +882,9 @@ class sonarDBManager:
                 if not match:
                     sys.exit(errmsg + val + ")")
                 operator = (
-                    self.__operators["negated"]["BETWEEN"]
+                    self.operators["negated"]["BETWEEN"]
                     if match.group(1)
-                    else self.__operators["genuine"]["BETWEEN"]
+                    else self.operators["genuine"]["BETWEEN"]
                 )
                 val = (match.group(2), match.group(3))
                 data[operator].add(val)
@@ -1105,9 +919,9 @@ class sonarDBManager:
                     sys.exit(errmsg + val + ")")
                 op = match.group(2) if match.group(2) else defaultop
                 operator = (
-                    self.__operators["negated"][op]
+                    self.operators["negated"][op]
                     if match.group(1)
-                    else self.__operators["genuine"][op]
+                    else self.operators["genuine"][op]
                 )
                 val = match.group(3)
                 data[operator].add(val)
@@ -1118,9 +932,9 @@ class sonarDBManager:
                 if not match:
                     sys.exit(errmsg + val + ")")
                 operator = (
-                    self.__operators["negated"]["BETWEEN"]
+                    self.operators["negated"]["BETWEEN"]
                     if match.group(1)
-                    else self.__operators["genuine"]["BETWEEN"]
+                    else self.operators["genuine"]["BETWEEN"]
                 )
                 val = (match.group(2), match.group(3))
                 data[operator].add(val)
@@ -1145,9 +959,9 @@ class sonarDBManager:
             else:
                 opkey = "genuine"
             if val.startswith("%") or val.endswith("%"):
-                operator = self.__operators[opkey]["LIKE"]
+                operator = self.operators[opkey]["LIKE"]
             else:
-                operator = self.__operators[opkey]["="]
+                operator = self.operators[opkey]["="]
 
             data[operator].add(val)
 
@@ -1171,7 +985,7 @@ class sonarDBManager:
             else:
                 opkey = "genuine"
             val = val.strip("%") + "%"
-            operator = self.__operators[opkey]["LIKE"]
+            operator = self.operators[opkey]["LIKE"]
 
             data[operator].add(val)
 
@@ -1772,13 +1586,12 @@ class sonarDBManager:
             )
             uri = "file:" + urlquote(dbfile)
             logging.info("Perform the Upgrade: %s" % uri)
-
             while current_version < SUPPORTED_DB_VERSION:
+
                 next_version = current_version + 1
                 file_path = os.path.join(
                     os.path.dirname(os.path.realpath(__file__)),
-                    "migrate",
-                    str(next_version) + ".sql",
+                    "migrate/" + str(next_version) + ".sql",
                 )
                 if not os.path.isfile(file_path):
                     raise ValueError("Sorry, we cannot find", file_path)

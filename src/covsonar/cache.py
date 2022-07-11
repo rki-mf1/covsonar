@@ -219,7 +219,6 @@ class sonarCache:
         The function takes in a bunch of arguments and returns a filename.
         :return: A list of dictionaries. Each dictionary contains the information for a single sample.
         """
-
         data = {
             "name": name,
             "sampleid": sampleid,
@@ -296,14 +295,15 @@ class sonarCache:
 
     def cache_lift(self, refid, refmol_acc, sequence):
         """
-                The function takes in a reference id, a reference molecule accession number,
-                and a reference sequence. It then checks to see if the reference molecule accession number is in the set of molecules that
-                have been cached. If it is not, it iterates through all of the coding sequences for that molecule and creates a
-                dataframe for each one.
+                        The function takes in a reference id, a reference molecule accession number,
+                        and a reference sequence. It then checks to see if the reference molecule accession number is in the set of molecules that
+                        have been cached. If it is not, it iterates through all of the coding sequences for that molecule and creates a
+                        dataframe for each one.
         .
-                It then saves the dataframe to a pickle file and adds the reference molecule accession number to
-                the set of molecules that have been cached.
-                It then returns the name of the pickle file
+                        It then saves the dataframe to a pickle file and adds the reference molecule accession number to
+                        the set of molecules that have been cached.
+                        It then returns the name of the pickle file
+
         """
         fname = self.get_lift_fname(refid)
         rows = []
@@ -377,7 +377,7 @@ class sonarCache:
                 "input error: "
                 + sample_id
                 + " refers to an unknown reference molecule ("
-                + self._molregex.search(header)
+                + refmol
                 + ")."
             )
         seq = sonarBasics.harmonize(seq)
@@ -408,15 +408,14 @@ class sonarCache:
                 disable=self.disable_progress,
             ) as pbar:
                 seq = []
-                header = None
                 for line in handle:
                     pbar.update(len(line))
                     line = line.strip()
                     if line.startswith(">"):
+                        header = line[1:]
                         if seq:
                             yield self.process_fasta_entry(header, "".join(seq))
                             seq = []
-                        header = line[1:]
                     else:
                         seq.append(line)
                 if seq:

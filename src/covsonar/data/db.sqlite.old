@@ -1,0 +1,333 @@
+PRAGMA user_version = 4;
+PRAGMA foreign_keys = OFF;
+PRAGMA analysis_limit=400;
+PRAGMA optimize;
+
+--
+-- SAMPLE SECTION
+--
+
+CREATE TABLE IF NOT EXISTS sample (
+	id INTEGER NOT NULL PRIMARY KEY,
+	name VARCHAR NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS property (
+	id INTEGER NOT NULL PRIMARY KEY,
+	name VARCHAR NOT NULL UNIQUE,
+	datatype VARCHAR NOT NULL,
+	querytype VARCHAR NOT NULL,
+	description VARCHAR NOT NULL,
+	standard INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sample2property (
+	property_id INTEGER NOT NULL,
+	sample_id INTEGER NOT NULL,
+	value_integer INTEGER,
+	value_float NUMERIC,
+	value_text TEXT,
+	value_varchar VARCHAR,
+	value_blob BLOB,
+	value_date DATE,
+	PRIMARY KEY(sample_id, property_id),
+	FOREIGN KEY(sample_id) REFERENCES sample(id) ON DELETE CASCADE,
+	FOREIGN KEY(property_id) REFERENCES property(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_sample2property_int ON sample2property(value_integer);
+CREATE INDEX IF NOT EXISTS idx_sample2property_float ON sample2property(value_float);
+CREATE INDEX IF NOT EXISTS idx_sample2property_text ON sample2property(value_text);
+CREATE INDEX IF NOT EXISTS idx_sample2property_vchar ON sample2property(value_varchar);
+CREATE INDEX IF NOT EXISTS idx_sample2property_blob ON sample2property(value_blob);
+CREATE INDEX IF NOT EXISTS idx_sample2property_date ON sample2property(value_date);
+CREATE INDEX IF NOT EXISTS idx_sample2property_property_id ON sample2property(property_id);
+
+--
+-- REFERENCE SECTION
+--
+
+CREATE TABLE IF NOT EXISTS translation (
+	id INTEGER NOT NULL,
+	codon VARCHAR NOT NULL,
+	aa VARCHAR NOT NULL,
+	PRIMARY KEY(id, codon)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS reference (
+	id INTEGER NOT NULL PRIMARY KEY,
+	accession VARCHAR NOT NULL UNIQUE,
+	description VARCHAR NOT NULL,
+	organism VARCHAR NOT NULL,
+	translation_id INTEGER NOT NULL,
+	standard INTEGER NOT NULL,
+	FOREIGN KEY(translation_id) REFERENCES translation(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_reference_standard ON reference(standard);
+
+
+CREATE TABLE IF NOT EXISTS molecule (
+	id INTEGER NOT NULL PRIMARY KEY,
+	reference_id INTEGER NOT NULL,
+	type VARCHAR NOT NULL,
+	accession VARCHAR NOT NULL UNIQUE,
+	symbol VARCHAR NOT NULL,
+	description VARCHAR NOT NULL,
+	length INTEGER NOT NULL,
+	segment INTEGER NOT NULL,
+	standard INTEGER NOT NULL,
+	FOREIGN KEY(reference_id) REFERENCES reference(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_molecule_standard ON molecule(standard);
+CREATE INDEX IF NOT EXISTS idx_molecule_symbol ON molecule(symbol);
+
+CREATE TABLE IF NOT EXISTS element (
+	id INTEGER NOT NULL PRIMARY KEY,
+	molecule_id INTEGER NOT NULL,
+	type VARCHAR NOT NULL,
+	accession VARCHAR NOT NULL UNIQUE,
+	symbol VARCHAR NOT NULL,
+	description VARCHAR NOT NULL,
+	start INTEGER NOT NULL,
+	end INTEGER NOT NULL,
+	strand INTEGER,
+	sequence TEXT,
+	FOREIGN KEY(molecule_id) REFERENCES molecule(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_element_type ON element(type);
+CREATE INDEX IF NOT EXISTS idx_element_symbol ON element(symbol);
+
+CREATE TABLE IF NOT EXISTS elempart (
+	element_id INTEGER NOT NULL,
+	start INTEGER NOT NULL,
+	end INTEGER NOT NULL,
+	strand INTEGER NOT NULL,
+	segment INTEGER NOT NULL,
+	PRIMARY KEY(element_id, segment),
+	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_elempart_segment ON elempart(segment);
+
+CREATE TABLE IF NOT EXISTS element2element (
+	parent_id INTEGER NOT NULL,
+	child_id INTEGER NOT NULL,
+	PRIMARY KEY(parent_id, child_id),
+	FOREIGN KEY(parent_id) REFERENCES element(id) ON DELETE CASCADE,
+	FOREIGN KEY(child_id) REFERENCES element(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_element2element_child_id ON element2element(child_id);
+
+--
+-- ALIGNMENT SECTION
+--
+
+CREATE TABLE IF NOT EXISTS variant (
+	id INTEGER NOT NULL PRIMARY KEY,
+	ref VARCHAR NOT NULL,
+	alt VARCHAR NOT NULL,
+	start INTEGER NOT NULL,
+	end INTEGER NOT NULL,
+	parent_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_variant_lookup ON variant(start, end, ref, alt, parent_id);
+CREATE INDEX IF NOT EXISTS idx_variant_parent_id ON variant(parent_id);
+
+
+CREATE TABLE IF NOT EXISTS sample2sequence (
+	sample_id INTEGER NOT NULL,
+	sequence_hash VARCHAR NOT NULL,
+	PRIMARY KEY(sample_id, sequence_hash),
+	FOREIGN KEY(sample_id) REFERENCES sample(id) ON DELETE CASCADE,
+	FOREIGN KEY(sequence_hash) REFERENCES alignment(sequence_hash) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_sample2sequence_sequence_hash ON sample2sequence(sequence_hash);
+
+
+CREATE TABLE IF NOT EXISTS alignment (
+	id INTEGER NOT NULL PRIMARY KEY,
+	sequence_hash VARCHAR NOT NULL,
+	element_id INTEGER NOT NULL,
+	FOREIGN KEY(sequence_hash) REFERENCES sequence(hash) ON DELETE CASCADE,
+	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS alignment2variant (
+	alignment_id VARCHAR NOT NULL,
+	variant_id INTEGER NOT NULL,
+	PRIMARY KEY(alignment_id, variant_id),
+	FOREIGN KEY(alignment_id) REFERENCES alignment(id) ON DELETE CASCADE,
+	FOREIGN KEY(variant_id) REFERENCES variant(id) ON DELETE CASCADE
+	) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS variant2variant (
+	parent_id INTEGER NOT NULL,
+	child_id INTEGER NOT NULL,
+	PRIMARY KEY(parent_id, child_id),
+	FOREIGN KEY(parent_id) REFERENCES variant(id) ON DELETE CASCADE,
+	FOREIGN KEY(child_id) REFERENCES variant(id) ON DELETE CASCADE
+) WITHOUT ROWID;
+
+--
+-- VIEWS
+--
+
+CREATE VIEW IF NOT EXISTS referenceView
+AS
+SELECT
+	reference.id as "reference.id",
+	reference.accession as "reference.accession",
+	reference.description as "reference.description",
+	reference.organism as "reference.organism",
+	reference.standard as "reference.standard",
+	reference.translation_id as "translation.id",
+	molecule.id as "molecule.id",
+	molecule.type as "molecule.type",
+	molecule.accession as "molecule.accession",
+	molecule.symbol as "molecule.symbol",
+	molecule.description as "molecule.description",
+	molecule.length as "molecule.length",
+	molecule.segment as "molecule.segment",
+	molecule.standard as "molecule.standard",
+	element.id as "element.id",
+	element.type as "element.type",
+	element.accession as "element.accession",
+	element.symbol as "element.symbol",
+	element.description as "element.description",
+	element.start as "element.start",
+	element.end as "element.end",
+	element.strand as "element.strand",
+	element.sequence as "element.sequence",
+	element2element.parent_id as "element.parent_id",
+	elempart.start as "elempart.start",
+	elempart.end as "elempart.end",
+	elempart.strand as "elempart.strand",
+	elempart.segment as "elempart.segment"
+FROM
+	reference
+LEFT JOIN molecule ON reference.id = molecule.reference_id
+LEFT JOIN element ON molecule.id = element.molecule_id
+LEFT JOIN element2element ON element.id = element2element.child_id
+LEFT JOIN elempart ON element.id = elempart.element_id;
+
+CREATE VIEW IF NOT EXISTS propertyView
+AS
+SELECT
+	sample.id as "sample.id",
+	sample.name as "sample.name",
+	property.id as "property.id",
+	property.name as "property.name",
+	property.querytype as "propery.querytype",
+	property.datatype as "property.datatype",
+	property.standard as "property.standard",
+	sample2property.value_integer as "sample2property.value_integer",
+	sample2property.value_float as "sample2property.value_float",
+	sample2property.value_text as "sample2property.value_text",
+	sample2property.value_varchar as "sample2property.value_varchar",
+	sample2property.value_blob as "sample2property.value_blob",
+	sample2property.value_date as "sample2property.value_date"
+FROM
+	sample
+LEFT JOIN sample2property ON sample.id = sample2property.sample_id
+LEFT JOIN property ON sample2property.property_id = property.id;
+
+CREATE VIEW IF NOT EXISTS sequenceView
+AS
+SELECT
+	sample.id as "sample.id",
+	sample.name as "sample.name",
+	sample2sequence.sequence_hash as "sequence.hash"
+FROM
+	sample
+LEFT JOIN sample2sequence ON sample.id = sample2sequence.sample_id;
+
+CREATE VIEW IF NOT EXISTS alignmentView
+AS
+SELECT
+	sample.id as "sample.id",
+	sample.name as "sample.name",
+	alignment.id as "alignment.id",
+	alignment.sequence_hash as "sequence.hash",
+	reference.id as "reference.id",
+	reference.accession as "reference.accession",
+	reference.description as "reference.description",
+	reference.organism as "reference.organism",
+	reference.standard as "reference.standard",
+	reference.translation_id as "translation.id",
+	molecule.id as "molecule.id",
+	molecule.type as "molecule.type",
+	molecule.accession as "molecule.accession",
+	molecule.symbol as "molecule.symbol",
+	molecule.description as "molecule.description",
+	molecule.length as "molecule.length",
+	molecule.segment as "molecule.segment",
+	molecule.standard as "molecule.standard",
+	element.id as "element.id",
+	element.type as "element.type",
+	element.accession as "element.accession",
+	element.symbol as "element.symbol",
+	element.description as "element.description",
+	element.start as "element.end",
+	element.strand as "element.strand"
+FROM
+	sample
+LEFT JOIN sample2sequence ON sample.id = sample2sequence.sample_id
+LEFT JOIN alignment ON sample2sequence.sequence_hash = alignment.sequence_hash
+LEFT JOIN element ON alignment.element_id = element.id
+LEFT JOIN molecule ON element.molecule_id = molecule.id
+LEFT JOIN reference ON molecule.reference_id = reference.id;
+
+CREATE VIEW IF NOT EXISTS variantView
+AS
+SELECT
+	sample.id as "sample.id",
+	sample.name as "sample.name",
+	sample2sequence.sequence_hash as "sequence.hash",
+	reference.id as "reference.id",
+	reference.standard as "reference.standard",
+	molecule.id as "molecule.id",
+	molecule.symbol as "molecule.symbol",
+	molecule.standard as "molecule.standard",
+	element.type as "element.type",
+	alignment.element_id as "element.id",
+	alignment2variant.alignment_id as "a2v.a_id",
+	alignment2variant.variant_id as "a2v.v_id",
+	variant.id as "variant.id",
+	variant.ref as "variant.ref",
+	variant.alt as "variant.alt",
+	variant.start as "variant.start",
+	variant.end as "variant.end",
+	variant.parent_id as "variant.parent_id"
+FROM
+	sample
+LEFT JOIN sample2sequence ON sample.id = sample2sequence.sample_id
+LEFT JOIN alignment ON sample2sequence.sequence_hash = alignment.sequence_hash
+LEFT JOIN element ON alignment.element_id = element.id
+LEFT JOIN molecule ON element.molecule_id = molecule.id
+LEFT JOIN reference ON molecule.reference_id = reference.id
+LEFT JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
+LEFT JOIN variant ON alignment2variant.variant_id = variant.id;
+
+--
+-- TRIGGER
+--
+
+CREATE TRIGGER property_bu_trigger
+BEFORE UPDATE ON property
+BEGIN
+    SELECT RAISE(FAIL, "properties cannot be updated.");
+END;
+
+CREATE TRIGGER property_bi_trigger
+BEFORE INSERT ON property
+BEGIN
+    SELECT CASE WHEN
+        (SELECT COUNT(*) FROM sample) > 0
+    THEN
+        RAISE(FAIL, "properties can be only added to empty databases.")
+    END;
+END;
+
+--
+-- PRAGMA
+--
+
+PRAGMA foreign_keys = ON;

@@ -1,6 +1,5 @@
 import logging
 
-
 # Determine version using pyproject.toml file
 try:
     from importlib.metadata import version, PackageNotFoundError  # type: ignore
