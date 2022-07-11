@@ -355,7 +355,7 @@ Success: Database upgrade was successfully completed
 ### 2.7 Delete sample (delete)
 
 ```sh
-sonar delete --db test.db --sample
+sonar delete --db test.db --sample ID_1 ID_2 ID_3
 ```
 
 ## How to contribute 🏗️
