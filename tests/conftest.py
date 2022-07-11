@@ -1,3 +1,4 @@
+import os
 import tempfile
 
 import pytest
@@ -24,28 +25,44 @@ def mock_workerpool_imap_unordered(monkeypatch):
 
 
 @pytest.fixture(scope="session")
-def setup_testdb(tmpdir_factory):
+def setup_db(tmp_path_factory):
     """Fixture to set up a temporay session-lasting test database with test data"""
-    dbfile = str(tmpdir_factory.mktemp("dbm_test").join("testdb"))
-    # sonarBasics.setup_db(dbfile, quiet=True)
-    sonarBasics.setup_db(dbfile)
+    dbfile = str(tmp_path_factory.mktemp("data") / "test.db")
+    sonarBasics.setup_db(dbfile, quiet=True)
     with sonarDBManager(dbfile, readonly=False) as dbm:
         dbm.add_property("LINEAGE", "text", "text", " ")
+        dbm.add_property("CITY", "zip", "zip", " ")
+        dbm.add_property("Ct", "integer", "integer", " ")
+        dbm.add_property("CONC", "float", "float", " ")
+        dbm.add_property("SAMPLING", "date", "date", " ")
     return dbfile
 
 
 @pytest.fixture
-def setup_db(get_tmpfile_name):
-    """Fixture to set up a temporay test database with test data"""
-    # sonarBasics.setup_db(get_tmpfile_name, quiet=True)
-    sonarBasics.setup_db(get_tmpfile_name)
-    return get_tmpfile_name
+def tmpfile_name(tmpdir_factory):
+    yield str(
+        tmpdir_factory.mktemp("dbm_test").join(next(tempfile._get_candidate_names()))
+    )
 
 
-@pytest.fixture
-def testdb(setup_testdb):
-    """Fixture to set up a temporay test database with test data"""
-    return setup_testdb
+@pytest.fixture(scope="session")
+def testdb(setup_db):
+    db = setup_db
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    fasta = os.path.join(script_dir, "data", "test.fasta")
+    sonarBasics.import_data(
+        db,
+        fasta=[fasta],
+        tsv=[],
+        cols={},
+        cachedir=None,
+        autodetect=True,
+        progress=False,
+        update=True,
+        debug=False,
+        quiet=True,
+    )
+    return db
 
 
 @pytest.fixture
@@ -60,10 +77,3 @@ def init_writeable_dbm(testdb):
     """Fixture to set up a wirte-able dbm object"""
     with sonarDBManager(testdb, readonly=False) as dbm:
         yield dbm
-
-
-@pytest.fixture
-def get_tmpfile_name(tmpdir_factory):
-    return str(
-        tmpdir_factory.mktemp("dbm_test").join(next(tempfile._get_candidate_names()))
-    )
