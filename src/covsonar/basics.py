@@ -8,17 +8,17 @@ import csv
 import gzip
 import lzma
 import os
-import re
 import sys
-from tempfile import mkstemp
 
 from Bio import SeqIO
 from Bio.SeqUtils.CheckSum import seguid
+from mpire import WorkerPool
 import pandas as pd
+from tqdm import tqdm
 
+import covsonar
 from . import __version__
 from . import logging
-from .dbm import sonarDBManager
 
 
 class Aliasor:
@@ -57,111 +57,10 @@ class Aliasor:
 class sonarBasics(object):
     """
     this object provides sonarBasics functionalities and intelligence
-
-    Notes
-    -----
-            Please note, that genomic and protein coordinates are expected to be  and
-            returned 0-based by this object, except for formatted profiles.
-            While start or single coordinates are inclusive, end coordinates of
-            ranges are exclusive, expressed in a mathematical notation: [start, end).
-            Only in formatted profiles start and end coordinates are 1-based and both
-            inclusive.
-
-    Examples
-    --------
-
-    In this example the path to the database is stored in DOCTESTDB.
-
-    >>> db = sonarBasics(DOCTESTDB)
-
-    Parameters
-    ----------
-    dbfile : str
-            define a path to a non-existent or valid SONAR database file. If the
-            file does not exist, a SONAR database is created.
-    translation_table : int
-            define the genetic code table used for in silico translation (see
-            https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
-
-    Attributes
-    ----------
-    db : str
-            stores the absolute path to the used SONAR database file
-    reffna : str
-            stores the absolute path to the built-in FASTA file containing the reference
-            genome sequence
-    refgff : str
-            stores the absolute path to the built-in GFF3 file containing the reference
-            genome annotation
-    translation_table : int
-            stores the genetic code table used for in silico translation (see
-            https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi) [ 1 ]
-    refseq : str
-            stores the upper-case sequence of the built-in reference genome
-    refdescr : str
-            stores the FASTA header of the built-in reference genome
-    refgffObj : object
-            stores the sonarGFF object based on the built-in reference genome
-            annotation
-    iupac_nt_code : dict
-            stores a dict with IUPAC one-letter nucleotide codes as keys and the
-            respective set of matching explicit IUPAC one-letter nucleotide codes
-            as values (e.g {"W": set('A', 'T')})
-    iupac_explicit_nt_code : dict
-            stores a set containing all non-ambiguous IUPAC one-letter nucleotide codes
-    iupac_ambig_nt_code : set
-            stores a set containing all ambiguous IUPAC one-letter nucleotide codes
-    iupac_aa_code : dict
-            stores a dict with IUPAC one-letter amino acid codes as keys and
-            the respective set of matching IUPAC one-letter amino acids codes as values
-    iupac_explicit_aa_code : dict
-            stores a set containing all non-ambiguous IUPAC one-letter amino acid codes
-    iupac_ambig_aa_code : dict
-            stores a set containing all ambiguous IUPAC one-letter amino acid codes
-    dna_var_regex : compiled re expression
-            stores a compiled re expression that matches to nucleotide profiles but
-            not to amino acid profiles
-    aa_var_regex : compiled re expression
-            stores a compiled re expression that matches to amino acid profiles but
-            not to nucleotide profiles
-    del_regex : compiled re expression
-            stores a compiled re expression that matches to deletion profiles on
-            nucleotide as well as on amino acid level.
-    dnavar_grep_regex : compiled re expression
-            stores a compiled re expression that matches to snp or dna insertion
-            profiles with eference allele, genomic position and variant allele
-            as groups.
-    codedict : dict
-            stores a dictionary with "dna" and "aa" containing the field name in the
-            database that stores the profile data, the one letter code with and
-            without ambiguities
     """
 
-    def __init__(self, dbfile, translation_table=1, debug=False):
-        self.db = os.path.abspath(dbfile) if dbfile else mkstemp()[1]
-        self.debug = debug
-        self.__moduledir = self.get_module_base()
-        self.reffna = os.path.join(self.__moduledir, "ref.fna")
-        self.refgff = os.path.join(self.__moduledir, "ref.gff3")
-        self.translation_table = translation_table
-        self.__refseq = None
-        self.__refdescr = None
-        self.__refgffObj = None
-        self.__iupac_nt_code = None
-        self.__iupac_aa_code = None
-        self.__iupac_explicit_nt_code = None
-        self.__iupac_explicit_aa_code = None
-        self.__iupac_ambig_nt_code = None
-        self.__iupac_ambig_aa_code = None
-        self.__terminal_letters_regex = re.compile("[A-Z]$")
-        self.__dna_var_regex = None
-        self.__aa_var_regex = None
-        self.__del_regex = None
-        self.__dnavar_grep_regex = None
-        self.__codedict = None
-        self.__fasta_tag_regex = None
-        self._covSonar_version = self.get_version()
-        # logging.basicConfig(format="%(asctime)s %(message)s")
+    def __init__(self):
+        logging.basicConfig(format="%(asctime)s %(message)s")
 
     @staticmethod
     def get_version():
@@ -175,15 +74,21 @@ class sonarBasics(object):
 
     @staticmethod
     def setup_db(  # noqa: C901
-        fname, auto_create=False, default_setup=True, reference_gb=None, debug=False
+        fname,
+        auto_create=False,
+        default_setup=True,
+        reference_gb=None,
+        debug=False,
+        quiet=False,
     ):
         if os.path.isfile(fname):
             sys.exit("setup error: " + fname + " does already exist.")
-        sonarDBManager.setup(fname, debug=debug)
+        covsonar.dbm.sonarDBManager.setup(fname, debug=debug)
 
         # loading default data
         if default_setup or auto_create:
-            with sonarDBManager(fname, readonly=False, debug=debug) as dbm:
+            with covsonar.dbm.sonarDBManager(fname, readonly=False, debug=debug) as dbm:
+                # adding pre-defined sample properties
                 # adding pre-defined sample properties
                 dbm.add_property(
                     "imported",
@@ -237,7 +142,7 @@ class sonarBasics(object):
                 # adding reference
                 if not reference_gb:
                     reference_gb = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)), "data/ref.gb"
+                        os.path.dirname(os.path.abspath(__file__)), "data", "ref.gb"
                     )
                 records = [x for x in sonarBasics.iter_genbank(reference_gb)]
                 ref_id = dbm.add_reference(
@@ -247,12 +152,10 @@ class sonarBasics(object):
                     1,
                     1,
                 )
-
                 # adding reference molecule and elements
                 for i, record in enumerate(records):
                     gene_ids = {}
                     s = 1 if i == 0 else 0
-
                     mol_id = dbm.insert_molecule(
                         ref_id,
                         record["moltype"],
@@ -263,7 +166,6 @@ class sonarBasics(object):
                         record["length"],
                         s,
                     )
-
                     # source handling
                     source_id = dbm.insert_element(
                         mol_id,
@@ -334,7 +236,8 @@ class sonarBasics(object):
                                 + elem["accession"]
                                 + "' (cds)"
                             )
-                logging.info("Success: Database was successfully installed")
+                if not quiet:
+                    logging.info("Success: Database was successfully installed")
 
     # DATA IMPORT
     # genbank handling handling
@@ -448,6 +351,141 @@ class sonarBasics(object):
         """ """
         return str(seq).strip().upper().replace("U", "T")
 
+    # importing
+    @staticmethod
+    def import_data(  # noqa: C901
+        db,
+        fasta=[],
+        tsv=[],
+        cols={},
+        cachedir=None,
+        autodetect=False,
+        progress=False,
+        update=True,
+        threads=1,
+        debug=False,
+        quiet=False,
+    ):
+        if not quiet:
+            if not update:
+                print("import mode: skipping existing samples")
+            else:
+                print("import mode: updating existing samples")
+
+        if not fasta:
+            if not tsv or not update:
+                print("Nothing to import.")
+                exit(0)
+
+        # prop handling
+        with covsonar.dbm.sonarDBManager(db, readonly=True) as dbm:
+            db_properties = set(dbm.properties.keys())
+            db_properties.add("sample")
+
+        colnames = {x: x for x in db_properties} if autodetect else {}
+        for x in cols:
+            if x.count("=") != 1:
+                sys.exit(
+                    "input error: " + x + " is not a valid sample property assignment."
+                )
+            k, v = x.split("=")
+            if k not in db_properties:
+                sys.exit(
+                    "input error: sample property "
+                    + k
+                    + " is unknown to the selected database. Use list-props to see all valid properties."
+                )
+            colnames[k] = v
+
+        if "sample" not in colnames:
+            sys.exit("input error: a sample column has to be assigned.")
+
+        properties = collections.defaultdict(dict)
+        for fname in tsv:
+            with open(fname, "r") as handle, tqdm(
+                desc="processing " + fname + "...",
+                total=os.path.getsize(fname),
+                unit="bytes",
+                unit_scale=True,
+                bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                disable=not progress,
+            ) as pbar:
+                line = handle.readline()
+                pbar.update(len(line))
+                fields = line.strip("\r\n").split("\t")
+                tsv_cols = {}
+                if not quiet:
+                    print()
+                for x in sorted(colnames.keys()):
+                    c = fields.count(colnames[x])
+                    if c == 1:
+                        tsv_cols[x] = fields.index(colnames[x])
+                        if not quiet:
+                            print("  " + x + " <- " + colnames[x])
+                    elif c > 1:
+                        sys.exit("error: " + colnames[x] + " is not an unique column.")
+                if "sample" not in tsv_cols:
+                    sys.exit("error: tsv file does not contain required sample column.")
+                elif len(tsv_cols) == 1:
+                    sys.exit(
+                        "input error: tsv does not provide any informative column."
+                    )
+                for line in handle:
+                    pbar.update(len(line))
+                    fields = line.strip("\r\n").split("\t")
+                    sample = fields[tsv_cols["sample"]]
+                    for x in tsv_cols:
+                        if x == "sample":
+                            continue
+                        properties[sample][x] = fields[tsv_cols[x]]
+
+        # setup cache
+        cache = covsonar.cache.sonarCache(
+            db,
+            outdir=cachedir,
+            logfile="import.log",
+            allow_updates=update,
+            temp=not cachedir,
+            debug=debug,
+            disable_progress=not progress,
+        )
+
+        # importing sequences
+        if fasta:
+            cache.add_fasta(*fasta, propdict=properties)
+            aligner = covsonar.align.sonarAligner()
+            l = len(cache._samplefiles_to_profile)
+            with WorkerPool(n_jobs=threads, start_method="fork") as pool, tqdm(
+                desc="profiling sequences...",
+                total=l,
+                unit="seqs",
+                bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                disable=not progress,
+            ) as pbar:
+                for _ in pool.imap_unordered(
+                    aligner.process_cached_sample, cache._samplefiles_to_profile
+                ):
+                    pbar.update(1)
+
+            cache.import_cached_samples()
+
+        # importing properties
+        elif tsv:
+            with covsonar.dbm.sonarDBManager(db, readonly=False, debug=debug) as dbm:
+                for sample_name in tqdm(
+                    properties,
+                    desc="import data ...",
+                    total=len(properties),
+                    unit="samples",
+                    bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                    disable=not progress,
+                ):
+                    sample_id = dbm.get_sample_id(sample_name)
+                    if not sample_id:
+                        continue
+                    for property_name, value in properties[sample_name].items():
+                        dbm.insert_property(sample_id, property_name, value)
+
     # matching
     @staticmethod
     def match(
@@ -460,7 +498,7 @@ class sonarBasics(object):
         format="csv",
         debug="False",
     ):
-        with sonarDBManager(db, debug=debug) as dbm:
+        with covsonar.dbm.sonarDBManager(db, debug=debug) as dbm:
             if format == "vcf" and reference is None:
                 reference = dbm.get_default_reference_accession()
             cursor = dbm.match(
@@ -493,7 +531,7 @@ class sonarBasics(object):
     def restore(
         db, *samples, reference_accession=None, aligned=False, outfile=None, debug=False
     ):
-        with sonarDBManager(db, readonly=True, debug=debug) as dbm:
+        with covsonar.dbm.sonarDBManager(db, readonly=True, debug=debug) as dbm:
             handle = sys.stdout if outfile is None else open(outfile, "w")
             for sample in samples:
                 prefixes = collections.defaultdict(str)
@@ -545,7 +583,7 @@ class sonarBasics(object):
     # restore
     @staticmethod
     def delete(db, *samples, debug):
-        with sonarDBManager(db, readonly=False, debug=debug) as dbm:
+        with covsonar.dbm.sonarDBManager(db, readonly=False, debug=debug) as dbm:
             before = dbm.count_samples()
             dbm.delete_samples(*samples)
             after = dbm.count_samples()
@@ -557,7 +595,7 @@ class sonarBasics(object):
 
     @staticmethod
     def show_db_info(db):
-        with sonarDBManager(db, readonly=True) as dbm:
+        with covsonar.dbm.sonarDBManager(db, readonly=True) as dbm:
             print("covSonar Version:          ", sonarBasics.get_version())
             print("database path:             ", dbm.dbfile)
             print("database version:          ", dbm.get_db_version())
@@ -611,7 +649,7 @@ class sonarBasics(object):
                     ),
                 }
             )
-        print(out)
+        logging.debug(out)
         return out
 
     # csv
@@ -624,7 +662,7 @@ class sonarBasics(object):
                     sep = "\t" if tsv else ","
                     writer = csv.DictWriter(
                         outfile, row.keys(), delimiter=sep, lineterminator=os.linesep
-                    )  # extrasaction='ignore',
+                    )
                     writer.writeheader()
                 writer.writerow(row)
             if i == -1:

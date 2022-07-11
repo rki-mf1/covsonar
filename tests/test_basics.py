@@ -5,8 +5,8 @@ import pytest
 from covsonar.basics import sonarBasics
 
 
-def test_setup_but_file_exists(get_tmpfile_name):
-    fname = get_tmpfile_name
+def test_setup_but_file_exists(tmpfile_name):
+    fname = tmpfile_name
     open(fname, "w").close()
     with pytest.raises(SystemExit) as pytest_wrapped_e:
         sonarBasics.setup_db(fname)
