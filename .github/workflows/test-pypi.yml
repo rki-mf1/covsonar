@@ -6,12 +6,22 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v3
       with:
         python-version: '3.9'
         architecture: x64
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: 3.9
+        mamba-version: "*"
+        activate-environment: covsonar
+        channels: conda-forge,bioconda,defaults
+        channel-priority: true
     - run: pip install nox==2022.1.7
     - run: pip install poetry==1.1.13
     - run: nox
