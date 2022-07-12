@@ -470,7 +470,7 @@ class sonarBasics(object):
             cache.import_cached_samples()
 
         # importing properties
-        elif tsv:
+        if tsv:
             with covsonar.dbm.sonarDBManager(db, readonly=False, debug=debug) as dbm:
                 for sample_name in tqdm(
                     properties,

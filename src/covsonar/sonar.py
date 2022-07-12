@@ -8,7 +8,7 @@ import sys
 from tempfile import mkstemp
 from textwrap import fill
 
-import tabulate
+from tabulate import tabulate
 
 from . import logging
 from .basics import sonarBasics
@@ -328,7 +328,6 @@ def parse_args(args):
 
     # register known arguments
     pargs = parser.parse_known_args(args=args, namespace=user_namespace)
-
     # register dynamic arguments
     # register additonal arguments from database-specific sample property names when matching genomes
     if pargs[0].tool == "match" and hasattr(pargs[0], "db"):
@@ -444,8 +443,14 @@ def main(args):  # noqa: C901
             args.db, args.auto_create, reference_gb=args.gbk, debug=debug
         )
     elif args.tool == "db-upgrade":
-        input("Warning: Backup db file before upgrading, Press Enter to continue...")
-        sonarDBManager.upgrade_db(args.db)
+        print("WARNING: Backup db file before upgrading")
+        decision = ""
+        while decision not in ("YES", "no"):
+            decision = input("Do you really want to perform this action? [YES/no]: ")
+        if decision == "YES":
+            sonarDBManager.upgrade_db(args.db)
+        else:
+            logging.info("No operation is performed")
     else:
         with sonarDBManager(args.db, readonly=True) as dbm:
             dbm.check_db_compatibility()
