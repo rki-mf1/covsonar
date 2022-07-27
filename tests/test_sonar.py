@@ -1,5 +1,7 @@
+import logging
 import os
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -89,6 +91,47 @@ def test_delete_nothing(tmp_path, monkeypatch, caplog):
             db_path,
         ]
     )
-    # with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.INFO):
+        assert sonar.main(parsed_args) == 0
+        assert "Nothing to delete." in caplog.text
+
+
+def test_upgrade_db(tmp_path, monkeypatch, caplog):
+    monkeypatch.chdir(Path(__file__).parent)
+    db_path_orig = Path("data/test.old.db")
+    db_path = os.path.join(tmp_path, "test.old.db")
+
+    shutil.copy(db_path_orig, db_path)
+
+    # detect fail case
+    parsed_args = sonar.parse_args(
+        [
+            "info",
+            "--db",
+            db_path,
+        ]
+    )
+    with pytest.raises(SystemExit) as pytest_wrapped_e:
+        sonar.main(parsed_args)
+    assert pytest_wrapped_e.type == SystemExit
+    assert "compatibility error:" in pytest_wrapped_e.value.code
+
+    # perform upgrade
+    parsed_args_upgrade = sonar.parse_args(
+        [
+            "db-upgrade",
+            "--db",
+            db_path,
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: "YES")
+    with caplog.at_level(logging.INFO):
+        assert sonar.main(parsed_args_upgrade) == 0
+        assert "Success: Database upgrade was successfully completed" in caplog.text
+
+    # no fail case is detected
+
     assert sonar.main(parsed_args) == 0
-    # assert 'Nothing to delete.' in caplog.text
+
+
+# to do next perform upgrade but not success

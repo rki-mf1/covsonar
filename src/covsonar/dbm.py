@@ -1424,7 +1424,7 @@ class sonarDBManager:
         reserved_props=None,
         properties=None,
         reference_accession=None,
-        showN=False,
+        showNX=False,
         format="csv",
     ):
         # collecting sqls for metadata-based filtering
@@ -1550,7 +1550,7 @@ class sonarDBManager:
             )
             m = ' "molecule.symbol" || "@" || '
 
-        if not showN:
+        if not showNX:
             nn = ' AND "variant.alt" != "N" '
             nx = ' AND "variant.alt" != "X" '
         else:
@@ -1753,7 +1753,7 @@ class sonarDBManager:
     # Utils.
     def get_db_size(self, decimal_places=3):
         size = os.path.getsize(self.dbfile)
-        for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:
+        for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:  # pragma: no cover
             if size < 1024.0:
                 break
             size /= 1024.0
@@ -1781,7 +1781,10 @@ class sonarDBManager:
                     str(next_version) + ".sql",
                 )
                 if not os.path.isfile(file_path):
-                    raise ValueError("Sorry, we cannot find", file_path)
+                    raise ValueError(
+                        "Sorry, we cannot find %s, please contract us or reinstall software."
+                        % (file_path)
+                    )  # pragma: no cover
 
                 with open(file_path, "r") as handle:
                     sql = handle.read()

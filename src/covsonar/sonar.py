@@ -247,6 +247,12 @@ def parse_args(args):
         nargs="+",
         default=[],
     )
+    parser_match.add_argument(
+        "--showNX",
+        help="include any variant character in the result (X for AA and N for NT)",
+        action="store_true",
+    )
+
     parser_match_format = parser_match.add_mutually_exclusive_group()
     parser_match_format.add_argument(
         "--count", help="count instead of listing matching genomes", action="store_true"
@@ -601,6 +607,7 @@ def main(args):  # noqa: C901
             outfile=args.out,
             debug=args.debug,
             format=format,
+            showNX=args.showNX,
         )
 
     # optimize
