@@ -27,7 +27,7 @@ def test_help():
 
 
 def test_setup_db(tmp_path):
-    parsed_args = sonar.parse_args(["setup", "--db", str(tmp_path / "test.db")])
+    parsed_args = sonar.parse_args(["setup", "--db", str(tmp_path / "test.db"), "-a"])
     retval = sonar.main(parsed_args)
     assert retval == 0
 
@@ -96,9 +96,14 @@ def test_valid_end(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
     monkeypatch.chdir(Path(__file__).parent)
 
-    db_path = "data/test-with-seqs.db"
-
-    run_cli(f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013")
+    db_path_orig = Path("data/test-with-seqs.db")
+    db_path = tmp_path / "test-with-seqs.db"
+    shutil.copy(db_path_orig, db_path)
+    run_cli(f"match --db {db_path} --profile ^A3451T A3451TGAT ")
+    run_cli(f"match --db {db_path} --profile del:28363-28371  --profile A3451N ")
+    run_cli(f"match --db {db_path} --profile ^S:A67X S:E484K")
+    run_cli(f"match --db {db_path} --profile S:A67G --profile S:N501Y --debug")
+    run_cli(f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013 --debug")
     run_cli(
         f"match --db {db_path} --DATE_DRAW 2021-03-01:2022-03-15 -o {tmp_path}/temp.tsv"
     )
@@ -136,6 +141,7 @@ def test_info(tmp_path, monkeypatch):
     # sonar.parse_args(["--version"])
     run_cli(f" info --db {db_path}")
     run_cli(f" list-prop --db {db_path}")
+    run_cli(f" dev --db {db_path}")
 
 
 def test_db_management(tmp_path, monkeypatch):

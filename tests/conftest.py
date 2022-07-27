@@ -35,6 +35,7 @@ def setup_db(tmp_path_factory):
         dbm.add_property("Ct", "integer", "integer", " ")
         dbm.add_property("CONC", "float", "float", " ")
         dbm.add_property("SAMPLING", "date", "date", " ")
+        dbm.add_property("SEQ_TYPE", "text", "text", " ")
     return dbfile
 
 

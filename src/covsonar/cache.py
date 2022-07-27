@@ -4,9 +4,7 @@
 
 import base64
 from collections import defaultdict
-import gzip
 import hashlib
-import lzma
 import os
 import pickle
 from pickle import load as load_pickle
@@ -354,21 +352,6 @@ class sonarCache:
             self._lifts.add(refmol_acc)
         return fname
 
-    @staticmethod
-    def open_file(fname, mode="r", compressed="auto", encoding=None):
-        if not os.path.isfile(fname):
-            sys.exit("input error: " + fname + " does not exist.")
-        if compressed == "auto":
-            compressed = os.path.splitext(fname)[1][1:]
-        try:
-            if compressed == "gz":
-                return gzip.open(fname, mode + "t", encoding=encoding)
-            if compressed == "xz":
-                return lzma.open(fname, mode + "t", encoding=encoding)
-            return open(fname, mode, encoding=encoding)
-        except Exception:
-            sys.exit("input error: " + fname + " cannot be opened.")
-
     def process_fasta_entry(self, header, seq):
         sample_id = header.replace("\t", " ").replace("|", " ").split(" ")[0]
         refmol = self.get_refmol(header)
@@ -399,7 +382,7 @@ class sonarCache:
         This function iterates over the fasta files and returns a dictionary for each record
         """
         for fname in fnames:
-            with self.open_file(fname) as handle, tqdm(
+            with sonarBasics.open_file(fname, compressed="auto") as handle, tqdm(
                 desc="processing " + fname + "...",
                 total=os.path.getsize(fname),
                 unit="bytes",

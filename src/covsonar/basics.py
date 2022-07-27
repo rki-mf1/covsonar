@@ -13,44 +13,11 @@ import sys
 from Bio import SeqIO
 from Bio.SeqUtils.CheckSum import seguid
 from mpire import WorkerPool
-import pandas as pd
 from tqdm import tqdm
 
 import covsonar
 from . import __version__
 from . import logging
-
-
-class Aliasor:
-    def __init__(self, alias_file):
-        aliases = pd.read_json(alias_file)
-        self.alias_dict = {
-            x: x if x.startswith("X") else aliases[x][0] for x in aliases.columns
-        }
-        self.alias_dict["A"] = "A"
-        self.alias_dict["B"] = "B"
-        self.realias_dict = {v: k for k, v in self.alias_dict.items()}
-
-    def compress(self, name):
-        name_split = name.split(".")
-        if len(name_split) < 5:
-            return name
-        letter = self.realias_dict[".".join(name_split[0:4])]
-        if len(name_split) == 5:
-            return letter + "." + name_split[4]
-        else:
-            return letter + "." + ".".join(name_split[4:])
-
-    def uncompress(self, name):
-        name_split = name.split(".")
-        letter = name_split[0]
-        unaliased = self.alias_dict[letter]
-        if len(name_split) == 1:
-            return name
-        if len(name_split) == 2:
-            return unaliased + "." + name_split[1]
-        else:
-            return unaliased + "." + ".".join(name_split[1:])
 
 
 # CLASS
@@ -60,7 +27,8 @@ class sonarBasics(object):
     """
 
     def __init__(self):
-        logging.basicConfig(format="%(asctime)s %(message)s")
+        pass
+        # logging.basicConfig(format="%(asctime)s %(message)s")
 
     @staticmethod
     def get_version():
@@ -68,9 +36,9 @@ class sonarBasics(object):
 
     # DB MAINTENANCE
 
-    @staticmethod
-    def get_module_base(*join_with):
-        return os.path.join(os.path.dirname(os.path.realpath(__file__)), *join_with)
+    # @staticmethod
+    # def get_module_base(*join_with):
+    #    return os.path.join(os.path.dirname(os.path.realpath(__file__)), *join_with)
 
     @staticmethod
     def setup_db(  # noqa: C901
@@ -357,7 +325,7 @@ class sonarBasics(object):
         db,
         fasta=[],
         tsv=[],
-        cols={},
+        cols=[],
         cachedir=None,
         autodetect=False,
         progress=False,
@@ -368,13 +336,13 @@ class sonarBasics(object):
     ):
         if not quiet:
             if not update:
-                print("import mode: skipping existing samples")
+                logging.info("import mode: skipping existing samples")
             else:
-                print("import mode: updating existing samples")
+                logging.info("import mode: updating existing samples")
 
         if not fasta:
             if not tsv or not update:
-                print("Nothing to import.")
+                logging.info("Nothing to import.")
                 exit(0)
 
         # prop handling
@@ -401,43 +369,49 @@ class sonarBasics(object):
             sys.exit("input error: a sample column has to be assigned.")
 
         properties = collections.defaultdict(dict)
-        for fname in tsv:
-            with open(fname, "r") as handle, tqdm(
-                desc="processing " + fname + "...",
-                total=os.path.getsize(fname),
-                unit="bytes",
-                unit_scale=True,
-                bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
-                disable=not progress,
-            ) as pbar:
-                line = handle.readline()
-                pbar.update(len(line))
-                fields = line.strip("\r\n").split("\t")
-                tsv_cols = {}
-                if not quiet:
-                    print()
-                for x in sorted(colnames.keys()):
-                    c = fields.count(colnames[x])
-                    if c == 1:
-                        tsv_cols[x] = fields.index(colnames[x])
-                        if not quiet:
-                            print("  " + x + " <- " + colnames[x])
-                    elif c > 1:
-                        sys.exit("error: " + colnames[x] + " is not an unique column.")
-                if "sample" not in tsv_cols:
-                    sys.exit("error: tsv file does not contain required sample column.")
-                elif len(tsv_cols) == 1:
-                    sys.exit(
-                        "input error: tsv does not provide any informative column."
-                    )
-                for line in handle:
+        if tsv:
+            for fname in tsv:
+                with open(fname, "r") as handle, tqdm(
+                    desc="processing " + fname + "...",
+                    total=os.path.getsize(fname),
+                    unit="bytes",
+                    unit_scale=True,
+                    bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
+                    disable=not progress,
+                ) as pbar:
+                    line = handle.readline()
                     pbar.update(len(line))
                     fields = line.strip("\r\n").split("\t")
-                    sample = fields[tsv_cols["sample"]]
-                    for x in tsv_cols:
-                        if x == "sample":
-                            continue
-                        properties[sample][x] = fields[tsv_cols[x]]
+                    print(fields)
+                    tsv_cols = {}
+                    if not quiet:
+                        print()
+                    for x in sorted(colnames.keys()):
+                        c = fields.count(colnames[x])
+                        if c == 1:
+                            tsv_cols[x] = fields.index(colnames[x])
+                            if not quiet:
+                                print("  " + x + " <- " + colnames[x])
+                        elif c > 1:
+                            sys.exit(
+                                "error: " + colnames[x] + " is not an unique column."
+                            )
+                    if "sample" not in tsv_cols:
+                        sys.exit(
+                            "error: tsv file does not contain required sample column."
+                        )
+                    elif len(tsv_cols) == 1:
+                        sys.exit(
+                            "input error: tsv does not provide any informative column."
+                        )
+                    for line in handle:
+                        pbar.update(len(line))
+                        fields = line.strip("\r\n").split("\t")
+                        sample = fields[tsv_cols["sample"]]
+                        for x in tsv_cols:
+                            if x == "sample":
+                                continue
+                            properties[sample][x] = fields[tsv_cols[x]]
 
         # setup cache
         cache = covsonar.cache.sonarCache(
@@ -497,6 +471,7 @@ class sonarBasics(object):
         outfile=None,
         format="csv",
         debug="False",
+        showNX=False,
     ):
         with covsonar.dbm.sonarDBManager(db, debug=debug) as dbm:
             if format == "vcf" and reference is None:
@@ -507,6 +482,7 @@ class sonarBasics(object):
                 properties=propdict,
                 reference_accession=reference,
                 format=format,
+                showNX=showNX,
             )
             if format == "csv" or format == "tsv":
                 tsv = True if format == "tsv" else False
@@ -540,7 +516,9 @@ class sonarBasics(object):
                         "seq": list(x["element.sequence"]),
                         "mol": x["element.symbol"],
                     }
-                    for x in dbm.get_alignment_data(sample, reference_accession=None)
+                    for x in dbm.get_alignment_data(
+                        sample, reference_accession=reference_accession
+                    )
                 }
                 gap = "-" if aligned else ""
                 for vardata in dbm.iter_dna_variants(sample, *molecules.keys()):
@@ -609,7 +587,12 @@ class sonarBasics(object):
     # output
     # profile generation
     @staticmethod
-    def iter_formatted_match(cursor):
+    def iter_formatted_match(cursor):  # pragma: no cover
+        """
+        VCF output
+        @deprecated("use another method")
+        this will be removed soon
+        """
         nuc_profiles = collections.defaultdict(list)
         aa_profiles = collections.defaultdict(list)
         samples = set()

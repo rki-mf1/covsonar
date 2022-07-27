@@ -5,7 +5,6 @@
 import argparse
 import os
 import sys
-from tempfile import mkstemp
 from textwrap import fill
 
 from tabulate import tabulate
@@ -248,6 +247,12 @@ def parse_args(args):
         nargs="+",
         default=[],
     )
+    parser_match.add_argument(
+        "--showNX",
+        help="include any variant character in the result (X for AA and N for NT)",
+        action="store_true",
+    )
+
     parser_match_format = parser_match.add_mutually_exclusive_group()
     parser_match_format.add_argument(
         "--count", help="count instead of listing matching genomes", action="store_true"
@@ -349,69 +354,6 @@ def parse_args(args):
 
     # return
     return parser.parse_args(args=args, namespace=user_namespace)
-
-
-class sonar:
-    def __init__(self, db, gff=None, debug=False):
-        self.dbfile = db if db else mkstemp()[1]
-        self.db = db
-        self.gff = gff
-        self.debug = debug
-
-    def show_system_info(self):
-        """
-        Prints out the version of the database, the name of the reference genome, the length of the
-        reference genome, the names of the annotated proteins, and the translation table used
-        """
-        print("sonarDB version:       ", self.db.get_version())
-        print("reference genome:      ", self.db.refdescr)
-        print("reference length:      ", str(len(self.db.refseq)) + "bp")
-        print("annotated proteins:    ", ", ".join(self.db.refgffObj.symbols))
-        print("used translation table:", self.db.translation_table)
-
-    def show_db_info(self):
-        with sonarDBManager(self.dbfile, readonly=True) as dbm:
-            print("database path:             ", dbm.dbfile)
-            print("database version:          ", dbm.get_db_version())
-            print("database size:             ", self.get_db_size())
-            g = dbm.count_genomes()
-            print("genomes:                   ", g)
-            print("unique sequences:          ", dbm.count_sequences())
-            print("labs:                      ", dbm.count_labs())
-            print("earliest genome import:    ", dbm.get_earliest_import())
-            print("latest genome import:      ", dbm.get_latest_import())
-            print("earliest sampling date:    ", dbm.get_earliest_date())
-            print("latest sampling date:      ", dbm.get_latest_date())
-            print("metadata:          ")
-            fields = sorted(
-                [
-                    "lab",
-                    "source",
-                    "collection",
-                    "technology",
-                    "platform",
-                    "chemistry",
-                    "software",
-                    "software_version",
-                    "material",
-                    "ct",
-                    "gisaid",
-                    "ena",
-                    "lineage",
-                    "zip",
-                    "date",
-                ]
-            )
-            maxlen = max([len(x) for x in fields])
-            for field in fields:
-                if g == 0:
-                    c = 0
-                    p = 0
-                else:
-                    c = dbm.count_metadata(field)
-                    p = c / g * 100
-                spacer = " " * (maxlen - len(field))
-                print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
 
 def check_file(fname):
@@ -665,6 +607,7 @@ def main(args):  # noqa: C901
             outfile=args.out,
             debug=args.debug,
             format=format,
+            showNX=args.showNX,
         )
 
     # optimize
@@ -677,7 +620,7 @@ def main(args):  # noqa: C901
         print("***dev mode***")
         with sonarDBManager(args.db, debug=debug) as dbm:
             for feature in dbm.get_annotation():
-                print(())
+                print(feature)
     # Finished successfully
     return 0
 

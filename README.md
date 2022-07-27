@@ -158,7 +158,7 @@ IMS-00113	2021-02-04		B.1.1.7
 
 The required argument for `import` command are listed as follows;
 
-1. `--fasta` a fasta file containing genome sequences to be imported.
+1. `--fasta` a fasta file containing genome sequences to be imported. A compressed file of fasta is also valid as an input (e.g., `--fasta sample.fasta.gz` or `sample.fasta.xz`)
 
 2. `--tsv` a tab-delimited file containing sample properties to be imported
 
