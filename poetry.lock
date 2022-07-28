@@ -338,6 +338,14 @@ pytz = ">=2020.1"
 test = ["hypothesis (>=5.5.3)", "pytest (>=6.0)", "pytest-xdist (>=1.31)"]
 
 [[package]]
+name = "pango-aliasor"
+version = "0.1.4"
+description = "Pango lineage aliasing and dealiasing"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
 name = "pathspec"
 version = "0.9.0"
 description = "Utility library for gitignore style pattern matching of file paths."
@@ -675,7 +683,11 @@ tomli = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
+<<<<<<< HEAD
 content-hash = "df5dd29b606651ee0366d99b33ed833b0d936ea8c2c88bc03d313da794d189f3"
+=======
+content-hash = "9cab5ad7d9952dae076636342295283a1cd8c205615dab5e583af43e706e998d"
+>>>>>>> dev/cov2_mpire
 
 [metadata.files]
 atomicwrites = []
@@ -706,6 +718,10 @@ mypy-extensions = []
 numpy = []
 packaging = []
 pandas = []
+<<<<<<< HEAD
+=======
+pango-aliasor = []
+>>>>>>> dev/cov2_mpire
 pathspec = []
 pbr = []
 platformdirs = []

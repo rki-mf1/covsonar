@@ -1243,6 +1243,7 @@ class sonarDBManager:
             "H": set("ACTH"),
             "V": set("ACGV"),
             "N": set("ACGTRYSWKMBDHVN"),
+            "n": set("N"),
         }
         iupac_aa_code = {
             "A": set("A"),
@@ -1278,9 +1279,10 @@ class sonarDBManager:
             "+": set("KRH+"),
             "-": set("DE-"),
             "X": set("ARNDCQEGHILKMFPSTWYVUOBZJΦΩΨπζ+-X"),
+            "x": set("X"),
         }
         del_regex = re.compile(r"^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$")
-        snv_regex = re.compile(r"^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Z]+)$")
+        snv_regex = re.compile(r"^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Zxn]+)$")
 
         # set variants and generate sql
         base_sql = 'SELECT "sample.id" AS id FROM variantView WHERE '
@@ -1304,8 +1306,10 @@ class sonarDBManager:
             elif match := del_regex.match(var):
                 snv = False
             else:
-                sys.exit("input error: " + var + " is not a valid variant definition.")
-
+                logging.error("'" + var + "' is not a valid variant definition.")
+                sys.exit(
+                    "Please check the query statement,(IUPAC AA/NT codes, NT format(e.g. A3451T), AA format(e.g. S:N501Y))"
+                )
             # set molecule
             if match.group(1):
                 c.append('"molecule.symbol" = ?')
@@ -1334,36 +1338,48 @@ class sonarDBManager:
                 v.append(int(match.group(4)))
                 c.append('"variant.ref" = ?')
                 v.append(match.group(3))
-
-                # explicit alternate allele
-                if match.group(5).startswith("="):
-                    c.append('"variant.alt" = ?')
-                    v.append(match.group(5)[1:])
-
-                # potentially ambiguous alternate snp
-                elif len(match.group(5)) == 1:
-                    l = len(code[match.group(5)])
-                    if l == 1:
+                try:
+                    # explicit alternate allele
+                    if match.group(5).startswith("="):
                         c.append('"variant.alt" = ?')
-                        v.append(match.group(5))
-                    else:
-                        c.append('"variant.alt" IN (' + ", ".join(["?"] * l) + ")")
-                        v.extend(code[match.group(5)])
+                        v.append(match.group(5)[1:])
 
-                # potentially ambiguous alternate insert
-                else:
-                    a = [
-                        "".join(x)
-                        for x in itertools.product(*[code[x] for x in match.group(5)])
-                    ]
-                    l = len(a)
-                    if l == 1:
-                        c.append('"variant.alt" = ?')
-                        v.extend(a)
-                    else:
-                        c.append('"variant.alt" IN (' + ", ".join(["?"] * l) + ")")
-                        v.extend(a)
+                    # potentially ambiguous alternate snp
+                    elif len(match.group(5)) == 1:
+                        l = len(code[match.group(5)])
+                        if l == 1:
+                            match_group5 = (
+                                match.group(5).upper()
+                                if match.group(5) == "n" or match.group(5) == "x"
+                                else match.group(5)
+                            )
+                            c.append('"variant.alt" = ?')
+                            v.append(match_group5)
+                        else:
+                            c.append('"variant.alt" IN (' + ", ".join(["?"] * l) + ")")
+                            v.extend(code[match.group(5)])
 
+                    # potentially ambiguous alternate insert
+                    else:
+                        a = [
+                            "".join(x)
+                            for x in itertools.product(
+                                *[code[x] for x in match.group(5)]
+                            )
+                        ]
+                        l = len(a)
+                        if l == 1:
+                            a = a.upper() if a == "n" or a == "x" else a
+                            c.append('"variant.alt" = ?')
+                            v.extend(a)
+                        else:
+                            c.append('"variant.alt" IN (' + ", ".join(["?"] * l) + ")")
+                            v.extend(a)
+                except KeyError:
+                    logging.error("'" + var + "' is not a valid input")
+                    sys.exit(
+                        "Please check the query statement,(IUPAC AA/NT codes, NT format(e.g. A3451T), AA format(e.g. S:N501Y))"
+                    )
             # deletion handling
             else:
                 s = match.group(3)
@@ -1509,7 +1525,6 @@ class sonarDBManager:
             )
         else:
             profile_sqls = ""
-
         if property_sqls and profile_sqls:
             if len(profiles) > 1:
                 sample_selection_sql = (

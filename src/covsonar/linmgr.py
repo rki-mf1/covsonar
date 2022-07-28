@@ -12,37 +12,64 @@ from tempfile import mkdtemp
 import pandas as pd
 import requests
 
+from . import logging
 
-class Aliasor:
-    def __init__(self, alias_file):
-        aliases = pd.read_json(alias_file)
-        self.alias_dict = {
-            x: x if x.startswith("X") else aliases[x][0] for x in aliases.columns
-        }
-        self.alias_dict["A"] = "A"
-        self.alias_dict["B"] = "B"
-        self.realias_dict = {v: k for k, v in self.alias_dict.items()}
+try:  # noqa: C901
+    from pango_aliasor.aliasor import Aliasor
+except ModuleNotFoundError:  # pragma: no cover
+    logging.WARN(
+        "Dependency `pango_aliasor` missing, please install using `pip install pango_aliasor`"
+    )
+    logging.WARN("Fall back to original Aliasor...")
 
-    def compress(self, name):
-        name_split = name.split(".")
-        if len(name_split) < 5:
-            return name
-        letter = self.realias_dict[".".join(name_split[0:4])]
-        if len(name_split) == 5:
-            return letter + "." + name_split[4]
-        else:
-            return letter + "." + ".".join(name_split[4:])
+    class Aliasor:
+        def __init__(self, alias_file=None):
+            import json
 
-    def uncompress(self, name):
-        name_split = name.split(".")
-        letter = name_split[0]
-        unaliased = self.alias_dict[letter]
-        if len(name_split) == 1:
-            return name
-        if len(name_split) == 2:
-            return unaliased + "." + name_split[1]
-        else:
-            return unaliased + "." + ".".join(name_split[1:])
+            if alias_file is None:
+                import importlib.resources
+
+                with importlib.resources.open_text(
+                    "pango_designation", "alias_key.json"
+                ) as file:
+                    file = json.load(file)
+
+            else:
+                with open(alias_file) as file:
+                    file = json.load(file)
+
+            self.alias_dict = {}
+            for column in file.keys():
+                if type(file[column]) is list or file[column] == "":
+                    self.alias_dict[column] = column
+                else:
+                    self.alias_dict[column] = file[column]
+
+            self.realias_dict = {v: k for k, v in self.alias_dict.items()}
+
+        def compress(self, name):
+            name_split = name.split(".")
+            levels = len(name_split) - 1
+            num_indirections = (levels - 1) // 3
+            if num_indirections <= 0:
+                return name
+            alias = ".".join(name_split[0 : (3 * num_indirections + 1)])
+            ending = ".".join(name_split[(3 * num_indirections + 1) :])
+            return self.realias_dict[alias] + "." + ending
+
+        def uncompress(self, name):
+            name_split = name.split(".")
+            letter = name_split[0]
+            try:
+                unaliased = self.alias_dict[letter]
+            except KeyError:
+                return name
+            if len(name_split) == 1:
+                return name
+            if len(name_split) == 2:
+                return unaliased + "." + name_split[1]
+            else:
+                return unaliased + "." + ".".join(name_split[1:])
 
 
 class sonarLinmgr:
@@ -79,16 +106,6 @@ class sonarLinmgr:
         return "".join(items)
 
     def process_lineage_data(self, output_file):
-        # handle duplicate values
-        with open(self.alias_file) as f:
-            # load json objects to dictionaries
-            data_dict = json.load(f)
-        for k, v in data_dict.items():
-            if type(v) is list:
-                data_dict[k] = list(set(v))
-        # rewrite the json
-        with open(self.alias_file, "w") as nf:
-            json.dump(data_dict, nf)
 
         aliasor = Aliasor(self.alias_file)
         df_lineages = pd.read_csv(self.lineage_file)
@@ -98,27 +115,38 @@ class sonarLinmgr:
         sorted_lineages = []
 
         # Calculating parent-child relationship
-        uncompressed_lineages = [x for x in map(aliasor.uncompress, lineages)]
+        uncompressed_lineages = list(map(aliasor.uncompress, lineages))
         uncompressed_lineages.sort(key=sonarLinmgr.lts)
-        sorted_lineages = [x for x in map(aliasor.compress, uncompressed_lineages)]
+        sorted_lineages = list(map(aliasor.compress, uncompressed_lineages))
 
-        datadict = []
-        for _id in lineages:
-            sub_lineage_char = aliasor.realias_dict.get(_id)
-            sub_lineage_list = [
-                x for x in sorted_lineages if x.split(".")[0] == sub_lineage_char
-            ]
-            sub_lineage_list = list(filter((_id).__ne__, sub_lineage_list))
-            if len(sub_lineage_list):
-                datadict.append(
-                    {"lineage": _id, "sublineage": ",".join(sub_lineage_list)}
-                )
+        _final_list = []
+        for _id in sorted_lineages:
+            alias_lineage_char = aliasor.uncompress(_id)
+            sub_lineage_list = []
+            row_dict = {}
+            # print(_id, '=',alias_lineage_char)
+
+            for name_ in uncompressed_lineages:  # fetch all lineage again
+                root = ""
+                for index, letter in enumerate(name_.split(".")):
+                    if index != 0:
+                        letter = root + "." + letter
+                    root = letter
+                    if letter == alias_lineage_char:
+                        sub_lineage_list.append(aliasor.compress(name_))
+            # remove root lineage
+            sub_lineage_list.remove(_id)
+            if len(sub_lineage_list) > 0:
+                row_dict["lineage"] = _id
+                row_dict["sublineage"] = ",".join(sub_lineage_list)
             else:
-                datadict.append({"lineage": _id, "sublineage": "none"})
+                row_dict["lineage"] = _id
+                row_dict["sublineage"] = "none"
+            _final_list.append(row_dict)
 
-        return pd.DataFrame(
-            datadict
-        )  # pd.DataFrame(datadict).to_csv(output_file, sep="	", index=False)
+        df = pd.DataFrame.from_dict(_final_list, orient="columns")
+
+        return df.sort_values(by=["lineage"])
 
     def update_lineage_data(self, output_file):
         self.download_lineage_data()

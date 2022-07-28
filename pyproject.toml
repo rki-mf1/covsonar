@@ -18,6 +18,7 @@ tabulate = "~0.8.9"
 mpire = "~2.3.3"
 pandas = "~1.4.0"
 requests = "^2.28.0"
+pango-aliasor = "^0.1.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.2"
