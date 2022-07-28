@@ -190,7 +190,7 @@ Genomic profiles can be defined to align genomes. For this purpose, the variants
 | type       | nucleotide level                                                  | amino acid level              |
 |-----------|-------------------------------------------------------------------|-------------------------------|
 | SNP       | ref_nuc _followed by_ ref_pos _followed by_ alt_nuc (e.g. A3451T) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aa (e.g. S:N501Y) |
-| deletion  | del:ref_pos:length_in_bp (e.g. del:3001:8)                        | protein_symbol:del:ref_pos:length_in_aa (e.g. ORF1ab:del:3001:21) |
+| deletion  | del:first_NT_deleted-last_NT_deleted (e.g. del:11288-11296)                        | protein_symbol:del:first_AA_deleted-last_AA_deleted (e.g. ORF1ab:del:3001-3004) |
 | insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |
 
 The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `--profile`, multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `--profile` options. As an example, `--profile S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `--profile S:N501Y --profile S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option **^** profiles can be defined that have not to be present in the matched genomes.
@@ -226,6 +226,36 @@ We use `^` as a **"NOT"** operator. We put it before any conditional statement t
 # matching genomes in DB 'mydb' sharing the "Nelly" and the "Erik" mutation but not
 # belonging to the B.1.1.7 lineage
 sonar match -profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db
+
+```
+
+More example; `--profile` match
+```sh
+# AA profile OR  NT profile case
+sonar match --profile S:del:K418I --profile T418A  --db test.db
+# AA profile AND NT profile case
+sonar match --profile S:del:K418I del:3677-3677  --db test.db
+# exact Match X or N , we use small x for AA and small n for NT
+sonar match --profile S:K418x --db test.db
+# this will match S:K418X
+
+sonar match --profile A2145n --db test.db
+# this will match A2145N
+
+# speacial case, we can combine exact match and any match in alternate postion.
+sonar match  --profile A2145nN --db test.db
+# this will look in ('NG', 'NB', 'NT', 'NM', 'NS', 'NV', 'NA', 'NH',
+# 'ND', 'NY', 'NR', 'NW', 'NK', 'NN', 'NC')
+
+```
+
+More example; property match
+```sh
+# int
+
+# zip code
+
+# date
 
 ```
 
