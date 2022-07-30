@@ -605,13 +605,6 @@ class sonarDBManager:
         row = self.cursor.execute(sql, [sample_name]).fetchone()
         return (row["id"], row["seqhash"]) if row else (None, None)
 
-    def seq_exists(self, seqhash):
-        """
-        Returns a True if sequence exists in the database based on the respective seqhash (else False).
-        """
-        sql = "SELECT id FROM sample WHERE seqhash=? LIMIT 1;"
-        return False if self.cursor.execute(sql, [seqhash]).fetchone() is None else True
-
     def get_alignment_id(self, seqhash, element_id):
         """
         Returns the rowid of a sample based on the respective seqhash and element. If no
@@ -809,29 +802,6 @@ class sonarDBManager:
             if row["variant.start"] is not None:
                 yield row
 
-    def iter_profile(self, sample_name, element_id):
-        sql = 'SELECT * FROM variantView WHERE "sample.name" = ? AND "element.id" = ? ORDER BY "element.id", "variant.start"'
-        for row in self.cursor.execute(sql, [sample_name, element_id]):
-            yield row
-
-    def iter_protein_variants(self, sample_name, *element_ids):
-        sql = (
-            "SELECT element_id, element.symbol, start, end, ref, alt FROM variant WHERE name = ? AND element.id IN ("
-            + ", ".join(["?"] * len(element_ids))
-            + ") AND type = 'cds' LEFT JOIN element ON element.id = element_id;"
-        )
-        for row in self.cursor.execute(sql, [sample_name] + element_ids):
-            yield row
-
-    def get_frameshift_vars(self, sample_name, *element_ids):
-        sql = (
-            "SELECT element_id, element.symbol, start, end, ref, alt FROM variant WHERE name = ? AND element.id IN ("
-            + ", ".join(["?"] * len(element_ids))
-            + ") AND frameshift = 1 LEFT JOIN element ON element.id = element_id;"
-        )
-        for row in self.cursor.execute(sql, [sample_name] + element_ids):
-            yield row
-
     def count_samples(self):
         sql = "SELECT COUNT(*) FROM sample;"
         return self.cursor.execute(sql).fetchone()["COUNT(*)"]
@@ -858,34 +828,6 @@ class sonarDBManager:
         )
         return self.cursor.execute(sql, v).fetchone()["count"]
 
-    def get_properties(self, sample_name, property_name=None):
-        if property_name:
-            sql = 'SELECT * FROM propertyView WHERE "sample.name" = ? AND property_name = ?'
-            vals = [sample_name, property_name]
-        else:
-            sql = 'SELECT * FROM propertyView WHERE "sample.name" = ?'
-            vals = [sample_name]
-        properties = {}
-        for row in self.cursor.execute(sql, vals):
-            if row is None:
-                return {}
-            properties[row["property.name"]] = row[
-                "sample2property.value_" + row["property.datatype"]
-            ]
-        return properties
-
-    def count_properties(self):
-        sql = "SELECT COUNT(*) as count FROM propertyView GROUP BY property_name;"
-        return self.cursor.execute(sql).fetchall()
-
-    def get_seqhash(self, sample_name):
-        sql = 'SELECT "sample.seqhash" FROM sequenceView WHERE sample.name = ?'
-        return [
-            x["sample.hash"]
-            for x in self.cursor.execute(sql, [sample_name]).fetchall()
-            if x is not None
-        ]
-
     def get_translation_dict(self, translation_id):
         sql = "SELECT codon, aa FROM translation WHERE id = ?"
         return {
@@ -893,21 +835,21 @@ class sonarDBManager:
             for x in self.cursor.execute(sql, [translation_id]).fetchall()
         }
 
-    def get_earliest_import(self):
-        sql = "SELECT MIN(imported) as import FROM genome WHERE import IS NOT NULL;"
-        return self.cursor.execute(sql).fetchone()["import"]
+    # def get_earliest_import(self):
+    #    sql = "SELECT MIN(imported) as import FROM genome WHERE import IS NOT NULL;"
+    #    return self.cursor.execute(sql).fetchone()["import"]
 
-    def get_latest_import(self):
-        sql = "SELECT MAX(imported) as import FROM genome WHERE import IS NOT NULL;"
-        return self.cursor.execute(sql).fetchone()["import"]
+    # def get_latest_import(self):
+    #    sql = "SELECT MAX(imported) as import FROM genome WHERE import IS NOT NULL;"
+    #    return self.cursor.execute(sql).fetchone()["import"]
 
-    def get_earliest_date(self):
-        sql = "SELECT MIN(date) as date FROM genome WHERE date IS NOT NULL;"
-        return self.cursor.execute(sql).fetchone()["date"]
+    # def get_earliest_date(self):
+    #    sql = "SELECT MIN(date) as date FROM genome WHERE date IS NOT NULL;"
+    #    return self.cursor.execute(sql).fetchone()["date"]
 
-    def get_latest_date(self):
-        sql = "SELECT MAX(date) as date FROM genome WHERE date IS NOT NULL;"
-        return self.cursor.execute(sql).fetchone()["date"]
+    # def get_latest_date(self):
+    #    sql = "SELECT MAX(date) as date FROM genome WHERE date IS NOT NULL;"
+    #    return self.cursor.execute(sql).fetchone()["date"]
 
     def get_element_parts(self, element_id=None):
         sql = "SELECT start, end, strand FROM elempart WHERE element_id = ? ORDER BY segment"
@@ -949,12 +891,6 @@ class sonarDBManager:
         for ind in _df.index:
             self.cursor.execute(sql, (_df["lineage"][ind], _df["sublineage"][ind]))
 
-    # MATCHING PROFILES
-    def get_operator(self, val):
-        if val.startswith("^"):
-            return val[1:], self.__operators["negated"]
-        return val, self.__operators["genuine"]
-
     def get_conditional_expr(self, field, operator, *vals):
         condlist = []
         vallist = []
@@ -983,7 +919,7 @@ class sonarDBManager:
 
         return condlist, vallist
 
-    def query_numeric(self, field, *vals, link="OR"):
+    def query_numeric(self, field, *vals, link="AND"):
         link = " " + link.strip() + " "
         defaultop = "="
         op1 = re.compile(r"^(\^*)((?:>|>=|<|<=|!=|=)?)(-?[1-9]+[0-9]*)$")
@@ -1032,7 +968,7 @@ class sonarDBManager:
 
         return link.join(conditions), vallist
 
-    def query_float(self, field, *vals, link="OR"):
+    def query_float(self, field, *vals, link="AND"):
         link = " " + link.strip() + " "
         defaultop = "="
         op1 = re.compile(r"^(\^*)((?:>|>=|<|<=|!=|=)?)(-?[1-9]+[0-9]*(?:.[0-9]+)*)$")
@@ -1082,7 +1018,7 @@ class sonarDBManager:
 
         return link.join(conditions), vallist
 
-    def query_dates(self, field, *vals, link="OR"):
+    def query_dates(self, field, *vals, link="AND"):
         link = " " + link.strip() + " "
         defaultop = "="
         op1 = re.compile(r"^(\^*)((?:>|>=|<|<=|!=|=)?)([0-9]{4}-[0-9]{2}-[0-9]{2})$")
@@ -1132,7 +1068,7 @@ class sonarDBManager:
 
         return link.join(conditions), vallist
 
-    def query_string(self, field, *vals, link="OR"):
+    def query_string(self, field, *vals, link="AND"):
         link = " " + link.strip() + " "
         data = defaultdict(set)
         conditions = []
@@ -1158,7 +1094,7 @@ class sonarDBManager:
 
         return link.join(conditions), vallist
 
-    def query_zip(self, field, *vals, link="OR"):
+    def query_zip(self, field, *vals, link="AND"):
         link = " " + link.strip() + " "
         data = defaultdict(set)
         conditions = []
@@ -1210,7 +1146,11 @@ class sonarDBManager:
             a, b = self.query_zip(targetfield, *vals)
             conditions.append(a)
             valueList.extend(b)
-
+        # query float
+        elif self.properties[name]["querytype"] == "float":
+            a, b = self.query_float(targetfield, *vals)
+            conditions.append(a)
+            valueList.extend(b)
         else:
             sys.exit(
                 "error: unknown query type '"
@@ -1501,9 +1441,10 @@ class sonarDBManager:
 
         if properties:
             for pname, vals in properties.items():
-                sql, val = self.query_metadata(pname, *vals)
-                property_sqls.append(sql)
-                property_vals.extend(val)
+                if vals is not None:
+                    sql, val = self.query_metadata(pname, *vals)
+                    property_sqls.append(sql)
+                    property_vals.extend(val)
 
         property_sqls = " INTERSECT ".join(property_sqls)
 

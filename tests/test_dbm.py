@@ -175,8 +175,6 @@ def test_upgrade_db(tmpfile_name, monkeypatch, caplog):
     with caplog.at_level(logging.ERROR):
         sonarDBManager(tmpfile_name).upgrade_db(tmpfile_name)
         assert "Sorry, we cannot find" in caplog.text
-<<<<<<< HEAD
-=======
 
 
 def test_query_profile(init_readonly_dbm):
@@ -322,4 +320,12 @@ def test_query_profile_failcase(init_readonly_dbm):
         init_readonly_dbm.query_profile("K417X~")
     assert e.type == SystemExit
     assert "Please check the query statement" in e.value.code
->>>>>>> dev/cov2_mpire
+
+
+def test_setup_database(tmpfile_name):
+
+    # _failcase
+    with pytest.raises(SystemExit) as e:
+        sonarDBManager(dbfile=tmpfile_name + "APOLLO")
+    assert e.type == SystemExit
+    assert "database does not exists" in e.value.code

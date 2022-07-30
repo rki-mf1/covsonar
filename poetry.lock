@@ -683,11 +683,7 @@ tomli = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-<<<<<<< HEAD
-content-hash = "df5dd29b606651ee0366d99b33ed833b0d936ea8c2c88bc03d313da794d189f3"
-=======
 content-hash = "9cab5ad7d9952dae076636342295283a1cd8c205615dab5e583af43e706e998d"
->>>>>>> dev/cov2_mpire
 
 [metadata.files]
 atomicwrites = []
@@ -718,10 +714,7 @@ mypy-extensions = []
 numpy = []
 packaging = []
 pandas = []
-<<<<<<< HEAD
-=======
 pango-aliasor = []
->>>>>>> dev/cov2_mpire
 pathspec = []
 pbr = []
 platformdirs = []

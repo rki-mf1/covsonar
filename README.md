@@ -214,8 +214,8 @@ sonar match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
 sonar match --profile S:E484K --LINEAGE B.1.1.7 --count --db test.db
 
 # matching genomes in DB 'test.db' sharing the "Nelly" mutation
-# and that were sampled in 2020
-sonar match --profile S:N501Y  --DATE 2020-01-01:2020-12-31 --db test.db
+# and that were sampled on first of January 2020
+sonar match --profile S:N501Y  --DATE 2020-01-01 --db test.db
 
 # matching genomes with specific IDs
 sonar match --sample ID-001 ID-001 ID-002 --db test.db
@@ -251,13 +251,24 @@ sonar match  --profile A2145nN --db test.db
 
 More example; property match
 ```sh
-# int
+# query with integer type
+# by default we use = operator
+sonar match  --AGE 25 --db test.db
+# however, if we want to query with comparison operators (e.g., >, !=, <, >=, <=)
+# , just add " " (double quote) around values.
+sonar match  --AGE ">25" --db test.db
+sonar match  --AGE ">=25" "<=30" --db test.db # AND Combination: >=25 AND <=30
+sonar match  --AGE "!=60" --db test.db
 
-# zip code
+# Range query matches
+sonar match  --DEMIS_ID_PC  10641:10658  --db test.db
+# 10641, 10642, 10643, .... 10658
 
-# date
-
+# Date
+# Sample were sampled in 2020
+sonar match  --DATE 2020-01-01:2020-12-31 --db test.db
 ```
+> TIP 🕯️: Don't forget `sonar list-prop  --db test.db` to see more details
 
 **Export to CSV/TSV/VCF file**
 
@@ -390,7 +401,10 @@ sonar delete --db test.db --sample ID_1 ID_2 ID_3
 
 ## How to contribute 🏗️
 
-covSonar has been very carefully programmed and tested, but is still in an early stage of development. You can contribute to this project by reporting problems 🐛 or writing feature requests to the [issue section](https://github.com/rki-mf1/covsonar/issues) 👨‍💻
+covSonar has been very carefully programmed and tested, but is still in an early stage of development. You can contribute to this project by
+* reporting problems 🐛
+* writing feature requests to the [issue section](https://github.com/rki-mf1/covsonar/issues) 📝
+* start hacking -> [read contribution guide]( https://github.com/rki-mf1/covsonar/blob/dev/cov2_mpire/CONTRIBUTING.md)👨‍💻
 
 Please let us know that you plan to contribute before do any coding.
 
