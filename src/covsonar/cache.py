@@ -7,7 +7,6 @@ from collections import defaultdict
 import hashlib
 import os
 import pickle
-from pickle import load as load_pickle
 import pprint
 import re
 import shutil
@@ -17,7 +16,6 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 from tqdm import tqdm
-import yaml
 
 from .align import sonarAligner
 from .basics import sonarBasics
@@ -115,11 +113,12 @@ class sonarCache:
             base64.urlsafe_b64encode(string.encode("UTF-8")).decode("UTF-8").rstrip("=")
         )
 
-    @staticmethod
-    def deslugify(string):
-        while len(string) % 3 != 0:
-            string += "="
-        return base64.urlsafe_b64decode(string).decode("utf-8")
+    # Do we need this function?
+    # @staticmethod
+    # def deslugify(string):
+    #    while len(string) % 3 != 0:
+    #        string += "="
+    #    return base64.urlsafe_b64decode(string).decode("utf-8")
 
     def log(self, msg, die=False, errtype="error"):
         if self.logfile:
@@ -139,11 +138,12 @@ class sonarCache:
         with open(fname, "rb") as handle:
             return pickle.load(handle, encoding="bytes")
 
-    @staticmethod
-    def pickle_collision(fname, data):
-        if os.path.isfile(fname) and load_pickle(fname) != data:
-            return True
-        return False
+    # Do we need this function?
+    # @staticmethod
+    # def pickle_collision(fname, data):
+    #     if os.path.isfile(fname) and load_pickle(fname) != data:
+    #        return True
+    #    return False
 
     @staticmethod
     def file_collision(fname, data):
@@ -152,22 +152,24 @@ class sonarCache:
                 return True
         return False
 
-    def sample_collision(self, key, datadict):
-        if sonarCache.read_pickle(key) != datadict:
-            return True
-        return False
+    # Do we need this function?
+    # def sample_collision(self, key, datadict):
+    #    if sonarCache.read_pickle(key) != datadict:
+    #        return True
+    #    return False
 
-    def write_smk_config(self):
-        data = {
-            "debug": self.debug,
-            "sample_dir": self.sample_dir,
-            "seq_dir": self.seq_dir,
-            "algn_dir": self.algn_dir,
-            "var_dir": self.var_dir,
-        }
+    # Do we need this function?
+    # def write_smk_config(self):
+    #    data = {
+    #        "debug": self.debug,
+    #        "sample_dir": self.sample_dir,
+    #        "seq_dir": self.seq_dir,
+    #        "algn_dir": self.algn_dir,
+    #        "var_dir": self.var_dir,
+    #    }
 
-        with open(self.smk_config, "w") as handle:
-            yaml.dump(data, handle)
+    #    with open(self.smk_config, "w") as handle:
+    #        yaml.dump(data, handle)
 
     def get_seq_fname(self, seqhash):
         fn = self.slugify(seqhash)

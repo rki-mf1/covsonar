@@ -64,8 +64,12 @@ def test_match_with_sample(monkeypatch):
 
 def test_delete_nothing(tmp_path, monkeypatch, caplog):
     monkeypatch.chdir(Path(__file__).parent)
-    db_path = "data/test-with-seqs.db"
+    test_db_path = "data/test-with-seqs.db"
     _tmp_sample_file = os.path.join(tmp_path, "_tmp_sample_file.txt")
+
+    db_path = os.path.join(tmp_path, "import-test.db")
+    shutil.copy(test_db_path, db_path)
+
     with open(_tmp_sample_file, "w") as file:
         file.write("NoOneKnowWhatYouAreLookingFor")
 

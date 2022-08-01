@@ -320,3 +320,12 @@ def test_query_profile_failcase(init_readonly_dbm):
         init_readonly_dbm.query_profile("K417X~")
     assert e.type == SystemExit
     assert "Please check the query statement" in e.value.code
+
+
+def test_setup_database(tmpfile_name):
+
+    # _failcase
+    with pytest.raises(SystemExit) as e:
+        sonarDBManager(dbfile=tmpfile_name + "APOLLO")
+    assert e.type == SystemExit
+    assert "database does not exists" in e.value.code

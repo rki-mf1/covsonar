@@ -338,18 +338,18 @@ def parse_args(args):
     if pargs[0].tool == "match" and hasattr(pargs[0], "db"):
         with sonarDBManager(pargs[0].db, readonly=True, debug=pargs[0].debug) as dbm:
             for prop in dbm.properties.values():
-                if prop["datatype"] == "integer":
-                    t = int
-                elif prop["datatype"] == "float":
-                    t = float
-                else:
-                    t = str
+                # if prop["datatype"] == "integer":
+                #    t = int
+                # elif prop["datatype"] == "float":
+                #    t = float
+                # else:
+                #    t = str
                 if pargs[0].tool == "match":
                     parser_match.add_argument(
                         "--" + prop["name"],
-                        type=t,
+                        # type=t,
                         nargs="+",
-                        default=argparse.SUPPRESS,
+                        # default=argparse.SUPPRESS,
                     )
 
     # return
@@ -407,7 +407,7 @@ def main(args):  # noqa: C901
             cachedir=args.cache,
             autodetect=not args.no_autodetect,
             progress=not args.no_progress,
-            update=not args.no_progress,
+            update=not args.no_update,
             threads=args.threads,
             debug=args.debug,
         )
@@ -482,7 +482,7 @@ def main(args):  # noqa: C901
             dbm.add_property(
                 args.name, args.dtype, args.qtype, args.descr, args.default
             )
-        print("Inserted successfully:", args.name)
+        logging.info("Inserted successfully: %s", args.name)
 
     # delprop
     elif args.tool == "delete-prop":
@@ -534,7 +534,7 @@ def main(args):  # noqa: C901
                 for line in handle:
                     samples.add(line.strip())
         if len(samples) == 0:
-            print("Nothing to restore.")
+            logging.info("Nothing to restore.")
         else:
             sonarBasics.restore(
                 args.db, *samples, aligned=args.aligned, debug=args.debug
@@ -574,9 +574,11 @@ def main(args):  # noqa: C901
                     reserved_props["with_sublineage"] = args.with_sublineage
                 else:
                     sys.exit(
-                        "input error: with-sublineage value is mismatch to the available properties"
+                        "input error: "
+                        + args.with_sublineage
+                        + " is mismatch to the available properties"
                     )
-
+        print()
         # for reserved keywords
         reserved_key = ["sample"]
         for pname in reserved_key:

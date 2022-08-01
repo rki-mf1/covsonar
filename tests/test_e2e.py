@@ -74,6 +74,7 @@ def test_valid_beginning(tmp_path, monkeypatch):
     )
     run_cli(f"add-prop --db {db_path} --name DUPLICATE_ID --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name LINEAGE --dtype text --descr descr")
+    run_cli(f"add-prop --db {db_path} --name AGE --dtype float --descr for_testing")
 
     run_cli(f"update-lineage-info --db {db_path}")
 
@@ -99,13 +100,19 @@ def test_valid_end(tmp_path, monkeypatch):
     db_path_orig = Path("data/test-with-seqs.db")
     db_path = tmp_path / "test-with-seqs.db"
     shutil.copy(db_path_orig, db_path)
-    run_cli(f"match --db {db_path} --profile ^A3451T A3451TGAT ")
-    run_cli(f"match --db {db_path} --profile del:28363-28371  --profile A3451N ")
-    run_cli(f"match --db {db_path} --profile ^S:A67X S:E484K")
-    run_cli(f"match --db {db_path} --profile S:A67G --profile S:N501Y --debug")
-    run_cli(f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013 --debug")
+    run_cli(f"match --db {db_path} --profile ^A3451T A3451TGAT -o {tmp_path}/temp1.tsv")
     run_cli(
-        f"match --db {db_path} --DATE_DRAW 2021-03-01:2022-03-15 -o {tmp_path}/temp.tsv"
+        f"match --db {db_path} --profile del:28363-28371  --profile A3451N -o {tmp_path}/temp2.tsv"
+    )
+    run_cli(f"match --db {db_path} --profile ^S:A67X S:E484K -o {tmp_path}/temp.tsv")
+    run_cli(
+        f"match --db {db_path} --profile S:A67G --profile S:N501Y --debug -o {tmp_path}/temp3.tsv"
+    )
+    run_cli(
+        f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013 --debug -o {tmp_path}/temp4.tsv"
+    )
+    run_cli(
+        f"match --db {db_path} --DATE_DRAW 2021-03-01:2022-03-15 -o {tmp_path}/temp5.tsv"
     )
     run_cli(f"match --db {db_path} --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count")
 
@@ -119,17 +126,157 @@ def test_valid_extend(tmp_path, monkeypatch):
     db_path = "data/test-with-seqs.db"
     # sonar.parse_args(["--version"])
     run_cli(
-        f"match --db {db_path} --LINEAGE ^B.1.1.7 --with-sublineage LINEAGE --count"
+        f"match --db {db_path} --LINEAGE ^B.1.1.7 --with-sublineage LINEAGE --count -o {tmp_path}/temp.tsv"
     )
-    run_cli(f"match --db {db_path} --LINEAGE ^B.1.1% AY.4% --with-sublineage LINEAGE")
+    run_cli(
+        f"match --db {db_path} --LINEAGE ^B.1.1% AY.4% --with-sublineage LINEAGE -o {tmp_path}/temp1.tsv "
+    )
     run_cli(f"match --db {db_path} --format csv -o {tmp_path}/out.csv")
     run_cli(f"match --db {db_path} --format vcf -o {tmp_path}/out.vcf")
     run_cli(
-        f"restore --db {db_path} --sample IMS-10025-CVDP-00960 IMS-10087-CVDP-D484F3AD-CD8F-473C-8A5E-DB5D6A710BE5 IMS-10004-CVDP-0672526C-BAEA-4FE9-A57B-941CBCC13343 IMS-10013-CVDP-69DF29F4-D7E3-4954-94F4-65C20BE7B850 IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95"
+        f"restore --db {db_path} --sample IMS-10025-CVDP-00960 IMS-10087-CVDP-D484F3AD-CD8F-473C-8A5E-DB5D6A710BE5 IMS-10004-CVDP-0672526C-BAEA-4FE9-A57B-941CBCC13343 IMS-10013-CVDP-69DF29F4-D7E3-4954-94F4-65C20BE7B850 IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95 > {tmp_path}/out.fasta"
     )
 
     assert filecmp.cmp(f"{tmp_path}/out.csv", "data/out.csv")
     assert filecmp.cmp(f"{tmp_path}/out.vcf", "data/out.vcf")
+
+
+def test_valid_extend2(monkeypatch, capsys):
+    """complex query"""
+    monkeypatch.chdir(Path(__file__).parent)
+    db_path = "data/test-with-seqs.db"
+    # float
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--AGE",
+            "<30",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "1"
+    # float AND OR
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--AGE",
+            "<30.0",
+            "^67.89",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "1"
+
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--AGE",
+            "30:55",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "2"
+    # numeric
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--HEIGHT",
+            "185:190",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "2"
+    # numeric AND OR
+
+    # zip
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--SENDING_LAB_PC",
+            "^86154",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "4"
+    # zip AND OR
+    # date
+
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--DATE_DRAW",
+            "2021-03-18",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "1"
+
+
+def test_valid_extend3(monkeypatch, capsys):
+    monkeypatch.chdir(Path(__file__).parent)
+    db_path = "data/test-with-seqs.db"
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--LINEAGE",
+            "^BA.5",
+            "--with-sublineage",
+            "LINEAGE",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "3"
+
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--sample",
+            "IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95",
+            "IMS-10025-CVDP-00960",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "2"
 
 
 def test_info(tmp_path, monkeypatch):
@@ -162,7 +309,6 @@ def test_edit_sample(tmp_path, monkeypatch):
     db_path = tmp_path / "import-test.db"
 
     shutil.copy(db_path_orig, db_path)
-    run_cli(f"add-prop --db {db_path} --name AGE --dtype float --descr descr")
     run_cli(
         f"delete --db {db_path} --sample IMS-10004-CVDP-0672526C-BAEA-4FE9-A57B-941CBCC13343 IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95"
     )
