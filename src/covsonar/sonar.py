@@ -407,7 +407,7 @@ def main(args):  # noqa: C901
             cachedir=args.cache,
             autodetect=not args.no_autodetect,
             progress=not args.no_progress,
-            update=not args.no_progress,
+            update=not args.no_update,
             threads=args.threads,
             debug=args.debug,
         )

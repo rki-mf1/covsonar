@@ -54,7 +54,7 @@ pip install -i https://test.pypi.org/simple/ covsonar==2.0.0a1.dev1657097995
 
 ## 2. Usage
 
-In covSonar2 there are several tools that can be called via subcommands.
+In covSonar2, the table below shows the several commands that can be called.
 
 | subcommand | purpose                                                             |
 |------------|---------------------------------------------------------------------|
@@ -86,32 +86,28 @@ First, we have to create a new database instance.
 sonar setup --db test.db
 ```
 
-, or we can create a new database instance with predefined properties.
+Or we can create a new database instance with predefined properties.
 ```sh
 sonar setup --db test.db --auto-create
 ```
+> TIP 🕯️: We can use [DB Browser](https://sqlitebrowser.org/) to visualise or manipulate the database file.
 
-By default, the MN908947.3 (SARS-CoV-2) is used as a reference. If we want to set up database for a different pathogen, we can add `--gbk` following with Genbank file.
+By default, the MN908947.3 (SARS-CoV-2) is used as a reference. If we want to set up a database for a different pathogen, we can add `--gbk` following with Genbank file. (⚠️WARNING: currently, covSonar2 is tailored for SARS-CoV-2, so some functions might not function with other pathogens.)
 
-example;
+Example;
 ```sh
 sonar setup --db test.db --auto-create --gbk Ebola.gb
 ```
 
 > NOTE 📌:  [how to download genbank file](https://ncbiinsights.ncbi.nlm.nih.gov/2017/05/08/genome-data-download-made-easy/)
 
-### 2.2 Property management (list-prop, add-prop, delete-prop)
+### 2.2 Property management (`list-prop`, `add-prop` and `delete-prop`)
 
-In covSonar2, users now can arbitrarily add meta information or properties into a database to fit a specific project objective.s
+In covSonar2, users can now arbitrarily add meta information or properties into a database to fit a specific project objective.
 
-To view the added properties, we can use the `list-prop` command to display all information.
-```sh
-sonar list-prop --db test.db
-```
+To add properties, we can use the `add-prop` command to add meta information into the database.
 
-To add more properties, we can use the `add-prop` command to add meta information into the database.
-
-The required arguments are listed below when we use `add-prop`
+The required arguments are listed below when we use `add-prop` command
 * `--name`, name of sample property
 * `--descr`, description of the new property
 * `--dtype`, data type of the new property (e.g., 'integer', 'float', 'text', 'date', 'zip')
@@ -119,13 +115,20 @@ The required arguments are listed below when we use `add-prop`
 ```sh
 # for example
 sonar add-prop --db test.db --name LINEAGE --dtype text --descr "store Lineage"
-sonar add-prop --db test.db --name SEQ_REASON --dtype text --descr "seq. reason"
+#
+sonar add-prop --db test.db --name AGE --dtype integer --descr "age information"
+#
 sonar add-prop --db test.db --name DATE_DRAW --dtype date --descr "sampling date"
 ```
-> tip 🕯️: `sonar add-prop -h ` to see all available arguments.
+> TIP 🕯️: `sonar add-prop -h ` to see all available arguments.
 
 ⚠️ WARNING: We reserve **'sample'** keyword that cannot be used as a property name
-(e.g., ⛔❌`--name sample`❌) because we use this name as the ID in the database schema.
+(e.g., ⛔❌`--name sample`) because we use this name as the ID in the database schema.⚠️
+
+To view the added properties, we can use the `list-prop` command to display all information.
+```sh
+sonar list-prop --db test.db
+```
 
 The `delete-prop` command is used to delete an unwanted property from the database.
 
@@ -140,10 +143,9 @@ Do you really want to delete this property? [YES/no]: YES
 
 ### 2.3 Adding genomes and meta information to the database (import)
 
-In this example, we show how we add sequence along with meta information.
+This example shows how we add sequence along with meta information.
 
-We have sequence file name `valid.fasta` and meta-info file name
-`day.tsv`
+We have sequence file name `valid.fasta` and meta-info file name `day.tsv`.
 
 valid.fasta
 ```
@@ -156,32 +158,32 @@ IMS_ID		SAMPLING_DATE	LINEAGE
 IMS-00113	2021-02-04		B.1.1.7
 ```
 
-The required argument for `import` command are listed as follows;
+The required argument for the `import` command are listed as follows;
 
-1. `--fasta` a fasta file containing genome sequences to be imported. A compressed file of fasta is also valid as an input (e.g., `--fasta sample.fasta.gz` or `sample.fasta.xz`)
+1. `--fasta` a fasta file containing genome sequences to be imported. A compressed file of fasta is also valid as an input (e.g., `--fasta sample.fasta.gz` or `sample.fasta.xz`).
 
-2. `--tsv` a tab-delimited file containing sample properties to be imported
+2. `--tsv` a tab-delimited file containing sample properties to be imported.
 
-3. `--cache` a directory for chaching data
+3. `--cache` a directory for caching data.
 
-4. `--cols` define column names for sample properties
+4. `--cols` define column names for sample properties.
 
-so,
+So, example
 ```sh
 sonar import --db test.db --fasta valid.fasta --tsv day.tsv --threads 10 --cache tmp_cache  --cols sample=IMS_ID
 ```
-as you can see we defined `--cols sample=IMS_ID`, in which `IMS_ID` is the column ID that linked the sample name between the fasta file and meta-info file, and `sample` is the reserved word used to link data between tables in the database.
+As you can see, we defined `--cols sample=IMS_ID`, in which `IMS_ID` is the column ID that linked the sample name between the fasta file and meta-info file, and `sample` is the reserved word used to link data between tables in the database.
 
-> TIP 🕯️: you might don't need to create an `ID` property because we use the `sample` keyword as the ID to link data in our database schema and also used in the query command which you will see in the next section.
+> TIP 🕯️: user might don't need to create an `ID` property because we use the `sample` keyword as the ID to link data in our database schema and also used in the query command, which you will see in the next section.
 
 > TIP 🕯️: use `--threads` to increase the performance.
 
-To update meta information when we just add new property, example:
+To update meta information when we add a new property, we can use the same `import` command, but this time, in the `--tsv` tag, we provide a new meta or old file, for example:
 ```sh
 sonar import --db test.db --tsv meta.passed.tsv --threads 200 --cache tmp_cache --cols sample=IMS_ID
 
 ```
-> NOTE 🤨: please make sure the `--cols sample=IMS_ID`  is correctly referenced, if you have a different column name please change it according to the met-info file (for example, `--cols sample=IMS_NEW_ID`)
+> NOTE 🤨: please make sure the `--cols sample=IMS_ID` is correctly referenced. If you have a different column name, please change it according to the meta-info file (for example, `--cols sample=IMS_NEW_ID`)
 
 ### 2.4 Query genome sequences based on profiles (match)
 
@@ -201,9 +203,12 @@ There are additional options to adjust the matching.
 | option             | description                                                            |
 |--------------------|------------------------------------------------------------------------|
 | --count            | count matching genomes only                                            |
+| --format {csv,tsv,vcf}| output format (default: tsv) |
 
 
-example;
+> TIP 🕯️: use `sonar match -h ` to see all available arguments.
+
+Example;
 ```sh
 sonar match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
 
@@ -268,7 +273,7 @@ sonar match  --DEMIS_ID_PC  10641:10658  --db test.db
 # Sample were sampled in 2020
 sonar match  --DATE 2020-01-01:2020-12-31 --db test.db
 ```
-> TIP 🕯️: Don't forget `sonar list-prop  --db test.db` to see more details
+> TIP 🕯️: Don't forget `sonar list-prop --db test.db` to see more details
 
 **Export to CSV/TSV/VCF file**
 
@@ -286,7 +291,7 @@ sonar match -i S:N501Y S:E484K --lineage Q.1 --db test.db --format vcf -o out.vc
 sonar match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
 ```
 
-> NOTE 📌: file has to contain one ID per line.
+> NOTE 📌: accessions.txt has to contain one ID per line.
 
 <u>Parent-Child relationship</u>
 

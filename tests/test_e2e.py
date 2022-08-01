@@ -242,6 +242,43 @@ def test_valid_extend2(monkeypatch, capsys):
     assert captured.out.strip() == "1"
 
 
+def test_valid_extend3(monkeypatch, capsys):
+    monkeypatch.chdir(Path(__file__).parent)
+    db_path = "data/test-with-seqs.db"
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--LINEAGE",
+            "^BA.5",
+            "--with-sublineage",
+            "LINEAGE",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "3"
+
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--sample",
+            "IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95",
+            "IMS-10025-CVDP-00960",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "2"
+
+
 def test_info(tmp_path, monkeypatch):
     monkeypatch.chdir(Path(__file__).parent)
     db_path_orig = Path("data/test-with-seqs.db")

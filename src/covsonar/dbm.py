@@ -572,18 +572,18 @@ class sonarDBManager:
             del self.properties[property_name]
 
     # SELECTING DATA
-
-    def sample_exists(self, sample_name):
-        """
-        Checks if a sample name exists and returns True and False, respectively.
-
-        >>> dbm = getfixture('init_readonly_dbm')
-        >>> dbm.sample_exists("seq01")
-        True
-
-        """
-        sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found"
-        return bool(self.cursor.execute(sql, [sample_name]).fetchone()["found"])
+    # # Do we need this function?
+    # def sample_exists(self, sample_name):
+    #    """
+    #    Checks if a sample name exists and returns True and False, respectively.
+    #
+    #    >>> dbm = getfixture('init_readonly_dbm')
+    #    >>> dbm.sample_exists("seq01")
+    #    True
+    #
+    #    """
+    #    sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found"
+    #    return bool(self.cursor.execute(sql, [sample_name]).fetchone()["found"])
 
     def get_sample_id(self, sample_name):
         """
@@ -642,16 +642,17 @@ class sonarDBManager:
             if x is not None
         }
 
-    def get_molecule_id(self, molecule_accession):
-        """
-        Returns the rowid of a molecule based on its accession (or None if the
-        accession does not exist).
-        """
-        sql = "SELECT id FROM molecule WHERE accession = ?;"
-        row = self.cursor.execute(sql, [molecule_accession]).fetchone()
-        if row:
-            row = row["id"]
-        return row
+    # Do we need this function?
+    # def get_molecule_id(self, molecule_accession):
+    #    """
+    #    Returns the rowid of a molecule based on its accession (or None if the
+    #    accession does not exist).
+    #    """
+    #    sql = "SELECT id FROM molecule WHERE accession = ?;"
+    #    row = self.cursor.execute(sql, [molecule_accession]).fetchone()
+    #    if row:
+    #        row = row["id"]
+    #    return row
 
     def get_molecule_data(self, *fields, reference_accession=None):
         """
@@ -835,6 +836,7 @@ class sonarDBManager:
             for x in self.cursor.execute(sql, [translation_id]).fetchall()
         }
 
+    # Do we need these functions?
     # def get_earliest_import(self):
     #    sql = "SELECT MIN(imported) as import FROM genome WHERE import IS NOT NULL;"
     #    return self.cursor.execute(sql).fetchone()["import"]
@@ -1360,19 +1362,6 @@ class sonarDBManager:
             sql += " EXCEPT " + " EXCEPT ".join(except_sqls)
 
         return sql, intersect_vals + except_vals
-
-    def count_molecules(self, reference_accession=None):
-        if reference_accession:
-            condition = '"reference.accession" = ?'
-            vals = [reference_accession]
-        else:
-            condition = '"reference.standard" = ?'
-            vals = [1]
-        sql = (
-            'SELECT count(DISTINCT "molecule.id") AS count FROM referenceView WHERE '
-            + condition
-        )
-        return self.cursor.execute(sql, vals).fetchone()["count"]
 
     def match(  # noqa: 901
         self,
