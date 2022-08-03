@@ -460,8 +460,6 @@ class sonarCache:
 
     def get_refseq_id(self, refmol_acc):
         try:
-            print(refmol_acc)
-            print(self.sources[refmol_acc]["id"])
             return self.sources[refmol_acc]["id"]
         except Exception:
             return None
