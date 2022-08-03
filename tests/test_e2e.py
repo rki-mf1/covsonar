@@ -92,6 +92,10 @@ def test_import(tmp_path, monkeypatch):
         f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 2"
     )
 
+    run_cli(
+        f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 2 --no-update"
+    )
+
 
 def test_valid_end(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
