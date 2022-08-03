@@ -104,8 +104,6 @@ class sonarCache:
             shutil.rmtree(self.basedir)
         if self.logfile:
             self.logfile.close()
-        if self.sample_yaml:
-            self.sample_yaml.close()
 
     @staticmethod
     def slugify(string):
@@ -124,7 +122,7 @@ class sonarCache:
         if self.logfile:
             self.logfile.write(msg)
         elif not die:
-            sys.stderr(msg)
+            sys.stderr.write(msg)
         else:
             exit(errtype + ": " + msg)
 
@@ -462,6 +460,8 @@ class sonarCache:
 
     def get_refseq_id(self, refmol_acc):
         try:
+            print(refmol_acc)
+            print(self.sources[refmol_acc]["id"])
             return self.sources[refmol_acc]["id"]
         except Exception:
             return None
@@ -506,64 +506,65 @@ class sonarCache:
 
                     # check reference
                     refseq_id = self.get_refseq_id(data["refmol"])
-                    if not refseq_id:
-                        if not self.ignore_errors:
-                            self.log(
-                                "fasta header refers to an unknown refrence ("
-                                + data["header"]
-                                + ")",
-                                True,
-                                "input error",
-                            )
-                        else:
-                            self.log(
-                                "skipping "
-                                + data["name"]
-                                + " referring to an unknown reference ("
-                                + data["header"]
-                                + ")"
-                            )
+                    self.write_checkref_log(data, refseq_id)
 
                     # check alignment
                     data["algnid"] = dbm.get_alignment_id(data["seqhash"], refseq_id)
-                    if data["algnid"] is None:
-                        data["seqfile"] = self.cache_sequence(
-                            data["seqhash"], data["sequence"]
-                        )
-                        data["reffile"] = self.cache_reference(
-                            refseq_id, self.get_refseq(data["refmol"])
-                        )
-                        data["ttfile"] = self.cache_translation_table(
-                            data["translation_id"], dbm
-                        )
-                        data["liftfile"] = self.cache_lift(
-                            refseq_id, data["refmol"], self.get_refseq(data["refmol"])
-                        )
-                        data["algnfile"] = self.get_algn_fname(
-                            data["seqhash"] + "@" + self.get_refhash(data["refmol"])
-                        )
-                        data["varfile"] = self.get_var_fname(
-                            data["seqhash"] + "@" + self.get_refhash(data["refmol"])
-                        )
-                    elif data["seqhash"] != seqhash:
-                        data["seqfile"] = self.cache_sequence(
-                            data["seqhash"], data["sequence"]
-                        )
-                        data["reffile"] = None
-                        data["ttfile"] = None
-                        data["liftfile"] = None
-                        data["algnfile"] = None
-                        data["varfile"] = None
-                    else:
-                        data["seqhash"] = None
-                        data["seqfile"] = None
-                        data["reffile"] = None
-                        data["ttfile"] = None
-                        data["liftfile"] = None
-                        data["algnfile"] = None
-                        data["varfile"] = None
+                    data = self.assign_data(data, seqhash, refseq_id, dbm)
                     del data["sequence"]
                     self.cache_sample(**data)
+
+    def write_checkref_log(self, data, refseq_id):
+        """this function linked to the add_fasta"""
+        if not refseq_id:
+            if not self.ignore_errors:
+                self.log(
+                    "fasta header refers to an unknown refrence ("
+                    + data["header"]
+                    + ")",
+                    True,
+                    "input error",
+                )
+            else:
+                self.log(
+                    "skipping "
+                    + data["name"]
+                    + " referring to an unknown reference ("
+                    + data["header"]
+                    + ")"
+                )
+
+    def assign_data(self, data, seqhash, refseq_id, dbm):
+        """this function linked to the add_fasta"""
+        if data["algnid"] is None:
+            data["seqfile"] = self.cache_sequence(data["seqhash"], data["sequence"])
+            data["reffile"] = self.cache_reference(
+                refseq_id, self.get_refseq(data["refmol"])
+            )
+            data["ttfile"] = self.cache_translation_table(data["translation_id"], dbm)
+            data["liftfile"] = self.cache_lift(
+                refseq_id, data["refmol"], self.get_refseq(data["refmol"])
+            )
+            data["algnfile"] = self.get_algn_fname(
+                data["seqhash"] + "@" + self.get_refhash(data["refmol"])
+            )
+            data["varfile"] = self.get_var_fname(
+                data["seqhash"] + "@" + self.get_refhash(data["refmol"])
+            )
+        else:
+            if data["seqhash"] != seqhash:
+                data["seqfile"] = self.cache_sequence(data["seqhash"], data["sequence"])
+            else:
+                data["seqhash"] = None
+                data["seqfile"] = None
+
+            data["reffile"] = None
+            data["ttfile"] = None
+            data["liftfile"] = None
+            data["algnfile"] = None
+            data["varfile"] = None
+
+        return data
 
     def import_cached_samples(self):  # noqa: C901
         refseqs = {}
@@ -606,59 +607,7 @@ class sonarCache:
                                 )
                     # paranoia test
                     if not sample_data["seqhash"] is None:
-                        try:
-                            seq = list(refseqs[sample_data["refmolid"]])
-                        except Exception:
-                            refseqs[sample_data["refmolid"]] = list(
-                                dbm.get_sequence(sample_data["refmolid"])
-                            )
-                            seq = list(refseqs[sample_data["refmolid"]])
-
-                        prefix = ""
-                        for vardata in dbm.iter_dna_variants(
-                            sample_data["name"], sample_data["refmolid"]
-                        ):
-                            if vardata["variant.alt"] == " ":
-                                for i in range(
-                                    vardata["variant.start"], vardata["variant.end"]
-                                ):
-                                    seq[i] = ""
-                            elif vardata["variant.start"] >= 0:
-                                seq[vardata["variant.start"]] = vardata["variant.alt"]
-                            else:
-                                prefix = vardata["variant.alt"]
-                        seq = prefix + "".join(seq)
-
-                        with open(sample_data["seq_file"], "r") as handle:
-                            orig_seq = handle.read()
-
-                        if seq != orig_seq:
-                            aligner = sonarAligner()
-                            with TemporaryDirectory() as tempdir:
-                                qryfile = os.path.join(tempdir, "qry")
-                                reffile = os.path.join(tempdir, "ref")
-                                with open(qryfile, "w") as handle:
-                                    handle.write(">seq\n" + seq)
-                                with open(reffile, "w") as handle:
-                                    handle.write(">ref\n" + orig_seq)
-                                qry, ref = aligner.align(qryfile, reffile)
-                            with open("paranoid.alignment.fna", "w") as handle:
-                                handle.write(
-                                    ">original_"
-                                    + sample_data["name"]
-                                    + "\n"
-                                    + ref
-                                    + "\n>restored_"
-                                    + sample_data["name"]
-                                    + "\n"
-                                    + qry
-                                    + "\n"
-                                )
-                            sys.exit(
-                                "import error: original sequence of sample "
-                                + sample_data["name"]
-                                + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)"
-                            )
+                        self.paranoid_test(refseqs, sample_data, dbm)
 
                 except Exception as e:
                     print("\n------- Fatal Error ---------")
@@ -666,6 +615,59 @@ class sonarCache:
                     print(e)
                     pp.pprint(sample_data)
                     sys.exit("unknown import error")
+
+    def paranoid_test(self, refseqs, sample_data, dbm):
+        """link to import_cached_samples"""
+        try:
+            seq = list(refseqs[sample_data["refmolid"]])
+        except Exception:
+            refseqs[sample_data["refmolid"]] = list(
+                dbm.get_sequence(sample_data["refmolid"])
+            )
+            seq = list(refseqs[sample_data["refmolid"]])
+
+        prefix = ""
+        for vardata in dbm.iter_dna_variants(
+            sample_data["name"], sample_data["refmolid"]
+        ):
+            if vardata["variant.alt"] == " ":
+                for i in range(vardata["variant.start"], vardata["variant.end"]):
+                    seq[i] = ""
+            elif vardata["variant.start"] >= 0:
+                seq[vardata["variant.start"]] = vardata["variant.alt"]
+            else:
+                prefix = vardata["variant.alt"]
+        seq = prefix + "".join(seq)
+
+        with open(sample_data["seq_file"], "r") as handle:
+            orig_seq = handle.read()
+        if seq != orig_seq:
+            aligner = sonarAligner()
+            with TemporaryDirectory() as tempdir:
+                qryfile = os.path.join(tempdir, "qry")
+                reffile = os.path.join(tempdir, "ref")
+                with open(qryfile, "w") as handle:
+                    handle.write(">seq\n" + seq)
+                with open(reffile, "w") as handle:
+                    handle.write(">ref\n" + orig_seq)
+                qry, ref = aligner.align(qryfile, reffile)
+            with open("paranoid.alignment.fna", "w") as handle:
+                handle.write(
+                    ">original_"
+                    + sample_data["name"]
+                    + "\n"
+                    + ref
+                    + "\n>restored_"
+                    + sample_data["name"]
+                    + "\n"
+                    + qry
+                    + "\n"
+                )
+            sys.exit(
+                "import error: original sequence of sample "
+                + sample_data["name"]
+                + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)"
+            )
 
 
 if __name__ == "__main__":
