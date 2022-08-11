@@ -2975,15 +2975,28 @@ class sonarDB(object):
 					if value != 'none':
 						_tmp_include_lin.append(in_lin)
 						_list = value.split(',')
-
+						# recursive way
 						for i in _list:
 							include_lin.append(i)
 								# _tmp_include_lin.append(i)
 								## if we don't find this wildcard so we discard it
 					else: # None
 						_tmp_include_lin.append(in_lin)
+				_tmp_include_lin = list(dict.fromkeys(_tmp_include_lin))
+				"""
+				# since we have a proper lineage file 
+				# the above code can be rewritten by below code
+				# however, we are not sure the upcoming lineage assignment
+				# so we stick the old method
+				while include_lin:
+					in_lin = include_lin.pop(0)	
+					value = self.lineage_sublineage_dict.get(in_lin, 'none')
+					if value != 'none':
+						_list = value.split(',')
+						_tmp_include_lin.extend(_list)
 
-
+					_tmp_include_lin.append(in_lin)
+				"""
 				include_lin = _tmp_include_lin
 			#print(include_profiles)
 			#print(include_lin)

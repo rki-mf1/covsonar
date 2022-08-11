@@ -4,7 +4,7 @@
 
 covSonar is a database-driven system for handling genomic sequences of SARS-CoV-2 and screening genomic profiles.
 
-<img src="https://img.shields.io/badge/covSonar-1.1.5-pink" />
+<img src="https://img.shields.io/badge/covSonar-1.1.6-pink" />
 
 
 ## 1. Prerequisites
@@ -26,7 +26,7 @@ covSonar has some software-environmental requirements that can most easily be me
 Proceed as follows to install covSonar:
 ```sh
 # download the repository to the current working directory using git 
-git clone https://gitlab.com/s.fuchs/covsonar
+git clone https://github.com/rki-mf1/covsonar.git
 # build the custom software environment using conda [recommended]
 conda env create -n sonar -f covsonar/sonar.env.yml
 # activate the conda evironment if built 
