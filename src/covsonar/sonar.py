@@ -9,11 +9,11 @@ from textwrap import fill
 
 from tabulate import tabulate
 
-from . import logging
-from .basics import sonarBasics
-from .cache import sonarCache  # noqa: F401
-from .dbm import sonarDBManager
-from .linmgr import sonarLinmgr
+from covsonar import logging
+from covsonar.basics import sonarBasics
+from covsonar.cache import sonarCache  # noqa: F401
+from covsonar.dbm import sonarDBManager
+from covsonar.linmgr import sonarLinmgr
 
 
 class arg_namespace(object):
@@ -50,6 +50,12 @@ def parse_args(args):
 
     # parser component: output
     output_parser = argparse.ArgumentParser(add_help=False)
+    output_parser.add_argument(
+        "--out-column",
+        help="select output columns to the output file (support csv and tsv)",
+        type=str,
+        default="all",
+    )
     output_parser.add_argument(
         "-o",
         "--out",
@@ -578,7 +584,23 @@ def main(args):  # noqa: C901
                         + args.with_sublineage
                         + " is mismatch to the available properties"
                     )
-        print()
+            # check column output and property name
+            if args.out_column != "all":
+                out_column = args.out_column.strip()
+                out_column_list = out_column.split(",")
+                check = all(item in dbm.properties for item in out_column_list)
+                if check:
+                    # sample.name is fixed
+                    valid_output_column = out_column_list + ["sample.name"]
+                else:
+                    sys.exit(
+                        "input error: "
+                        + str(out_column_list)
+                        + " one or more given name mismatch the available properties"
+                    )
+            else:
+                valid_output_column = "all"
+
         # for reserved keywords
         reserved_key = ["sample"]
         for pname in reserved_key:
@@ -607,6 +629,7 @@ def main(args):  # noqa: C901
             reserved_props,
             props,
             outfile=args.out,
+            output_column=valid_output_column,
             debug=args.debug,
             format=format,
             showNX=args.showNX,

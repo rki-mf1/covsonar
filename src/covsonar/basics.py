@@ -49,163 +49,179 @@ class sonarBasics(object):
         debug=False,
         quiet=False,
     ):
-        if os.path.isfile(fname):
-            sys.exit("setup error: " + fname + " does already exist.")
-        covsonar.dbm.sonarDBManager.setup(fname, debug=debug)
+        try:
+            if os.path.isfile(fname):
+                sys.exit("setup error: " + fname + " does already exist.")
+            covsonar.dbm.sonarDBManager.setup(fname, debug=debug)
 
-        # loading default data
-        if default_setup or auto_create:
-            with covsonar.dbm.sonarDBManager(fname, readonly=False, debug=debug) as dbm:
-                # adding pre-defined sample properties
-                # adding pre-defined sample properties
-                dbm.add_property(
-                    "imported",
-                    "date",
-                    "date",
-                    "date sample has been imported to the database",
-                )
-                dbm.add_property(
-                    "modified",
-                    "date",
-                    "date",
-                    "date when sample data has been modified lastly",
-                )
-                dbm.add_property(
-                    "nuc_profile",
-                    "text",
-                    "text",
-                    "stores the nucleotide level profiles",
-                )
-                dbm.add_property(
-                    "aa_profile", "text", "text", "stores the aa level profiles"
-                )
-                dbm.add_property(
-                    "nuc_n_profile",
-                    "text",
-                    "text",
-                    "stores the nucleotide(with N) level profiles",
-                )
-                dbm.add_property(
-                    "aa_x_profile",
-                    "text",
-                    "text",
-                    "stores the aa(with X) level profiles",
-                )
-
-                # if enable, create PREDEFINED properties
-                if auto_create:
-                    dbm.add_property("DATE_DRAW", "date", "date", "Sampling date")
+            # loading default data
+            if default_setup or auto_create:
+                with covsonar.dbm.sonarDBManager(
+                    fname, readonly=False, debug=debug
+                ) as dbm:
+                    # adding pre-defined sample properties
+                    # adding pre-defined sample properties
                     dbm.add_property(
-                        "PROCESSING_DATE", "date", "date", "Submission/Processing date"
+                        "imported",
+                        "date",
+                        "date",
+                        "date sample has been imported to the database",
                     )
                     dbm.add_property(
-                        "COUNTRY", "text", "text", "Country where a sample belongs to"
+                        "modified",
+                        "date",
+                        "date",
+                        "date when sample data has been modified lastly",
                     )
-                    dbm.add_property("HOST", "text", "text", "e.g., HUMAN")
-                    dbm.add_property("ZIP", "text", "text", "zip code e.g., 33602")
-                    dbm.add_property("LAB", "text", "text", "lab id e.g., 11069")
-                    dbm.add_property("LINEAGE", "text", "text", "e.g., BA.2 or B.1.1.7")
-                    dbm.add_property("TECHNOLOGY", "text", "text", "e.g., ILLUMINA")
+                    dbm.add_property(
+                        "nuc_profile",
+                        "text",
+                        "text",
+                        "stores the nucleotide level profiles",
+                    )
+                    dbm.add_property(
+                        "aa_profile", "text", "text", "stores the aa level profiles"
+                    )
+                    dbm.add_property(
+                        "nuc_n_profile",
+                        "text",
+                        "text",
+                        "stores the nucleotide(with N) level profiles",
+                    )
+                    dbm.add_property(
+                        "aa_x_profile",
+                        "text",
+                        "text",
+                        "stores the aa(with X) level profiles",
+                    )
 
-                # adding reference
-                if not reference_gb:
-                    reference_gb = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)), "data", "ref.gb"
-                    )
-                records = [x for x in sonarBasics.iter_genbank(reference_gb)]
-                ref_id = dbm.add_reference(
-                    records[0]["accession"],
-                    records[0]["description"],
-                    records[0]["organism"],
-                    1,
-                    1,
-                )
-                # adding reference molecule and elements
-                for i, record in enumerate(records):
-                    gene_ids = {}
-                    s = 1 if i == 0 else 0
-                    mol_id = dbm.insert_molecule(
-                        ref_id,
-                        record["moltype"],
-                        record["accession"],
-                        record["symbol"],
-                        record["description"],
-                        i,
-                        record["length"],
-                        s,
-                    )
-                    # source handling
-                    source_id = dbm.insert_element(
-                        mol_id,
-                        "source",
-                        record["source"]["accession"],
-                        record["source"]["symbol"],
-                        record["source"]["description"],
-                        record["source"]["start"],
-                        record["source"]["end"],
-                        record["source"]["strand"],
-                        record["source"]["sequence"],
-                        standard=1,
-                        parts=record["source"]["parts"],
-                    )
-                    if record["source"]["sequence"] != dbm.get_sequence(source_id):
-                        sys.exit(
-                            "genbank error: could not recover sequence of '"
-                            + record["source"]["accession"]
-                            + "' (source)"
+                    # if enable, create PREDEFINED properties
+                    if auto_create:
+                        dbm.add_property("DATE_DRAW", "date", "date", "Sampling date")
+                        dbm.add_property(
+                            "PROCESSING_DATE",
+                            "date",
+                            "date",
+                            "Submission/Processing date",
                         )
+                        dbm.add_property(
+                            "COUNTRY",
+                            "text",
+                            "text",
+                            "Country where a sample belongs to",
+                        )
+                        dbm.add_property("HOST", "text", "text", "e.g., HUMAN")
+                        dbm.add_property("ZIP", "text", "text", "zip code e.g., 33602")
+                        dbm.add_property("LAB", "text", "text", "lab id e.g., 11069")
+                        dbm.add_property(
+                            "LINEAGE", "text", "text", "e.g., BA.2 or B.1.1.7"
+                        )
+                        dbm.add_property("TECHNOLOGY", "text", "text", "e.g., ILLUMINA")
 
-                    # gene handling
-                    for elem in record["gene"]:
-                        gene_ids[elem["accession"]] = dbm.insert_element(
+                    # adding reference
+                    if not reference_gb:
+                        reference_gb = os.path.join(
+                            os.path.dirname(os.path.abspath(__file__)), "data", "ref.gb"
+                        )
+                    records = [x for x in sonarBasics.iter_genbank(reference_gb)]
+                    ref_id = dbm.add_reference(
+                        records[0]["accession"],
+                        records[0]["description"],
+                        records[0]["organism"],
+                        1,
+                        1,
+                    )
+                    # adding reference molecule and elements
+                    for i, record in enumerate(records):
+                        gene_ids = {}
+                        s = 1 if i == 0 else 0
+                        mol_id = dbm.insert_molecule(
+                            ref_id,
+                            record["moltype"],
+                            record["accession"],
+                            record["symbol"],
+                            record["description"],
+                            i,
+                            record["length"],
+                            s,
+                        )
+                        # source handling
+                        source_id = dbm.insert_element(
                             mol_id,
-                            "gene",
-                            elem["accession"],
-                            elem["symbol"],
-                            elem["description"],
-                            elem["start"],
-                            elem["end"],
-                            elem["strand"],
-                            elem["sequence"],
-                            standard=0,
-                            parent_id=source_id,
-                            parts=elem["parts"],
+                            "source",
+                            record["source"]["accession"],
+                            record["source"]["symbol"],
+                            record["source"]["description"],
+                            record["source"]["start"],
+                            record["source"]["end"],
+                            record["source"]["strand"],
+                            record["source"]["sequence"],
+                            standard=1,
+                            parts=record["source"]["parts"],
                         )
-                        if elem["sequence"] != dbm.extract_sequence(
-                            gene_ids[elem["accession"]]
-                        ):
+                        if record["source"]["sequence"] != dbm.get_sequence(source_id):
                             sys.exit(
                                 "genbank error: could not recover sequence of '"
-                                + elem["accession"]
-                                + "' (gene)"
+                                + record["source"]["accession"]
+                                + "' (source)"
                             )
 
-                    # cds handling
-                    for elem in record["cds"]:
-                        cid = dbm.insert_element(
-                            mol_id,
-                            "cds",
-                            elem["accession"],
-                            elem["symbol"],
-                            elem["description"],
-                            elem["start"],
-                            elem["end"],
-                            elem["strand"],
-                            elem["sequence"],
-                            0,
-                            gene_ids[elem["gene"]],
-                            elem["parts"],
-                        )
-                        if elem["sequence"] != dbm.extract_sequence(
-                            cid, translation_table=1
-                        ):
-                            sys.exit(
-                                "genbank error: could not recover sequence of '"
-                                + elem["accession"]
-                                + "' (cds)"
+                        # gene handling
+                        for elem in record["gene"]:
+                            gene_ids[elem["accession"]] = dbm.insert_element(
+                                mol_id,
+                                "gene",
+                                elem["accession"],
+                                elem["symbol"],
+                                elem["description"],
+                                elem["start"],
+                                elem["end"],
+                                elem["strand"],
+                                elem["sequence"],
+                                standard=0,
+                                parent_id=source_id,
+                                parts=elem["parts"],
                             )
-                if not quiet:
-                    logging.info("Success: Database was successfully installed")
+                            if elem["sequence"] != dbm.extract_sequence(
+                                gene_ids[elem["accession"]]
+                            ):
+                                sys.exit(
+                                    "genbank error: could not recover sequence of '"
+                                    + elem["accession"]
+                                    + "' (gene)"
+                                )
+
+                        # cds handling
+                        for elem in record["cds"]:
+                            cid = dbm.insert_element(
+                                mol_id,
+                                "cds",
+                                elem["accession"],
+                                elem["symbol"],
+                                elem["description"],
+                                elem["start"],
+                                elem["end"],
+                                elem["strand"],
+                                elem["sequence"],
+                                0,
+                                gene_ids[elem["gene"]],
+                                elem["parts"],
+                            )
+                            if elem["sequence"] != dbm.extract_sequence(
+                                cid, translation_table=1
+                            ):
+                                sys.exit(
+                                    "genbank error: could not recover sequence of '"
+                                    + elem["accession"]
+                                    + "' (cds)"
+                                )
+                    if not quiet:
+                        logging.info("Success: Database was successfully installed")
+        except Exception as e:
+            logging.exception(e)
+            logging.warning("Clean up %s", fname)
+            os.remove(fname)
+            logging.error("Database was fail to create")
 
     # DATA IMPORT
     # genbank handling handling
@@ -469,6 +485,7 @@ class sonarBasics(object):
         propdict={},
         reference=None,
         outfile=None,
+        output_column="all",
         format="csv",
         debug="False",
         showNX=False,
@@ -482,6 +499,7 @@ class sonarBasics(object):
                 properties=propdict,
                 reference_accession=reference,
                 format=format,
+                output_column=output_column,
                 showNX=showNX,
             )
             if format == "csv" or format == "tsv":
