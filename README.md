@@ -98,6 +98,7 @@ Example;
 ```sh
 sonar setup --db test.db --auto-create --gbk Ebola.gb
 ```
+> TIP 🕯️: We recommend using a database with only one reference genome.
 
 > NOTE 📌:  [how to download genbank file](https://ncbiinsights.ncbi.nlm.nih.gov/2017/05/08/genome-data-download-made-easy/)
 
@@ -230,16 +231,16 @@ We use `^` as a **"NOT"** operator. We put it before any conditional statement t
 ```sh
 # matching genomes in DB 'mydb' sharing the "Nelly" and the "Erik" mutation but not
 # belonging to the B.1.1.7 lineage
-sonar match -profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db
+sonar match --profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db
 
 ```
 
 More example; `--profile` match
 ```sh
 # AA profile OR  NT profile case
-sonar match --profile S:del:K418I --profile T418A  --db test.db
+sonar match --profile S:del:K418 --profile T418A  --db test.db
 # AA profile AND NT profile case
-sonar match --profile S:del:K418I del:3677-3677  --db test.db
+sonar match --profile ORF8:del:119-120 del:3677-3677  --db test.db
 # exact Match X or N , we use small x for AA and small n for NT
 sonar match --profile S:K418x --db test.db
 # this will match S:K418X
@@ -292,6 +293,15 @@ sonar match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
 ```
 
 > NOTE 📌: accessions.txt has to contain one ID per line.
+
+By default, covSonar returns every property to the output file if a user needs to export only some particular column. We can use `--out-column` tag to include only a specific property/column. 
+for example,
+
+```sh
+# only NUC_PROFILE,AA_PROFILE and LINEAGE will save into tsv file
+sonar match --db test.db  --DATE_DRAW 2021-03-01  -o test.tsv --out-column NUC_PROFILE,AA_PROFILE,LINEAGE
+# column name separated by comma
+```
 
 <u>Parent-Child relationship</u>
 

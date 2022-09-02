@@ -1370,6 +1370,7 @@ class sonarDBManager:
         properties=None,
         reference_accession=None,
         showNX=False,
+        output_column="all",
         format="csv",
     ):
         # collecting sqls for metadata-based filtering
@@ -1629,7 +1630,13 @@ class sonarDBManager:
             )
 
             _1_rows = list(filter(None, _1_rows))
-
+            # filter column
+            if output_column != "all":
+                _1_rows = [
+                    {k: v for k, v in d.items() if k in output_column} for d in _1_rows
+                ]
+            # print(_1_rows)
+            # print(list(_1_rows))
             # since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name)
             # at _1_rows so we can return _1_rows only a
             return _1_rows  # list(rows.values())
