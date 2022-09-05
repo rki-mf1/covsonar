@@ -2965,7 +2965,7 @@ class sonarDB(object):
 			exclude_lin = _tmp_exclude_lin
 			### support paren-child relationship ####
 			if(with_sublineage):
-				print('sublineage query is enbable for all included lineages')
+				# print('sublineage query is enbable for all included lineages')
 				_tmp_include_lin = []
 
 				while include_lin:
@@ -3300,8 +3300,7 @@ class sonarDB(object):
 
 	@staticmethod
 	def get_version():
-		with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
-			return handle.read().strip()
+		return SUPPORTED_DB_VERSION
 
 class sonarCache():
 	"""
