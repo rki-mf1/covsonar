@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 #author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
-VERSION = "1.1.5"
 import os
 from posixpath import split
 import sys
@@ -21,6 +20,8 @@ from tqdm import tqdm
 from multiprocessing import Pool
 import shutil
 
+with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".version"), "r") as handle:
+	VERSION =  handle.read().strip()
 
 def parse_args():
 	parser = argparse.ArgumentParser(prog="sonar.py", description="")
@@ -297,7 +298,7 @@ class sonar():
 		print(str(g_before-g_after) + " genomic entrie(s) deleted.")
 
 	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, with_sublineage, zips, dates, submission_dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, submission_dates=submission_dates, labs=labs, sources=sources, collections=collections, technologies=technologies, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, submission_dates=submission_dates, labs=labs, sources=sources, collections=collections, technologies=technologies, platforms=platforms, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
 			print(rows)
 		else:

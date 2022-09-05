@@ -56,6 +56,9 @@ class Aliasor:
         return self.realias_dict[alias] + '.' + ending
 
     def uncompress(self,name):
+        # A function that prints the output to the screen.
+        if(pd.isna(name)):
+            return ""
         name_split = name.split('.')
         letter = name_split[0]
         try:
@@ -147,7 +150,8 @@ def process_lineage(alias_key_path, lineages_path, output):
             row_dict['lineage']= _id
             row_dict['sublineage']= "none"
         _final_list.append(row_dict)    
-    print('Write output')
+    print('Write output:',output)
     df = pd.DataFrame.from_dict(_final_list, orient='columns')
+    df = df[df.lineage != '']
     df.sort_values(by=['lineage']).to_csv(output, sep="\t", index=False)
 
