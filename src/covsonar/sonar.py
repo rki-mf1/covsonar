@@ -548,15 +548,15 @@ def main(args):  # noqa: C901
 
     # update-lineage-info
     elif args.tool == "update-lineage-info":
-        logging.info("Start to update parent-child relationship")
-        fname = os.path.join(
-            os.path.join(os.path.dirname(os.path.realpath(__file__))),
-            "data/lineage.all.tsv",
-        )
+        logging.info("Start to update parent-child relationship...")
+        # fname = os.path.join(
+        #    os.path.join(os.path.dirname(os.path.realpath(__file__))),
+        #    "data/lineage.all.tsv",
+        # )
         # obj = sonarLinmgr()
         # lin_df = obj.update_lineage_data(fname)
         with sonarLinmgr() as obj:
-            lin_df = obj.update_lineage_data(fname)
+            lin_df = obj.update_lineage_data()
 
         with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
             dbm.add_update_lineage(lin_df)

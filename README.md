@@ -33,7 +33,7 @@ pip install covsonar
 ```
 or via conda
 ```sh
-conda install covsonar
+conda install -c bioconda covsonar
 ```
 
 verify installation
@@ -294,7 +294,7 @@ sonar match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
 
 > NOTE 📌: accessions.txt has to contain one ID per line.
 
-By default, covSonar returns every property to the output file if a user needs to export only some particular column. We can use `--out-column` tag to include only a specific property/column. 
+By default, covSonar returns every property to the output file if a user needs to export only some particular column. We can use `--out-column` tag to include only a specific property/column.
 for example,
 
 ```sh
