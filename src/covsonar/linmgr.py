@@ -1,6 +1,5 @@
 #!/usr/bin/python
 # Maintainer: KongkitimanonK
-# Script version 1 (copy from VOCAL)
 # The method originally came from  https://github.com/cov-lineages/pango-designation.
 # We just adapt and change some parts to be used in covsonar, vocal etc.
 
@@ -105,7 +104,7 @@ class sonarLinmgr:
             items.append((5 - len(item)) * "0" + item_string)
         return "".join(items)
 
-    def process_lineage_data(self, output_file):
+    def process_lineage_data(self):
 
         aliasor = Aliasor(self.alias_file)
         df_lineages = pd.read_csv(self.lineage_file)
@@ -115,7 +114,8 @@ class sonarLinmgr:
         sorted_lineages = []
 
         # Calculating parent-child relationship
-        uncompressed_lineages = list(map(aliasor.uncompress, lineages))
+        cleanedlineages = [x for x in lineages if str(x) != "nan"]
+        uncompressed_lineages = list(map(aliasor.uncompress, cleanedlineages))
         uncompressed_lineages.sort(key=sonarLinmgr.lts)
         sorted_lineages = list(map(aliasor.compress, uncompressed_lineages))
 
@@ -148,7 +148,7 @@ class sonarLinmgr:
 
         return df.sort_values(by=["lineage"])
 
-    def update_lineage_data(self, output_file):
+    def update_lineage_data(self):
         self.download_lineage_data()
-        df = self.process_lineage_data(output_file)
+        df = self.process_lineage_data()
         return df
