@@ -53,7 +53,7 @@ def parse_args():
 	parser_remove = subparsers.add_parser('remove', parents=[general_parser], help='remove genome sequences to the database.')
 	parser_remove = parser_remove.add_mutually_exclusive_group()
 	parser_remove.add_argument('--acc', metavar="STR", help="define accession(s) of sequences to delete", type=str, nargs="+", default=[])
-	parser_remove.add_argument('--file', metavar="FILE", help="define file containing accession(s) of sequences to delete (one per line)", type=str, nargs="+", default=None)
+	parser_remove.add_argument('--file', metavar="FILE", help="define file containing accession(s) of sequences to delete (one per line)", type=str, default=None)
 
 	# create the parser for the "match" command
 	parser_match = subparsers.add_parser('match', parents=[general_parser], help='get mutations profiles for given accessions.')
@@ -478,7 +478,7 @@ if __name__ == "__main__":
 	if args.tool == "remove":
 		acc = []
 		if args.file:
-			if not os.isfile(args.file):
+			if not os.path.isfile(args.file):
 				sys.exit("input error: file not found.")
 			with open(args.file, "r") as handle:
 				acc = [x.strip() for x in handle if x.strip() != ""]
