@@ -1378,8 +1378,32 @@ class sonarDBManager():
 	# DELETING DATA
 
 	def delete_genome(self, acc):
+		"""
+		we currently did not add CONSTRAINT, ON DELETE CASCADE to .sql file.
+		so we manually delete each table.
+		
+		Attributes
+		----------
+		acc: String
+			accession id
+		"""
+		sql = "SELECT seqhash FROM genome WHERE accession = ?;"
+		row = self.cursor.execute(sql, [acc]).fetchone()
 		sql = "DELETE FROM genome WHERE accession = ?;"
 		self.cursor.execute(sql, [acc])
+		if row:
+			selected_seqhash = row["seqhash"]
+			# delete profile
+			sql = "DELETE FROM profile WHERE seqhash = ?;"
+			self.cursor.execute(sql, [selected_seqhash])
+			# delete seq seq2dna 2prpt
+			sql = "DELETE FROM sequence WHERE seqhash = ?;"
+			self.cursor.execute(sql, [selected_seqhash])
+			sql = "DELETE FROM sequence2dna WHERE seqhash = ?;"
+			self.cursor.execute(sql, [selected_seqhash])
+			sql = "DELETE FROM sequence2prot WHERE seqhash = ?;"
+			self.cursor.execute(sql, [selected_seqhash])
+
 
 	# SELECTING DATA
 
