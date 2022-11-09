@@ -471,7 +471,7 @@ class sonarDBManager:
         strand,
         sequence,
         standard=0,
-        parent_id=" ",
+        parent_id=0,
         parts=None,
     ):
         """
@@ -862,9 +862,11 @@ class sonarDBManager:
         row = self.cursor.execute(sql, [element_id]).fetchone()
         return None if row is None else row["sequence"]
 
-    def extract_sequence(self, element_id=None, translation_table=None):
-        sql = "SELECT sequence, type, id, parent_id FROM element WHERE id = ?"
-        row = self.cursor.execute(sql, [element_id]).fetchone()
+    def extract_sequence(
+        self, element_id=None, translation_table=None, molecule_id=None
+    ):
+        sql = "SELECT sequence, type, id, parent_id FROM element WHERE id = ? AND molecule_id = ?;"
+        row = self.cursor.execute(sql, [element_id, molecule_id]).fetchone()
         if not row:
             return None
         element_id = row["id"]

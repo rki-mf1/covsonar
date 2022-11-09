@@ -183,7 +183,7 @@ class sonarBasics(object):
                                 parts=elem["parts"],
                             )
                             if elem["sequence"] != dbm.extract_sequence(
-                                gene_ids[elem["accession"]]
+                                gene_ids[elem["accession"]], molecule_id=mol_id
                             ):
                                 sys.exit(
                                     "genbank error: could not recover sequence of '"
@@ -208,7 +208,7 @@ class sonarBasics(object):
                                 elem["parts"],
                             )
                             if elem["sequence"] != dbm.extract_sequence(
-                                cid, translation_table=1
+                                cid, translation_table=1, molecule_id=mol_id
                             ):
                                 sys.exit(
                                     "genbank error: could not recover sequence of '"
@@ -238,7 +238,14 @@ class sonarBasics(object):
         return segments
 
     @staticmethod
-    def iter_genbank(fname):
+    def iter_genbank(fname):  # noqa: C901
+        """
+        small note on iter_genbank function
+        1. At CDS and gene tag in gbk, if "gene" key is not exist in dict, we can use "locus_tag" instead
+        (ref;https://www.ncbi.nlm.nih.gov/genomes/locustag/Proposal.pdf.) This also apply to accession
+        in similar way to solve the problem when key is missing.
+
+        """
         gb_data = {}
         for gb_record in SeqIO.parse(fname, "genbank"):
             # adding general annotation
@@ -288,12 +295,21 @@ class sonarBasics(object):
             for feat in gb_record.features:
                 # adding gene annotation
                 if feat.type == "gene":
+                    if feat.id != "<unknown id>":
+                        accession = feat.id
+                    elif "gene" in feat.qualifiers:
+                        accession = feat.qualifiers["gene"][0]
+                    elif "locus_tag" in feat.qualifiers:
+                        accession = feat.qualifiers["locus_tag"][0]
+
+                    if "gene" in feat.qualifiers:
+                        symbol = feat.qualifiers["gene"][0]
+                    else:
+                        symbol = feat.qualifiers["locus_tag"][0]
                     gb_data["gene"].append(
                         {
-                            "accession": feat.id
-                            if feat.id != "<unknown id>"
-                            else feat.qualifiers["gene"][0],
-                            "symbol": feat.qualifiers["gene"][0],
+                            "accession": accession,
+                            "symbol": symbol,
                             "start": int(feat.location.start),
                             "end": int(feat.location.end),
                             "strand": feat.strand,

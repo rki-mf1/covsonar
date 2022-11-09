@@ -71,11 +71,15 @@ class sonarCache:
         )
         self._molregex = re.compile(r"\[molecule=([^\[\]=]+)\]")
 
-        self.logfile = open(logfile, "w") if logfile else None
         self.basedir = (
             os.path.abspath(mkdtemp(prefix=".sonarCache_"))
             if not outdir
             else os.path.abspath(outdir)
+        )
+        if not os.path.exists(self.basedir):
+            os.makedirs(self.basedir)
+        self.logfile = (
+            open(os.path.join(self.basedir, logfile), "a+") if logfile else None
         )
         self.smk_config = os.path.join(self.basedir, "config.yaml")
         self.sample_dir = os.path.join(self.basedir, "samples")
@@ -425,7 +429,9 @@ class sonarCache:
         prev_elem = None
         with sonarDBManager(self.db, debug=self.debug) as dbm:
             for row in dbm.get_annotation(
-                molecule_accession=refmol_acc, element_type="cds"
+                reference_accession=refmol_acc,
+                molecule_accession=refmol_acc,
+                element_type="cds",
             ):
                 if prev_elem is None:
                     prev_elem = row["element.id"]
@@ -533,7 +539,10 @@ class sonarCache:
                 )
 
     def assign_data(self, data, seqhash, refseq_id, dbm):
-        """this function linked to the add_fasta"""
+        """this function linked to the add_fasta.
+        refseq_id is ID from element table.
+        ref_acc is accession in reference table.
+        """
         if data["algnid"] is None:
             data["seqfile"] = self.cache_sequence(data["seqhash"], data["sequence"])
             data["reffile"] = self.cache_reference(
@@ -579,8 +588,11 @@ class sonarCache:
                     # nucleotide level import
                     if not sample_data["seqhash"] is None:
                         dbm.insert_sample(sample_data["name"], sample_data["seqhash"])
+                        # Please consider from change sample_data["refmolid"] (moleculeID)
+                        # to sample_data["sourceid"] in insert_alignment function argument.
+                        # if we want to support multiple references.
                         algnid = dbm.insert_alignment(
-                            sample_data["seqhash"], sample_data["refmolid"]
+                            sample_data["seqhash"], sample_data["sourceid"]
                         )
                     if not sample_data["var_file"] is None:
                         with open(sample_data["var_file"], "r") as handle:
@@ -616,17 +628,19 @@ class sonarCache:
 
     def paranoid_test(self, refseqs, sample_data, dbm):
         """link to import_cached_samples"""
+        # Consider: change from refmolid (moleculeID) to sourceid
+        # to support multiple references.
         try:
-            seq = list(refseqs[sample_data["refmolid"]])
+            seq = list(refseqs[sample_data["sourceid"]])
         except Exception:
-            refseqs[sample_data["refmolid"]] = list(
-                dbm.get_sequence(sample_data["refmolid"])
+            refseqs[sample_data["sourceid"]] = list(
+                dbm.get_sequence(sample_data["sourceid"])
             )
-            seq = list(refseqs[sample_data["refmolid"]])
+            seq = list(refseqs[sample_data["sourceid"]])
 
         prefix = ""
         for vardata in dbm.iter_dna_variants(
-            sample_data["name"], sample_data["refmolid"]
+            sample_data["name"], sample_data["sourceid"]
         ):
             if vardata["variant.alt"] == " ":
                 for i in range(vardata["variant.start"], vardata["variant.end"]):
