@@ -632,11 +632,12 @@ class sonarBasics(object):
         samples = set()
         logging.warning("getting profile data")
         logging.warning("processing profile data")
-        for row in cursor:
 
-            samples.add(row["samples"])
+        for row in cursor:
+            exit(row)
+            samples.add(row["sample.name"])
             if row["element.type"] == "cds":
-                aa_profiles[row["samples"]].append(
+                aa_profiles[row["sample.name"]].append(
                     (
                         row["element.id"],
                         row["variant.start"],
@@ -644,7 +645,7 @@ class sonarBasics(object):
                     )
                 )
             else:
-                nuc_profiles[row["samples"]].append(
+                nuc_profiles[row["sample.name"]].append(
                     (row["element.id"], row["variant.start"], row["variant.label"])
                 )
         out = []
@@ -654,7 +655,6 @@ class sonarBasics(object):
 
         logging.warning("assembling profile data")
         for sample in sorted(samples):
-            print(sample)
             out.append(
                 {
                     "sample.name": sample,
@@ -672,27 +672,23 @@ class sonarBasics(object):
     # csv
     def exportCSV(cursor, outfile=None, na="*** no data ***", tsv=False):
         i = -1
-        try:
-            for i, row in enumerate(cursor):
-                if i == 0:
-                    outfile = sys.stdout if outfile is None else open(outfile, "w")
-                    sep = "\t" if tsv else ","
-                    writer = csv.DictWriter(
-                        outfile, row.keys(), delimiter=sep, lineterminator=os.linesep
-                    )
-                    writer.writeheader()
-                writer.writerow(row)
-            if i == -1:
-                print(na)
-        except Exception:
-            logging.error("An exception occurred %s", row)
-            raise
+        for i, row in enumerate(cursor):
+            if i == 0:
+                outfile = sys.stdout if outfile is None else open(outfile, "w")
+                sep = "\t" if tsv else ","
+                writer = csv.DictWriter(
+                    outfile, row.keys(), delimiter=sep, lineterminator=os.linesep
+                )
+                writer.writeheader()
+            writer.writerow(row)
+        if i == -1:
+            print(na)
 
     # vcf
     def exportVCF(cursor, reference, outfile=None, na="*** no match ***"):  # noqa: C901
         records = collections.OrderedDict()
         all_samples = set()
-        for row in cursor.fetchall():  # sonarBasics.iter_formatted_match(cursor):
+        for row in cursor.fetchall():
             chrom, pos, ref, alt, samples = (
                 row["molecule.accession"],
                 row["variant.start"],
