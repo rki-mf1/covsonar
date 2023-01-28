@@ -7,12 +7,13 @@ import os
 import sys
 from textwrap import fill
 
-from src.covsonar import logging
-from src.covsonar.basics import sonarBasics
-from src.covsonar.cache import sonarCache  # noqa: F401
-from src.covsonar.dbm import sonarDBManager
-from src.covsonar.linmgr import sonarLinmgr
 from tabulate import tabulate
+
+from covsonar import logging
+from covsonar.basics import sonarBasics
+from covsonar.cache import sonarCache  # noqa: F401
+from covsonar.dbm import sonarDBManager
+from covsonar.linmgr import sonarLinmgr
 
 
 class arg_namespace(object):
