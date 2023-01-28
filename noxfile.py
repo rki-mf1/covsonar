@@ -78,6 +78,6 @@ def tests(session):
     session.conda_install("emboss==6.6.0", "libiconv", channel="bioconda")
     session.run("poetry", "install", "--only", "main", external=True)
     install_with_constraints(
-        session, "coverage[toml]", "pytest", "pytest-cov", "pytest-sugar"
+        session, "coverage[toml]", "nox", "pytest", "pytest-cov", "pytest-sugar"
     )
-    session.run("pytest", *args)
+    session.run("pytest", "--doctest-modules", *args)

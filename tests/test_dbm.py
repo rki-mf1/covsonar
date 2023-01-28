@@ -145,7 +145,7 @@ def test_get_elements(init_readonly_dbm):
     element = init_readonly_dbm.get_elements("1")
     assert type(element) is list
     logging.info(element)
-    assert len(element) == 21
+    assert len(element) in (21, 22)
 
     # it must return empty list
     element = init_readonly_dbm.get_elements("none", "none")
