@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from covsonar.basics import sonarBasics
+from src.covsonar.basics import sonarBasics
 
 
 def test_setup_and_file_exists(tmpfile_name):

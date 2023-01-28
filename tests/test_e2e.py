@@ -5,7 +5,7 @@ import shutil
 
 import pytest
 
-from covsonar import sonar
+from src.covsonar import sonar
 
 
 def split_cli(s):

@@ -15,7 +15,7 @@ from Bio.SeqUtils.CheckSum import seguid
 from mpire import WorkerPool
 from tqdm import tqdm
 
-import covsonar
+import src.covsonar as covsonar
 from . import __version__
 from . import logging
 

@@ -5,8 +5,8 @@ import shutil
 
 import pytest
 
-from covsonar.cache import sonarCache
-from covsonar.dbm import sonarDBManager
+from src.covsonar.cache import sonarCache
+from src.covsonar.dbm import sonarDBManager
 
 
 def test_get_refseq_id_failcase(tmpfile_name, testdb):

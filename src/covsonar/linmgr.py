@@ -16,9 +16,7 @@ from . import logging
 try:  # noqa: C901
     from pango_aliasor.aliasor import Aliasor
 except ModuleNotFoundError:  # pragma: no cover
-    logging.WARN(
-        "Dependency `pango_aliasor` missing, please install using `pip install pango_aliasor`"
-    )
+    logging.WARN("Dependency `pango_aliasor` missing, please install using `pip install pango_aliasor`")
     logging.WARN("Fall back to original Aliasor...")
 
     class Aliasor:

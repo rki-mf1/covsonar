@@ -3,8 +3,8 @@ import tempfile
 
 import pytest
 
-from covsonar.basics import sonarBasics
-from covsonar.dbm import sonarDBManager
+from src.covsonar.basics import sonarBasics
+from src.covsonar.dbm import sonarDBManager
 
 
 # PYTEST FIXTURES
@@ -50,7 +50,7 @@ def tmpfile_name(tmpdir_factory):
 def testdb(setup_db):
     db = setup_db
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    fasta = os.path.join(script_dir, "data", "test.fasta")
+    fasta = os.path.join(script_dir, "tests", "data", "test.fasta")
     sonarBasics.import_data(
         db,
         fasta=[fasta],

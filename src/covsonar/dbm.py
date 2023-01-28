@@ -714,7 +714,10 @@ class sonarDBManager:
         return [x["id"] for x in row]
 
     def get_source(self, molecule_id):
-        return self.get_elements(molecule_id, "source")[0]
+        if len(self.get_elements(molecule_id, "source")) > 0:
+            return self.get_elements(molecule_id, "source")[0]
+        else: 
+            return None
 
     def get_annotation(
         self,

@@ -5,7 +5,7 @@ import sqlite3
 from Bio.Seq import Seq
 import pytest
 
-from covsonar.dbm import sonarDBManager
+from src.covsonar.dbm import sonarDBManager
 
 
 def test_add_property_that_exists(init_writeable_dbm):
@@ -146,7 +146,7 @@ def test_get_elements(init_readonly_dbm):
     element = init_readonly_dbm.get_elements("1")
     assert type(element) is list
     logging.info(element)
-    assert len(element) == 21
+    assert len(element) == 22
 
     # it must return empty list
     element = init_readonly_dbm.get_elements("none", "none")

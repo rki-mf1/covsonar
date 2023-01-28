@@ -5,7 +5,7 @@ import shutil
 
 import pytest
 
-from covsonar import sonar
+from src.covsonar import sonar
 
 
 def test_check_file_not_exist(tmpfile_name):
