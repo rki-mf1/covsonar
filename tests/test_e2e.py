@@ -4,7 +4,6 @@ import re
 import shutil
 
 import pytest
-
 from src.covsonar import sonar
 
 
@@ -289,7 +288,6 @@ def test_info(tmp_path, monkeypatch):
     db_path = tmp_path / "import-test.db"
 
     shutil.copy(db_path_orig, db_path)
-    # sonar.parse_args(["--version"])
     run_cli(f" info --db {db_path}")
     run_cli(f" list-prop --db {db_path}")
     run_cli(f" dev --db {db_path}")

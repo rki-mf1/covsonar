@@ -3,6 +3,7 @@
 # The method originally came from  https://github.com/cov-lineages/pango-designation.
 # We just adapt and change some parts to be used in covsonar, vocal etc.
 
+import importlib.resources
 import json
 import os
 import shutil
@@ -15,17 +16,17 @@ from . import logging
 
 try:  # noqa: C901
     from pango_aliasor.aliasor import Aliasor
+
+
 except ModuleNotFoundError:  # pragma: no cover
-    logging.WARN("Dependency `pango_aliasor` missing, please install using `pip install pango_aliasor`")
+    logging.WARN(
+        "Dependency `pango_aliasor` missing, please install using `pip install pango_aliasor`"
+    )
     logging.WARN("Fall back to original Aliasor...")
 
     class Aliasor:
         def __init__(self, alias_file=None):
-            import json
-
             if alias_file is None:
-                import importlib.resources
-
                 with importlib.resources.open_text(
                     "pango_designation", "alias_key.json"
                 ) as file:

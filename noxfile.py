@@ -28,13 +28,14 @@ def install_with_constraints(session: Session, *args: str, **kwargs: Any) -> Non
         session.run(
             "poetry",
             "export",
-            "--dev",
+            "--with",
+            "dev",
             "--format=requirements.txt",
             "--without-hashes",
             f"--output={requirements.name}",
             external=True,
         )
-        session.install(f"--constraint={requirements.name}", *args, **kwargs)
+        session.install(f"--requirement={requirements.name}", *args, **kwargs)
 
 
 @nox.session(python="3.9")
@@ -75,7 +76,7 @@ def lint(session: Session) -> None:
 def tests(session):
     args = session.posargs or ["--cov"]
     session.conda_install("emboss==6.6.0", "libiconv", channel="bioconda")
-    session.run("poetry", "install", "--no-dev", external=True)
+    session.run("poetry", "install", "--only", "main", external=True)
     install_with_constraints(
         session, "coverage[toml]", "pytest", "pytest-cov", "pytest-sugar"
     )

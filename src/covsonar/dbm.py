@@ -716,7 +716,7 @@ class sonarDBManager:
     def get_source(self, molecule_id):
         if len(self.get_elements(molecule_id, "source")) > 0:
             return self.get_elements(molecule_id, "source")[0]
-        else: 
+        else:
             return None
 
     def get_annotation(

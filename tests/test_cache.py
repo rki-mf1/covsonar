@@ -4,7 +4,6 @@ from pathlib import Path
 import shutil
 
 import pytest
-
 from src.covsonar.cache import sonarCache
 from src.covsonar.dbm import sonarDBManager
 

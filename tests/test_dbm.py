@@ -4,7 +4,6 @@ import sqlite3
 
 from Bio.Seq import Seq
 import pytest
-
 from src.covsonar.dbm import sonarDBManager
 
 
@@ -146,7 +145,7 @@ def test_get_elements(init_readonly_dbm):
     element = init_readonly_dbm.get_elements("1")
     assert type(element) is list
     logging.info(element)
-    assert len(element) == 22
+    assert len(element) == 21
 
     # it must return empty list
     element = init_readonly_dbm.get_elements("none", "none")

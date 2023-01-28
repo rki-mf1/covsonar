@@ -3,7 +3,6 @@ from pathlib import Path
 import re
 
 import pytest
-
 from src.covsonar.basics import sonarBasics
 
 

@@ -4,7 +4,6 @@ from pathlib import Path
 import shutil
 
 import pytest
-
 from src.covsonar import sonar
 
 
