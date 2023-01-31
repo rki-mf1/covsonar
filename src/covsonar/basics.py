@@ -612,6 +612,7 @@ class sonarBasics(object):
             print("database path:             ", dbm.dbfile)
             print("database version:          ", dbm.get_db_version())
             print("database size:             ", dbm.get_db_size())
+            print("unique samples:            ", dbm.count_samples())
             print("unique sequences:          ", dbm.count_sequences())
             # print("Sample properties          ", dbm.get_earliest_import())
             # print("latest genome import:      ", dbm.get_latest_import())

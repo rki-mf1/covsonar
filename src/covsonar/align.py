@@ -73,7 +73,7 @@ class sonarAligner(object):
                 ]
             )
             if aa_vars:
-                # concatinate to the same file of NT variants
+                # concatenate to the same file of NT variants
                 vars += "\n" + aa_vars
             vars += "\n"
         try:
@@ -115,8 +115,9 @@ class sonarAligner(object):
                 s = i - 1
                 while ref_seq[i + 1] == "-":
                     i += 1
+                # insertion at pos 0
                 if s == -1:
-                    ref = " "
+                    ref = "-"
                     alt = qry_seq[: i + 1]
                 else:
                     ref = ref_seq[s]

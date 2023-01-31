@@ -390,7 +390,6 @@ class sonarDBManager:
         >>> rowid = dbm.insert_sample("my_new_sample", "1a1f34ef4318911c2f98a7a1d6b7e9217c4ae1d1")
 
         """
-        self.insert_sequence(seqhash)
         sql = "INSERT OR REPLACE INTO sample (name, seqhash, datahash) VALUES(?, ?, ?);"
         self.cursor.execute(sql, [sample_name, seqhash, ""])
         sql = "SELECT id FROM sample WHERE name = ?;"
@@ -398,6 +397,7 @@ class sonarDBManager:
         for pname in self.properties:
             if not self.properties[pname]["standard"] is None:
                 self.insert_property(sid, pname, self.properties[pname]["standard"])
+        self.insert_sequence(seqhash)
         return sid
 
     def insert_alignment(self, seqhash, element_id):
@@ -1563,10 +1563,9 @@ class sonarDBManager:
                 + selected_sample_ids
                 + ")"
             )
-            # print(_1_final_sql)
             _1_rows = self.cursor.execute(_1_final_sql).fetchall()
             _2_final_sql = (
-                " SELECT name AS 'sample.name'  , nt_profile._profile AS NUC_PROFILE, aa_profile._profile AS AA_PROFILE \
+                " SELECT name AS 'sample.name', nt_profile._profile AS NUC_PROFILE, aa_profile._profile AS AA_PROFILE \
                     FROM \
                             ( \
                               SELECT  \"sample.id\", group_concat("
@@ -1596,55 +1595,34 @@ class sonarDBManager:
                 + selected_sample_ids
                 + ")"
             )
-            _2_rows = self.cursor.execute(_2_final_sql).fetchall()
-            if len(_1_rows) != len(_2_rows):
-                logging.warning(
-                    "covSonarBot detects something suspicious in match command."
-                )
-                logging.warning(
-                    "Mismatch records; %d and %d between meta-info and fasta"
-                    % (len(_1_rows), len(_2_rows))
-                )
-                logging.warning(
-                    "This might happen when the ID of a sample does not represent in either fasta or meta-info file, or there is no NT/AA profile in a sample"
-                )
-                logging.warning(
-                    "Please interpret result carefully, otherwise contact us"
-                )
 
-            # print(set([ x['sample.name'] for x in _1_rows ]) ^ set([ x['name'] for x in _2_rows ]))
+            _2_rows = {
+                x["sample.name"]: x
+                for x in self.cursor.execute(_2_final_sql).fetchall()
+            }
             # To combine:
             # We update list of dict (update on result from query #2)
             # merge all results
-            _1_rows.extend(
-                list(
-                    map(
-                        lambda x, y: x.update(
-                            {
-                                key: value
-                                for key, value in y.items()
-                                if (key == "NUC_PROFILE") or (key == "AA_PROFILE")
-                            }
-                        )
-                        if x.get("sample.name") == y.get("sample.name")
-                        else None,
-                        _1_rows,
-                        _2_rows,
-                    )
-                )
-            )
-
+            for key in range(len(_1_rows)):
+                if not _1_rows[key]:
+                    continue
+                sample = _1_rows[key]["sample.name"]
+                if sample in _2_rows:
+                    _1_rows[key]["NUC_PROFILE"] = _2_rows[sample]["NUC_PROFILE"]
+                    _1_rows[key]["AA_PROFILE"] = _2_rows[sample]["AA_PROFILE"]
+                else:
+                    _1_rows[key]["NUC_PROFILE"] = None
+                    _1_rows[key]["AA_PROFILE"] = None
             _1_rows = list(filter(None, _1_rows))
+
             # filter column
+
             if output_column != "all":
                 _1_rows = [
                     {k: v for k, v in d.items() if k in output_column} for d in _1_rows
                 ]
-            # print(_1_rows)
-            # print(list(_1_rows))
-            # since we use "update" function (i.e. extends the dict. to include all key:value from properties base on sample name)
-            # at _1_rows so we can return _1_rows only a
-            return _1_rows  # list(rows.values())
+            # since we added for profile information to _1_rows so we can return _1_rows only
+            return _1_rows
             """
             sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
                SELECT  *, \

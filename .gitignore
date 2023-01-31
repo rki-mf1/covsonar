@@ -164,3 +164,6 @@ cython_debug/
 
 # Test data
 !tests/data/cache-test/var
+
+# Editor
+.vscode/

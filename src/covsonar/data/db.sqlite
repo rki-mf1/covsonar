@@ -7,7 +7,8 @@ PRAGMA analysis_limit=1000;
 --
 
 CREATE TABLE IF NOT EXISTS sequence (
-	seqhash VARCHAR PRIMARY KEY
+	seqhash VARCHAR PRIMARY KEY,
+	FOREIGN KEY(seqhash) REFERENCES sample(seqhash) ON DELETE CASCADE
 ) WITHOUT ROWID;
 
 
@@ -19,8 +20,7 @@ CREATE TABLE IF NOT EXISTS sample (
 	id INTEGER PRIMARY KEY,
 	name VARCHAR NOT NULL UNIQUE,
 	seqhash VARCHAR NOT NULL,
-	datahash VARCHAR NOT NULL,
-	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash) ON DELETE CASCADE
+	datahash VARCHAR NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sample_name ON sample(name);
 CREATE INDEX IF NOT EXISTS idx_sample_seqhash ON sample(seqhash);
