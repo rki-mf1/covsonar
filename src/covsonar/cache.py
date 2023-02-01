@@ -13,6 +13,7 @@ import shutil
 import sys
 from tempfile import mkdtemp
 from tempfile import TemporaryDirectory
+import traceback
 
 import pandas as pd
 from tqdm import tqdm
@@ -623,6 +624,7 @@ class sonarCache:
                     print("\n------- Fatal Error ---------")
                     print("\nDebugging Information")
                     print(e)
+                    traceback.print_exc()
                     pp.pprint(sample_data)
                     sys.exit("unknown import error")
 
@@ -638,6 +640,7 @@ class sonarCache:
             )
             seq = list(refseqs[sample_data["sourceid"]])
 
+        # sequence recovery based on nucleotide variations
         prefix = ""
         for vardata in dbm.iter_dna_variants(
             sample_data["name"], sample_data["sourceid"]
@@ -645,6 +648,8 @@ class sonarCache:
             if vardata["variant.alt"] == " ":
                 for i in range(vardata["variant.start"], vardata["variant.end"]):
                     seq[i] = ""
+            elif vardata["variant.alt"] == ".":
+                seq[vardata["variant.start"]] = ""
             elif vardata["variant.start"] >= 0:
                 seq[vardata["variant.start"]] = vardata["variant.alt"]
             else:
@@ -659,10 +664,12 @@ class sonarCache:
                 qryfile = os.path.join(tempdir, "qry")
                 reffile = os.path.join(tempdir, "ref")
                 with open(qryfile, "w") as handle:
-                    handle.write(">seq\n" + seq)
+                    handle.write(seq)
                 with open(reffile, "w") as handle:
-                    handle.write(">ref\n" + orig_seq)
-                qry, ref = aligner.align(qryfile, reffile)
+                    handle.write(orig_seq)
+                ref, qry, cigar = aligner.align(
+                    aligner.read_seqcache(qryfile), aligner.read_seqcache(reffile)
+                )
             with open("paranoid.alignment.fna", "w") as handle:
                 handle.write(
                     ">original_"
@@ -678,7 +685,9 @@ class sonarCache:
             sys.exit(
                 "import error: original sequence of sample "
                 + sample_data["name"]
-                + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna)"
+                + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna):"
+                + " "
+                + cigar
             )
 
 

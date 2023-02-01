@@ -1564,6 +1564,8 @@ class sonarDBManager:
                 + ")"
             )
             _1_rows = self.cursor.execute(_1_final_sql).fetchall()
+            _1_rows = sorted(_1_rows, key=lambda x: x["sample.name"])
+
             _2_final_sql = (
                 " SELECT name AS 'sample.name', nt_profile._profile AS NUC_PROFILE, aa_profile._profile AS AA_PROFILE \
                     FROM \
@@ -1616,7 +1618,6 @@ class sonarDBManager:
             _1_rows = list(filter(None, _1_rows))
 
             # filter column
-
             if output_column != "all":
                 _1_rows = [
                     {k: v for k, v in d.items() if k in output_column} for d in _1_rows

@@ -4,10 +4,12 @@
 
 import os
 import pickle
+import re
 import sys
 
 from Bio.Emboss.Applications import StretcherCommandline
 import pandas as pd
+import parasail
 
 
 class sonarAligner(object):
@@ -21,8 +23,14 @@ class sonarAligner(object):
         self.nuc_n_profile = []
         self.aa_profile = []
         self.aa_n_profile = []
+        self.cigar_pattern = re.compile(r"(\d+)(\D)")
 
-    def align(self, qry, ref, gapopen=16, gapextend=4):
+    def read_seqcache(self, fname):
+        with open(fname, "r") as handle:
+            seq = handle.readline().strip()
+        return seq
+
+    def align_global(self, qry, ref, gapopen=16, gapextend=4):
         """ """
         cline = StretcherCommandline(
             asequence=qry,
@@ -39,6 +47,106 @@ class sonarAligner(object):
         qry = stdout[s1:e].replace("\n", "")
         ref = stdout[s2:].replace("\n", "")
         return qry, ref
+
+    def align(self, qryseq, refseq, gapopen=16, gapextend=4):
+        """ """
+        result = parasail.sg_trace(
+            qryseq, refseq, gapopen, gapextend, parasail.blosum62
+        )
+        return (
+            result.traceback.ref,
+            result.traceback.query,
+            result.get_cigar().decode.decode(),
+        )
+
+    def extract_vars_from_cigar(self, qryseq, refseq, cigar, elemid):  # noqa: C901
+        refpos = 0
+        qrypos = 0
+        qrylen = len(qryseq)
+        vars = []
+        for match in self.cigar_pattern.finditer(cigar):
+            vartype = match.group(2)
+            varlen = int(match.group(1))
+            # identical sites
+            if vartype == "=":
+                refpos += varlen
+                qrypos += varlen
+            # snp handling
+            elif vartype == "X":
+                for x in range(varlen):
+                    ref = refseq[refpos]
+                    alt = qryseq[qrypos]
+                    vars.append(
+                        (
+                            ref,
+                            str(refpos),
+                            str(refpos + 1),
+                            alt,
+                            elemid,
+                            ref + str(refpos + 1) + alt,
+                        )
+                    )
+                    refpos += 1
+                    qrypos += 1
+            # deletion handling
+            elif vartype == "D":
+                if refpos == 0 or qrypos == qrylen:  # deletion at sequence terminus
+                    for x in range(varlen):
+                        vars.append(
+                            (refseq[x], str(refpos), str(refpos + 1), ".", elemid, " ")
+                        )
+                        refpos += 1
+                elif varlen == 1:  # 1bp deletion
+                    vars.append(
+                        (
+                            refseq[refpos],
+                            str(refpos),
+                            str(refpos + 1),
+                            " ",
+                            elemid,
+                            "del:" + str(refpos + 1),
+                        )
+                    )
+                    refpos += 1
+                else:  # multi-bp deletion
+                    vars.append(
+                        (
+                            refseq[refpos : refpos + varlen],
+                            str(refpos),
+                            str(refpos + varlen),
+                            " ",
+                            elemid,
+                            "del:" + str(refpos + 1) + "-" + str(refpos + varlen),
+                        )
+                    )
+                    refpos += varlen
+            # insertion handling
+            elif vartype == "I":
+                if refpos == 0:  # to consider insertion berfore sequence start
+                    ref = "."
+                    alt = qryseq[:varlen]
+                else:
+                    ref = refseq[refpos - 1]
+                    alt = qryseq[qrypos - 1 : qrypos + varlen]
+                vars.append(
+                    (
+                        ref,
+                        str(refpos - 1),
+                        str(refpos),
+                        alt,
+                        elemid,
+                        ref + str(refpos) + alt,
+                    )
+                )
+                qrypos += varlen
+            # unknown
+            else:
+                sys.exit(
+                    "error: covSonar cannot interpret '"
+                    + vartype
+                    + "' in cigar string."
+                )
+        return vars
 
     def process_cached_sample(self, fname):
         """
@@ -58,9 +166,13 @@ class sonarAligner(object):
             if line == "//":
                 return True
 
-        sourceid = str(data["sourceid"])
-        alignment = self.align(data["seq_file"], data["ref_file"])
-        nuc_vars = [x for x in self.extract_vars(*alignment, sourceid)]
+        elemid = str(data["sourceid"])
+        qryseq = self.read_seqcache(data["seq_file"])
+        refseq = self.read_seqcache(data["ref_file"])
+        _, __, cigar = self.align(qryseq, refseq)
+        nuc_vars = [
+            x for x in self.extract_vars_from_cigar(qryseq, refseq, cigar, elemid)
+        ]
         vars = "\n".join(["\t".join(x) for x in nuc_vars])
         if nuc_vars:
             # create AA mutation
@@ -84,54 +196,6 @@ class sonarAligner(object):
             with open(data["var_file"], "w") as handle:
                 handle.write(vars + "//")
         return True
-
-    def extract_vars(self, qry_seq, ref_seq, elemid):
-        query_length = len(qry_seq)
-        if query_length != len(ref_seq):
-            sys.exit("error: sequences differ in length")
-        qry_seq += " "
-        ref_seq += " "
-        i = 0
-        offset = 0
-        while i < query_length:
-            # match
-            if qry_seq[i] == ref_seq[i]:
-                pass
-            # deletion
-            elif qry_seq[i] == "-":
-                s = i
-                while qry_seq[i + 1] == "-":
-                    i += 1
-                start = s - offset
-                end = i + 1 - offset
-                if end - start == 1:
-                    label = "del:" + str(start + 1)
-                else:
-                    label = "del:" + str(start + 1) + "-" + str(end)
-                yield ref_seq[s : i + 1], str(start), str(end), " ", elemid, label
-
-            # insertion
-            elif ref_seq[i] == "-":
-                s = i - 1
-                while ref_seq[i + 1] == "-":
-                    i += 1
-                # insertion at pos 0
-                if s == -1:
-                    ref = "-"
-                    alt = qry_seq[: i + 1]
-                else:
-                    ref = ref_seq[s]
-                    alt = qry_seq[s : i + 1]
-                pos = s - offset + 1
-                yield ref, str(pos - 1), str(pos), alt, elemid, ref + str(pos) + alt
-                offset += i - s
-            # snps
-            else:
-                ref = ref_seq[i]
-                alt = qry_seq[i]
-                pos = i - offset + 1
-                yield ref, str(pos - 1), str(pos), alt, elemid, ref + str(pos) + alt
-            i += 1
 
     def translate(self, seq, tt):
         aa = []
@@ -158,7 +222,7 @@ class sonarAligner(object):
             | (df["ref3"] != df["alt3"])
         ]
         df["altAa"] = df.apply(
-            lambda x: self.translate(x["alt1"] + x["alt1"] + x["alt1"], tt), axis=1
+            lambda x: self.translate(x["alt1"] + x["alt2"] + x["alt3"], tt), axis=1
         )
         df = df.loc[df["aa"] != df["altAa"]]
 
@@ -203,3 +267,60 @@ class sonarAligner(object):
             yield prev_row["aa"], str(start), str(end), " ", str(
                 prev_row["elemid"]
             ), label
+
+    # deprecated var extractor from aligned sequence strings
+    def extract_vars(self, qry_seq, ref_seq, elemid):  # noqa: C901
+        query_length = len(qry_seq)
+        if query_length != len(ref_seq):
+            sys.exit("error: sequences differ in length")
+        qry_seq += " "
+        ref_seq += " "
+        i = 0
+        offset = 0
+        while i < query_length:
+            # match
+            if qry_seq[i] == ref_seq[i]:
+                pass
+            # deletion
+            elif qry_seq[i] == "-":
+                s = i
+                while qry_seq[i + 1] == "-":
+                    i += 1
+                start = s - offset
+                end = i + 1 - offset
+                if (
+                    start == 0 or end == query_length
+                ):  # handle deletions at sequence termini
+                    for k in range(start, end):
+                        ref = ref_seq[k]
+                        pos = k - offset + 1
+                        yield ref, str(pos - 1), str(pos), ".", elemid, " "
+                else:  # 'real' (inner) deletions
+                    if end - start == 1:
+                        label = "del:" + str(start + 1)
+                    else:
+                        label = "del:" + str(start + 1) + "-" + str(end)
+                    yield ref_seq[s : i + 1], str(start), str(end), " ", elemid, label
+
+            # insertion
+            elif ref_seq[i] == "-":
+                s = i - 1
+                while ref_seq[i + 1] == "-":
+                    i += 1
+                # insertion at pos 0
+                if s == -1:
+                    ref = "."
+                    alt = qry_seq[: i + 1]
+                else:
+                    ref = ref_seq[s]
+                    alt = qry_seq[s : i + 1]
+                pos = s - offset + 1
+                yield ref, str(pos - 1), str(pos), alt, elemid, ref + str(pos) + alt
+                offset += i - s
+            # snps
+            else:
+                ref = ref_seq[i]
+                alt = qry_seq[i]
+                pos = i - offset + 1
+                yield ref, str(pos - 1), str(pos), alt, elemid, ref + str(pos) + alt
+            i += 1
