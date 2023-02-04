@@ -517,6 +517,7 @@ class sonarBasics(object):
                 format=format,
                 output_column=output_column,
                 showNX=showNX,
+                ignoreTerminalGaps=True,
             )
             if format == "csv" or format == "tsv":
                 tsv = True if format == "tsv" else False

@@ -1375,6 +1375,7 @@ class sonarDBManager:
         properties=None,
         reference_accession=None,
         showNX=False,
+        ignoreTerminalGaps=False,
         output_column="all",
         format="csv",
     ):
@@ -1507,6 +1508,7 @@ class sonarDBManager:
         else:
             nn = ""
             nx = ""
+        tg = ' AND "variant.alt" != "." ' if ignoreTerminalGaps else ""
 
         cds_element_condition = [
             str(x) for x in self.get_element_ids(reference_accession, "cds")
@@ -1578,6 +1580,7 @@ class sonarDBManager:
                 + ") AND "
                 + genome_element_condition
                 + nn
+                + tg
                 + ' GROUP BY "sample.id" \
                             ) nt_profile, \
                             ( \
@@ -1624,25 +1627,7 @@ class sonarDBManager:
                 ]
             # since we added for profile information to _1_rows so we can return _1_rows only
             return _1_rows
-            """
-            sql = "WITH selected_samples AS (" + sample_selection_sql + ") \
-               SELECT  *, \
-                        ( \
-                          SELECT group_concat(" + m + "\"variant.label\") AS nuc_profile \
-                          FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + genome_element_condition + nn + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
-                        ) nt_profile, \
-                        ( \
-                          SELECT group_concat(" + m + "\"element.symbol\" || \":\" || \"variant.label\") AS nuc_profile \
-                          FROM variantView WHERE \"sample.id\" IN (SELECT id FROM selected_samples) AND " + cds_element_condition + np + " GROUP BY \"sample.name\" ORDER BY \"element.id\", \"variant.start\" \
-                        ) aa_profile \
-                FROM sample \
-                WHERE id IN ( SELECT id FROM selected_samples )"
 
-
-            sql = "SELECT * \
-                   FROM variantView \
-                   WHERE \"sample.id\" IN (" + sample_selection_sql + ")" # ORDER BY \"sample.id\", \"element.id\", \"variant.start\""
-            """
         elif format == "count":
             sql = (
                 "SELECT count(DISTINCT id) as count FROM (" + sample_selection_sql + ")"
@@ -1654,6 +1639,7 @@ class sonarDBManager:
                 + ") AND "
                 + genome_element_condition
                 + nn
+                + tg
                 + 'GROUP BY "molecule.accession", "variant.start", "variant.ref", "variant.alt" ORDER BY "molecule.accession", "variant.start"'
             )
         else:

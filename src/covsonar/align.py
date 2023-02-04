@@ -62,6 +62,7 @@ class sonarAligner(object):
     def extract_vars_from_cigar(self, qryseq, refseq, cigar, elemid):  # noqa: C901
         refpos = 0
         qrypos = 0
+        prefix = False
         qrylen = len(qryseq)
         vars = []
         for match in self.cigar_pattern.finditer(cigar):
@@ -90,7 +91,9 @@ class sonarAligner(object):
                     qrypos += 1
             # deletion handling
             elif vartype == "D":
-                if refpos == 0 or qrypos == qrylen:  # deletion at sequence terminus
+                if (
+                    refpos == 0 and prefix is False
+                ) or qrypos == qrylen:  # deletion at sequence terminus
                     for x in range(varlen):
                         vars.append(
                             (refseq[x], str(refpos), str(refpos + 1), ".", elemid, " ")
@@ -125,6 +128,7 @@ class sonarAligner(object):
                 if refpos == 0:  # to consider insertion berfore sequence start
                     ref = "."
                     alt = qryseq[:varlen]
+                    prefix = True
                 else:
                     ref = refseq[refpos - 1]
                     alt = qryseq[qrypos - 1 : qrypos + varlen]
@@ -205,11 +209,13 @@ class sonarAligner(object):
             aa.append(tt[codon])
         return "".join(aa)
 
-    def lift_vars(self, nuc_vars, lift_file, tt_file):
+    def lift_vars(self, nuc_vars, lift_file, tt_file):  # noqa: C901
         df = pd.read_pickle(lift_file)
         with open(tt_file, "rb") as handle:
             tt = pickle.load(handle, encoding="bytes")
         for nuc_var in nuc_vars:
+            if nuc_var[3] == ".":
+                continue
             for i in range(int(nuc_var[1]), int(nuc_var[2])):
                 alt = "-" if nuc_var[3] == " " else nuc_var[3]
                 df.loc[df["nucPos1"] == i, "alt1"] = alt
@@ -268,8 +274,12 @@ class sonarAligner(object):
                 prev_row["elemid"]
             ), label
 
-    # deprecated var extractor from aligned sequence strings
-    def extract_vars(self, qry_seq, ref_seq, elemid):  # noqa: C901
+    def extract_vars(self, qry_seq, ref_seq, elemid):  # pragma: no cover # noqa: C901
+        """
+        var extractor from aligned sequence strings
+        @deprecated("use another method")
+        this will be removed soon
+        """
         query_length = len(qry_seq)
         if query_length != len(ref_seq):
             sys.exit("error: sequences differ in length")

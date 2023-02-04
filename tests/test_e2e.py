@@ -78,6 +78,56 @@ def test_valid_beginning(tmp_path, monkeypatch):
     run_cli(f"update-lineage-info --db {db_path}")
 
 
+def test_import_update_delete(tmp_path, monkeypatch):
+    """The test example provided by other devs, after the import command"""
+    monkeypatch.chdir(Path(__file__).parent)
+
+    db_path_orig = Path("data/test.db")
+    db_path = tmp_path / "import-test.db"
+
+    shutil.copy(db_path_orig, db_path)
+
+    # test import
+    run_cli(
+        f"import --db {db_path} --fasta data/test.fasta --cols sample=IMS_ID --threads 2"
+    )
+    run_cli(f"match --db {db_path} --showNX -o {tmp_path}/test.import.csv")
+    assert filecmp.cmp(f"{tmp_path}/test.import.csv", "data/test.import.csv")
+
+    # test delete
+    run_cli(
+        f"import --db {db_path} --fasta data/test.fasta --cols sample=IMS_ID --threads 2"
+    )
+    run_cli(f"delete --db {db_path} --sample seq03")
+    run_cli(f"match --db {db_path} --format csv -o {tmp_path}/test.delete.csv")
+    assert filecmp.cmp(f"{tmp_path}/test.delete.csv", "data/test.delete.csv")
+
+    # test import2
+    run_cli(
+        f"import --db {db_path} --fasta data/test.seq03.fasta --cols sample=IMS_ID --threads 2"
+    )
+    run_cli(
+        f"match --profile T26504TATGC --db {db_path} -o {tmp_path}/test.import2.csv"
+    )
+    assert filecmp.cmp(f"{tmp_path}/test.import2.csv", "data/test.import2.csv")
+
+    # test no update
+    run_cli(
+        f"import --db {db_path} --fasta data/test.fasta --cols sample=IMS_ID --threads 2 --no-update"
+    )
+    run_cli(
+        f"match --profile T26504TATGC --db {db_path} -o {tmp_path}/test.no-update.csv"
+    )
+    assert filecmp.cmp(f"{tmp_path}/test.no-update.csv", "data/test.import2.csv")
+
+    # test update
+    run_cli(
+        f"import --db {db_path} --fasta data/test.fasta --cols sample=IMS_ID --threads 2"
+    )
+    run_cli(f"match --db {db_path} --showNX -o {tmp_path}/test.update.csv")
+    assert filecmp.cmp(f"{tmp_path}/test.update.csv", "data/test.import.csv")
+
+
 def test_import(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
     monkeypatch.chdir(Path(__file__).parent)
