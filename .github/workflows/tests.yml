@@ -8,7 +8,7 @@ jobs:
         shell: bash -l {0}
     strategy:
       matrix:
-        python-version: ['3.9.10']
+        python-version: ['3.9']
     name: Python ${{ matrix.python-version }}
     steps:
     - uses: actions/checkout@v3
@@ -18,11 +18,11 @@ jobs:
         architecture: x64
     - uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: 3.9.10
+        python-version: 3.9
         mamba-version: "*"
         activate-environment: covsonar
         channels: conda-forge,bioconda,defaults
         channel-priority: true
-    - run: pip install nox==2022.1.7
-    - run: pip install poetry==1.1.13
+    - run: pip install nox==2022.11.21
+    - run: pip install poetry==1.3.2
     - run: nox
