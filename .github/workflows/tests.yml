@@ -8,7 +8,7 @@ jobs:
         shell: bash -l {0}
     strategy:
       matrix:
-        python-version: ['3.9']
+        python-version: ['3.9.10']
     name: Python ${{ matrix.python-version }}
     steps:
     - uses: actions/checkout@v3
@@ -18,7 +18,7 @@ jobs:
         architecture: x64
     - uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: 3.9
+        python-version: 3.9.10
         mamba-version: "*"
         activate-environment: covsonar
         channels: conda-forge,bioconda,defaults
