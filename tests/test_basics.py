@@ -42,7 +42,8 @@ def test_match(testdb):
         sonarBasics().match(
             testdb,
             profiles=[],
-            reserved_props_dict={},
+            samples=[],
+            lincol=None,
             propdict={},
             reference=None,
             outfile=None,

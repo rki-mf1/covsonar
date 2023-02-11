@@ -31,7 +31,7 @@ def parse_args(args):
     user_namespace = arg_namespace()
     parser = argparse.ArgumentParser(prog="sonar", description="covsonar " + VERSION)
     subparsers = parser.add_subparsers(
-        help="detect, store, and screen for mutations in genomic sequences"
+        help="detect, store, and match mutations in genomic sequences."
     )
     subparsers.dest = "tool"
     subparsers.required = True
@@ -51,16 +51,10 @@ def parse_args(args):
     # parser component: output
     output_parser = argparse.ArgumentParser(add_help=False)
     output_parser.add_argument(
-        "--out-column",
-        help="select output columns to the output file (support csv and tsv)",
-        type=str,
-        default="all",
-    )
-    output_parser.add_argument(
         "-o",
         "--out",
         metavar="FILE",
-        help="write output to file",
+        help="write output file (please note: existing file will be overwritten!)",
         type=str,
         default=None,
     )
@@ -70,7 +64,7 @@ def parse_args(args):
     sample_parser.add_argument(
         "--sample",
         metavar="STR",
-        help="sample accession(s) to consider ",
+        help="sample accession(s) to consider",
         type=str,
         nargs="+",
         default=[],
@@ -87,7 +81,7 @@ def parse_args(args):
     # parser component: property name
     prop_parser = argparse.ArgumentParser(add_help=False)
     prop_parser.add_argument(
-        "--name", metavar="STR", help="name of sample property", type=str, required=True
+        "--name", metavar="STR", help="property name", type=str, required=True
     )
 
     # parser component: reference
@@ -126,7 +120,7 @@ def parse_args(args):
     parser_setup.add_argument(
         "--gbk",
         metavar="FILE",
-        help="genbank file of the reference genome (default MN908947.3 is used as reference)",
+        help="genbank file reference genome sequence and annotation (default MN908947.3 is used as reference)",
         type=str,
         default=None,
     )
@@ -135,7 +129,7 @@ def parse_args(args):
     parser_import = subparsers.add_parser(
         "import",
         parents=[general_parser, thread_parser],
-        help="Import genome sequences and sample information to the database.",
+        help="Import genome sequences and sample properties into the database.",
     )
     parser_import.add_argument(
         "--fasta",
@@ -153,19 +147,19 @@ def parse_args(args):
     )
     parser_import.add_argument(
         "--cols",
-        help="define column names for sample properties (if different from property name)",
+        help="if differing, assign column names used in the provided TSV file to the matching property names provided by the database in the form PROPERTY-NAME=COL-NAME (e.g. SAMPLE=GenomeID)",
         type=str,
         nargs="+",
         default=[],
     )
     parser_import.add_argument(
         "--no-autodetect",
-        help="do not auto-detect of columns for sample properties based on property names",
+        help="do not auto-detect of columns for sample properties based on identical names",
         action="store_true",
     )
     parser_import.add_argument(
         "--no-update",
-        help="skip samples already existing in the database",
+        help="do not update sequences or properties of samples already existing in the database",
         action="store_true",
     )
     parser_import.add_argument(
@@ -179,7 +173,7 @@ def parse_args(args):
     parser_import_g1.add_argument(
         "--no-progress",
         "-p",
-        help="don't show progress bars while importing",
+        help="do not show progress bars while importing",
         action="store_true",
     )
 
@@ -241,7 +235,7 @@ def parse_args(args):
     parser_match = subparsers.add_parser(
         "match",
         parents=[sample_parser, output_parser, general_parser],
-        help="get mutations profiles for given accessions.",
+        help="match samples based on mutation profiles and/or sample properties.",
     )
     parser_match.add_argument(
         "--profile",
@@ -254,14 +248,28 @@ def parse_args(args):
         default=[],
     )
     parser_match.add_argument(
+        "--with-sublineage",
+        metavar="STR",
+        help="use sublineage mapping for the specified property, which must refer to pangolin virus lineages for SARS-CoV-2.",
+        type=str,
+        default=None,
+    )
+    parser_match.add_argument(
         "--showNX",
-        help="include any variant character in the result (X for AA and N for NT)",
+        help="include non-informative polymorphisms in resulting mutation profiles (X for AA and N for NT)",
         action="store_true",
     )
-
+    parser_match.add_argument(
+        "--out-cols",
+        metavar="STR",
+        help="define output columns for csv and tsv files (by default all available columns are shown)",
+        type=str,
+        nargs="+",
+        default=[],
+    )
     parser_match_format = parser_match.add_mutually_exclusive_group()
     parser_match_format.add_argument(
-        "--count", help="count instead of listing matching genomes", action="store_true"
+        "--count", help="count matching genomes only", action="store_true"
     )
     parser_match_format.add_argument(
         "--format",
@@ -269,41 +277,31 @@ def parse_args(args):
         choices=["csv", "tsv", "vcf"],
         default="tsv",
     )
-    parser_match.add_argument(
-        "--with-sublineage",
-        metavar="STR",
-        help="recursively get all sublineages from a given lineage. ",
-        type=str,
-        default=None,
-    )
 
     # delete parser
-    parser_delete = subparsers.add_parser(
+    parser_delete = subparsers.add_parser(  # noqa: F841
         "delete",
         parents=[ref_parser, sample_parser, general_parser],
-        help="delete one or more samples from the database.",
-    )
-    parser_delete.add_argument(
-        "--aligned",
-        help="ise aligned form (deletions indicated by - and insertions by lower-case letters)",
-        action="store_true",
+        help="delete samples from the database.",
     )
 
     # restore parser
     parser_restore = subparsers.add_parser(
         "restore",
-        parents=[ref_parser, sample_parser, general_parser],
+        parents=[ref_parser, sample_parser, output_parser, general_parser],
         help="restore sequence(s) from the database.",
     )
     parser_restore.add_argument(
         "--aligned",
-        help="ise aligned form (deletions indicated by - and insertions by lower-case letters)",
+        help="use pairwise aligned form (deletions indicated by - and insertions by lower-case letters)",
         action="store_true",
     )
 
     # info parser
     subparsers.add_parser(
-        "info", parents=[general_parser], help="show software and database info"
+        "info",
+        parents=[general_parser],
+        help="show detailed information about the software and database ",
     )
 
     # optimize parser
@@ -339,24 +337,11 @@ def parse_args(args):
 
     # register known arguments
     pargs = parser.parse_known_args(args=args, namespace=user_namespace)
-    # register dynamic arguments
-    # register additonal arguments from database-specific sample property names when matching genomes
+    # register additonal arguments from database-specific sample property names
     if pargs[0].tool == "match" and hasattr(pargs[0], "db"):
         with sonarDBManager(pargs[0].db, readonly=True, debug=pargs[0].debug) as dbm:
             for prop in dbm.properties.values():
-                # if prop["datatype"] == "integer":
-                #    t = int
-                # elif prop["datatype"] == "float":
-                #    t = float
-                # else:
-                #    t = str
-                if pargs[0].tool == "match":
-                    parser_match.add_argument(
-                        "--" + prop["name"],
-                        # type=t,
-                        nargs="+",
-                        # default=argparse.SUPPRESS,
-                    )
+                parser_match.add_argument("--" + prop["name"], type=str, nargs="+")
 
     # return
     return parser.parse_args(args=args, namespace=user_namespace)
@@ -364,17 +349,14 @@ def parse_args(args):
 
 def check_file(fname):
     if not os.path.isfile(fname):
-        sys.exit("iput error: " + fname + " is not a valid file.")
+        sys.exit("input error: " + fname + " is not a valid file.")
 
 
 def main(args):  # noqa: C901
     # process arguments
-    # args = parse_args()
-
     if hasattr(args, "db") and args.db:
         if args.tool != "setup" and args.db is not None and not os.path.isfile(args.db):
             sys.exit("input error: database does not exist.")
-            # check_db_compatibility
 
     # set debugging mode
     if hasattr(args, "debug") and args.debug:
@@ -383,7 +365,7 @@ def main(args):  # noqa: C901
         debug = False
 
     # tool procedures
-    # setup, db-upgrade
+    # setup, db-upgrade, database compatibility check
     if args.tool == "setup":
         if args.gbk:
             check_file(args.gbk)
@@ -402,6 +384,7 @@ def main(args):  # noqa: C901
     else:
         with sonarDBManager(args.db, readonly=True) as dbm:
             dbm.check_db_compatibility()
+
     # other than the above
     # import
     if args.tool == "import":
@@ -415,7 +398,7 @@ def main(args):  # noqa: C901
             progress=not args.no_progress,
             update=not args.no_update,
             threads=args.threads,
-            debug=args.debug,
+            debug=debug,
         )
 
     # view-prop
@@ -454,9 +437,7 @@ def main(args):  # noqa: C901
             print("dates must comply with the following format: YYYY-MM-DD")
             print()
             print("OPERATORS")
-            print(
-                "integer, floating point and decimal number data types support the following operators prefixed directly to the respective value without spaces:"
-            )
+            print("All numbers can be extended by the following operators:")
             print("  > larger than (e.g. >1)")
             print("  < smaller than (e.g. <1)")
             print("  >= larger than or equal to (e.g. >=1)")
@@ -464,9 +445,7 @@ def main(args):  # noqa: C901
             print("  != different than (e.g. !=1)")
             print()
             print("RANGES")
-            print(
-                "integer, floating point and date data types support ranges defined by two values directly connected by a colon (:) with no space between them:"
-            )
+            print("All numbers and dates support ranges in the following format:")
             print("  e.g. 1:10 (between 1 and 10)")
             print("  e.g. 2021-01-01:2021-12-31 (between 1st Jan and 31st Dec of 2021)")
             print()
@@ -495,7 +474,6 @@ def main(args):  # noqa: C901
         with sonarDBManager(args.db, readonly=False, debug=debug) as dbm:
             if args.name not in dbm.properties:
                 sys.exit("input error: unknown property.")
-            a = dbm.count_property(args.name)
             b = dbm.count_property(args.name, ignore_standard=True)
             if args.force:
                 decision = "YES"
@@ -503,9 +481,7 @@ def main(args):  # noqa: C901
                 logging.warning(
                     "There are"
                     " %d"
-                    " samples with content for this property. Amongst those,"
-                    " %d"
-                    " samples do not share the default value of this property." % (a, b)
+                    " samples have non-default values for this property" % (b)
                 )
                 decision = ""
                 while decision not in ("YES", "no"):
@@ -514,9 +490,9 @@ def main(args):  # noqa: C901
                     )
             if decision == "YES":
                 dbm.delete_property(args.name)
-                logging.info("property deleted.")
+                logging.info("property deleted")
             else:
-                logging.info("property not deleted.")
+                logging.info("property not deleted")
 
     # delete
     elif args.tool == "delete":
@@ -543,18 +519,16 @@ def main(args):  # noqa: C901
             logging.info("Nothing to restore.")
         else:
             sonarBasics.restore(
-                args.db, *samples, aligned=args.aligned, debug=args.debug
+                args.db,
+                *samples,
+                aligned=args.aligned,
+                outfile=args.out,
+                debug=args.debug,
             )
 
     # update-lineage-info
     elif args.tool == "update-lineage-info":
         logging.info("Start to update parent-child relationship...")
-        # fname = os.path.join(
-        #    os.path.join(os.path.dirname(os.path.realpath(__file__))),
-        #    "data/lineage.all.tsv",
-        # )
-        # obj = sonarLinmgr()
-        # lin_df = obj.update_lineage_data(fname)
         with sonarLinmgr() as obj:
             lin_df = obj.update_lineage_data()
 
@@ -569,67 +543,56 @@ def main(args):  # noqa: C901
     # match
     elif args.tool == "match":
         props = {}
-        reserved_props = {}
-
         with sonarDBManager(args.db, readonly=False, debug=args.debug) as dbm:
             for pname in dbm.properties:
                 if hasattr(args, pname):
                     props[pname] = getattr(args, pname)
+
+            # check property refering to pangolin classification
             if args.with_sublineage:
                 if args.with_sublineage in dbm.properties:
-                    reserved_props["with_sublineage"] = args.with_sublineage
+                    lincol = args.with_sublineage
                 else:
                     sys.exit(
-                        "input error: "
+                        "input error: property "
                         + args.with_sublineage
-                        + " is mismatch to the available properties"
-                    )
-            # check column output and property name
-            if args.out_column != "all":
-                out_column = args.out_column.strip()
-                out_column_list = out_column.split(",")
-                check = all(item in dbm.properties for item in out_column_list)
-                if check:
-                    # sample.name is fixed
-                    valid_output_column = out_column_list + ["sample.name"]
-                else:
-                    sys.exit(
-                        "input error: "
-                        + str(out_column_list)
-                        + " one or more given name mismatch the available properties"
+                        + " is unknown to the database."
                     )
             else:
-                valid_output_column = "all"
+                lincol = None
 
-        # for reserved keywords
-        reserved_key = ["sample"]
-        for pname in reserved_key:
-            if hasattr(args, pname):
-                if pname == "sample" and len(getattr(args, pname)) > 0:
-                    # reserved_props[pname] = set([x.strip() for x in args.sample])
-                    reserved_props = sonarBasics.set_key(
-                        reserved_props, pname, getattr(args, pname)
+            # check column output and property name
+            if len(args.out_cols) > 0:
+                if all(item in dbm.properties for item in args.out_cols):
+                    # sample.name is fixed for output
+                    args.out_cols = args.out_cols + ["sample.name"]
+                else:
+                    sys.exit(
+                        "input error: Unknown output column(s) selected. Please select from: "
+                        + ", ".join(dbm.properties)
                     )
-                    # reserved_props[pname] = getattr(args, pname)
 
-        # Support file upload
+        # sample name handling
+        samples = set(args.sample)
         if args.sample_file:
             for sample_file in args.sample_file:
                 check_file(sample_file)
                 with sonarBasics.open_file(sample_file, compressed="auto") as file:
                     for line in file:
-                        reserved_props = sonarBasics.set_key(
-                            reserved_props, "sample", line.strip()
-                        )
+                        samples.add(line.strip())
+
+        # set ouput format
         format = "count" if args.count else args.format
 
+        # match
         sonarBasics.match(
             args.db,
             args.profile,
-            reserved_props,
+            samples,
+            lincol,
             props,
             outfile=args.out,
-            output_column=valid_output_column,
+            output_column=args.out_cols,
             debug=args.debug,
             format=format,
             showNX=args.showNX,
@@ -651,8 +614,8 @@ def main(args):  # noqa: C901
 
 
 def run():
-    parsed_args = parse_args(sys.argv[1:])
-    main(parsed_args)
+    args = parse_args(sys.argv[1:])
+    main(args)
 
 
 if __name__ == "__main__":

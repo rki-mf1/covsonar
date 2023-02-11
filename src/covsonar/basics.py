@@ -497,7 +497,8 @@ class sonarBasics(object):
     def match(
         db,
         profiles=[],
-        reserved_props_dict={},
+        samples=[],
+        lincol=None,
         propdict={},
         reference=None,
         outfile=None,
@@ -511,7 +512,8 @@ class sonarBasics(object):
                 reference = dbm.get_default_reference_accession()
             cursor = dbm.match(
                 *profiles,
-                reserved_props=reserved_props_dict,
+                samples=samples,
+                lineage_column=lincol,
                 properties=propdict,
                 reference_accession=reference,
                 format=format,
@@ -544,6 +546,8 @@ class sonarBasics(object):
     ):
         with covsonar.dbm.sonarDBManager(db, readonly=True, debug=debug) as dbm:
             handle = sys.stdout if outfile is None else open(outfile, "w")
+            gap = "-" if aligned else ""
+            gapalts = {" ", "."}
             for sample in samples:
                 prefixes = collections.defaultdict(str)
                 molecules = {
@@ -555,14 +559,13 @@ class sonarBasics(object):
                         sample, reference_accession=reference_accession
                     )
                 }
-                gap = "-" if aligned else ""
                 for vardata in dbm.iter_dna_variants(sample, *molecules.keys()):
                     if aligned and len(vardata["variant.alt"]) > 1:
                         vardata["variant.alt"] = (
                             vardata["variant.alt"][0]
                             + vardata["variant.alt"][1:].lower()
                         )
-                    if vardata["variant.alt"] == " ":
+                    if vardata["variant.alt"] in gapalts:
                         for i in range(
                             vardata["variant.start"], vardata["variant.end"]
                         ):
@@ -795,12 +798,12 @@ class sonarBasics(object):
         except Exception:
             sys.exit("input error: " + fname + " cannot be opened.")
 
-    @staticmethod
-    def set_key(dictionary, key, value):
-        if key not in dictionary:
-            dictionary[key] = value
-        elif type(dictionary[key]) == list:
-            dictionary[key].append(value)
-        else:
-            dictionary[key] = [dictionary[key], value]
-        return dictionary
+    # @staticmethod
+    # def set_key(dictionary, key, value):
+    #    if key not in dictionary:
+    #        dictionary[key] = value
+    #    elif type(dictionary[key]) == list:
+    #        dictionary[key].append(value)
+    #    else:
+    #        dictionary[key] = [dictionary[key], value]
+    #    return dictionary

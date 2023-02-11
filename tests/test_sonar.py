@@ -13,7 +13,7 @@ def test_check_file_not_exist(tmpfile_name):
         sonar.check_file(fname)
     assert pytest_wrapped_e.type == SystemExit
     assert (
-        pytest_wrapped_e.value.code == "iput error: " + fname + " is not a valid file."
+        pytest_wrapped_e.value.code == "input error: " + fname + " is not a valid file."
     )
 
 

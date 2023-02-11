@@ -162,7 +162,8 @@ def test_iter_dna_variants(init_readonly_dbm):
 
     # no element_ids
     row = init_readonly_dbm.iter_dna_variants(sample_name="seq01")
-    assert len(list(row)) == 32
+    x = list(row)
+    assert len(list(x)) == 32
 
 
 def test_upgrade_db(tmpfile_name, monkeypatch, caplog):

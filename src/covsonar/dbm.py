@@ -1371,12 +1371,13 @@ class sonarDBManager:
     def match(  # noqa: 901
         self,
         *profiles,
-        reserved_props=None,
+        samples=[],
+        lineage_column=None,
         properties=None,
         reference_accession=None,
         showNX=False,
         ignoreTerminalGaps=False,
-        output_column="all",
+        output_column=[],
         format="csv",
     ):
         # collecting sqls for metadata-based filtering
@@ -1384,15 +1385,13 @@ class sonarDBManager:
         property_vals = []
         # IF sublineage search is enable
         # support: include and exclude
-        if "with_sublineage" in reserved_props:
-            _tmp_include_lin = []  # used to keep all lienages after search.
-            lineage_col = reserved_props.get("with_sublineage")
-            include_lin = properties.get(lineage_col)  # get list of given lineages
+        if lineage_column:
+            _tmp_include_lin = []  # used to keep all lineages after search.
+            include_lin = properties[lineage_column]  # get list of given lineages
             negate = False
-            logging.info("sublineage search is enable on %s" % include_lin)
+            logging.info("sublineage mapping is enabled for property %s" % include_lin)
             while include_lin:
                 in_lin = include_lin.pop(0)
-
                 if in_lin.startswith("^"):
                     in_lin = in_lin[1:]
                     negate = True
@@ -1429,9 +1428,9 @@ class sonarDBManager:
                         in_lin = "^" + in_lin
                     _tmp_include_lin.append(in_lin)
                 negate = False
-
             include_lin = _tmp_include_lin
-            properties[lineage_col] = include_lin
+            properties[lineage_column] = include_lin
+
         if self.debug:
             logging.debug(properties)
 
@@ -1471,24 +1470,16 @@ class sonarDBManager:
                 sample_selection_sql = property_sqls + " INTERSECT " + profile_sqls
         elif property_sqls or profile_sqls:
             sample_selection_sql = property_sqls + profile_sqls
+        elif not samples:
+            sample_selection_sql = "SELECT id FROM sample"
         else:
-            if "sample" in reserved_props:
-                # if 'sample' is presented we just use only samples
-                samples_condition = []
-                for pname, vals in reserved_props.items():
-                    if pname == "sample":
-                        for x in vals:
-                            samples_condition.append('"' + x + '"')
-                sample_selection_sql = (
-                    "SELECT id FROM sample WHERE name IN ("
-                    + " , ".join(samples_condition)
-                    + ")"
-                )
-
-                property_sqls = []
-                property_vals = []
-            else:
-                sample_selection_sql = "SELECT id FROM sample"
+            sample_selection_sql = (
+                "SELECT id FROM sample WHERE name IN ("
+                + " , ".join(['"' + x + '"' for x in samples])
+                + ")"
+            )
+            property_sqls = []
+            property_vals = []
 
         genome_element_condition = [
             str(x) for x in self.get_element_ids(reference_accession, "source")
@@ -1621,7 +1612,7 @@ class sonarDBManager:
             _1_rows = list(filter(None, _1_rows))
 
             # filter column
-            if output_column != "all":
+            if len(output_column) > 0:
                 _1_rows = [
                     {k: v for k, v in d.items() if k in output_column} for d in _1_rows
                 ]

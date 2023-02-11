@@ -78,7 +78,7 @@ def test_valid_beginning(tmp_path, monkeypatch):
     run_cli(f"update-lineage-info --db {db_path}")
 
 
-def test_import_update_delete(tmp_path, monkeypatch):
+def test_import_update_delete_restore(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
     monkeypatch.chdir(Path(__file__).parent)
 
@@ -126,6 +126,16 @@ def test_import_update_delete(tmp_path, monkeypatch):
     )
     run_cli(f"match --db {db_path} --showNX -o {tmp_path}/test.update.csv")
     assert filecmp.cmp(f"{tmp_path}/test.update.csv", "data/test.import.csv")
+
+    # test restore
+    run_cli(f"restore --db {db_path} --sample seq04 -o {tmp_path}/test.restore.fasta")
+    assert filecmp.cmp(f"{tmp_path}/test.restore.fasta", "data/test.restore.fasta")
+    run_cli(
+        f"restore --db {db_path} --sample seq04 --aligned -o {tmp_path}/test.restore.aligned.fasta"
+    )
+    assert filecmp.cmp(
+        f"{tmp_path}/test.restore.aligned.fasta", "data/test.restore.aligned.fasta"
+    )
 
 
 def test_import(tmp_path, monkeypatch):
@@ -187,7 +197,7 @@ def test_valid_extend(tmp_path, monkeypatch):
     run_cli(f"match --db {db_path} --format csv -o {tmp_path}/out.csv")
     run_cli(f"match --db {db_path} --format vcf -o {tmp_path}/out.vcf")
     run_cli(
-        f"restore --db {db_path} --sample IMS-10025-CVDP-00960 IMS-10087-CVDP-D484F3AD-CD8F-473C-8A5E-DB5D6A710BE5 IMS-10004-CVDP-0672526C-BAEA-4FE9-A57B-941CBCC13343 IMS-10013-CVDP-69DF29F4-D7E3-4954-94F4-65C20BE7B850 IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95 > {tmp_path}/out.fasta"
+        f"restore --db {db_path} --sample IMS-10025-CVDP-00960 IMS-10087-CVDP-D484F3AD-CD8F-473C-8A5E-DB5D6A710BE5 IMS-10004-CVDP-0672526C-BAEA-4FE9-A57B-941CBCC13343 IMS-10013-CVDP-69DF29F4-D7E3-4954-94F4-65C20BE7B850 IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95 -o {tmp_path}/out.fasta"
     )
 
     assert filecmp.cmp(f"{tmp_path}/out.csv", "data/out.csv")
@@ -324,6 +334,7 @@ def test_valid_extend3(monkeypatch, capsys):
             "IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95",
             "IMS-10025-CVDP-00960",
             "--count",
+            "--debug",
         ]
     )
     result = sonar.main(parsed_args)

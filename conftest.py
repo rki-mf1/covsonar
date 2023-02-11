@@ -2,7 +2,6 @@ import os
 import tempfile
 
 import pytest
-
 from src.covsonar.basics import sonarBasics
 from src.covsonar.dbm import sonarDBManager
 
