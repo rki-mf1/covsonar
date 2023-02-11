@@ -618,10 +618,6 @@ class sonarBasics(object):
             print("database size:             ", dbm.get_db_size())
             print("unique samples:            ", dbm.count_samples())
             print("unique sequences:          ", dbm.count_sequences())
-            # print("Sample properties          ", dbm.get_earliest_import())
-            # print("latest genome import:      ", dbm.get_latest_import())
-            # print("earliest sampling date:    ", dbm.get_earliest_date())
-            # print("latest sampling date:      ", dbm.get_latest_date())
 
     # output
     # csv

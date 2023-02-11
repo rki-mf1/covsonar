@@ -571,20 +571,6 @@ class sonarDBManager:
             self.cursor.execute(sql, [property_name])
             del self.properties[property_name]
 
-    # SELECTING DATA
-    # # Do we need this function?
-    # def sample_exists(self, sample_name):
-    #    """
-    #    Checks if a sample name exists and returns True and False, respectively.
-    #
-    #    >>> dbm = getfixture('init_readonly_dbm')
-    #    >>> dbm.sample_exists("seq01")
-    #    True
-    #
-    #    """
-    #    sql = "SELECT EXISTS(SELECT 1 FROM sample WHERE name=? LIMIT 1) as found"
-    #    return bool(self.cursor.execute(sql, [sample_name]).fetchone()["found"])
-
     def get_sample_id(self, sample_name):
         """
         Returns the rowid of a sample based on its name if it exists (else None is returned).
@@ -641,18 +627,6 @@ class sonarDBManager:
             for x in self.cursor.execute(sql, val).fetchall()
             if x is not None
         }
-
-    # Do we need this function?
-    # def get_molecule_id(self, molecule_accession):
-    #    """
-    #    Returns the rowid of a molecule based on its accession (or None if the
-    #    accession does not exist).
-    #    """
-    #    sql = "SELECT id FROM molecule WHERE accession = ?;"
-    #    row = self.cursor.execute(sql, [molecule_accession]).fetchone()
-    #    if row:
-    #        row = row["id"]
-    #    return row
 
     def get_molecule_data(self, *fields, reference_accession=None):
         """
@@ -838,23 +812,6 @@ class sonarDBManager:
             x["codon"]: x["aa"]
             for x in self.cursor.execute(sql, [translation_id]).fetchall()
         }
-
-    # Do we need these functions?
-    # def get_earliest_import(self):
-    #    sql = "SELECT MIN(imported) as import FROM genome WHERE import IS NOT NULL;"
-    #    return self.cursor.execute(sql).fetchone()["import"]
-
-    # def get_latest_import(self):
-    #    sql = "SELECT MAX(imported) as import FROM genome WHERE import IS NOT NULL;"
-    #    return self.cursor.execute(sql).fetchone()["import"]
-
-    # def get_earliest_date(self):
-    #    sql = "SELECT MIN(date) as date FROM genome WHERE date IS NOT NULL;"
-    #    return self.cursor.execute(sql).fetchone()["date"]
-
-    # def get_latest_date(self):
-    #    sql = "SELECT MAX(date) as date FROM genome WHERE date IS NOT NULL;"
-    #    return self.cursor.execute(sql).fetchone()["date"]
 
     def get_element_parts(self, element_id=None):
         sql = "SELECT start, end, strand FROM elempart WHERE element_id = ? ORDER BY segment"
@@ -1388,46 +1345,38 @@ class sonarDBManager:
         if lineage_column:
             _tmp_include_lin = []  # used to keep all lineages after search.
             include_lin = properties[lineage_column]  # get list of given lineages
-            negate = False
             logging.info("sublineage mapping is enabled for property %s" % include_lin)
             while include_lin:
                 in_lin = include_lin.pop(0)
                 if in_lin.startswith("^"):
                     in_lin = in_lin[1:]
-                    negate = True
+                    op = "^"
+                else:
+                    op = ""
 
                 # have wildcard in string which mean we have to find all lineage from wildcard query
                 # then we used the wildcard query result to find all sublineages agian.
                 if "%" in in_lin:
                     _tobeadded_lin = self.get_list_of_lineages(in_lin)
                     for i in _tobeadded_lin:
-
-                        # if i != in_lin: # we dont need to add same lineage agian,so we skip for the duplicate lineage.
-                        if negate:  # all lineage should add not ^
-                            i = "^" + i
+                        i = op + i
                         include_lin.append(i)  # add more lineage to find in next round.
 
                 value = self.lineage_sublineage_dict.get(
                     in_lin, "none"
                 )  # provide a default value if the key is missing:
-                # print(value)
                 if value != "none":
-                    if negate:
-                        in_lin = "^" + in_lin
+                    in_lin = op + in_lin
                     _tmp_include_lin.append(in_lin)
 
                     _list = value.split(",")
                     for i in _list:
-                        if negate:  # all sublineage should add not^
-                            i = "^" + i
+                        i = op + i
                         include_lin.append(i)  # add more lineage to find in next round.
-                        # _tmp_include_lin.append(i)
                         # if we don't find this wildcard so we discard it
                 else:  # None (no child)
-                    if negate:
-                        in_lin = "^" + in_lin
+                    in_lin = op + in_lin
                     _tmp_include_lin.append(in_lin)
-                negate = False
             include_lin = _tmp_include_lin
             properties[lineage_column] = include_lin
 
