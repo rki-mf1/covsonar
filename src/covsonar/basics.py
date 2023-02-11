@@ -624,56 +624,6 @@ class sonarBasics(object):
             # print("latest sampling date:      ", dbm.get_latest_date())
 
     # output
-    # profile generation
-    @staticmethod
-    def iter_formatted_match(cursor):  # pragma: no cover
-        """
-        VCF output
-        @deprecated("use another method")
-        this will be removed soon
-        """
-        nuc_profiles = collections.defaultdict(list)
-        aa_profiles = collections.defaultdict(list)
-        samples = set()
-        logging.warning("getting profile data")
-        logging.warning("processing profile data")
-
-        for row in cursor:
-            exit(row)
-            samples.add(row["sample.name"])
-            if row["element.type"] == "cds":
-                aa_profiles[row["sample.name"]].append(
-                    (
-                        row["element.id"],
-                        row["variant.start"],
-                        row["element.symbol"] + ":" + row["variant.label"],
-                    )
-                )
-            else:
-                nuc_profiles[row["sample.name"]].append(
-                    (row["element.id"], row["variant.start"], row["variant.label"])
-                )
-        out = []
-        logging.debug(len(samples))
-        for sample in sorted(samples):
-            print(sorted(nuc_profiles[sample], key=lambda x: (x[0], x[1])))
-
-        logging.warning("assembling profile data")
-        for sample in sorted(samples):
-            out.append(
-                {
-                    "sample.name": sample,
-                    "nuc_profile": " ".join(
-                        sorted(nuc_profiles[sample], key=lambda x: (x[0], x[1]))
-                    ),
-                    "aa_profile": " ".join(
-                        sorted(aa_profiles[sample], key=lambda x: (x[0], x[1]))
-                    ),
-                }
-            )
-        logging.debug(out)
-        return out
-
     # csv
     def exportCSV(cursor, outfile=None, na="*** no data ***", tsv=False):
         i = -1
