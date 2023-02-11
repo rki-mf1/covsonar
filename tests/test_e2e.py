@@ -138,6 +138,24 @@ def test_import_update_delete_restore(tmp_path, monkeypatch):
     )
 
 
+def test_direct_query(tmp_path, monkeypatch):
+    """The test example provided by other devs, after the import command"""
+    monkeypatch.chdir(Path(__file__).parent)
+
+    db_path_orig = Path("data/test-with-seqs.db")
+    db_path = tmp_path / "test-with-seqs.db"
+
+    shutil.copy(db_path_orig, db_path)
+
+    # test import
+    run_cli(
+        f'direct-query --db {db_path} --sql "SELECT * FROM variant WHERE variant.start >= 25000 ORDER BY id" -o {tmp_path}/test.direct-query.csv'
+    )
+    assert filecmp.cmp(
+        f"{tmp_path}/test.direct-query.csv", "data/test.direct-query.csv"
+    )
+
+
 def test_import(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
     monkeypatch.chdir(Path(__file__).parent)

@@ -610,8 +610,8 @@ class sonarBasics(object):
             )
 
     @staticmethod
-    def show_db_info(db):
-        with covsonar.dbm.sonarDBManager(db, readonly=True) as dbm:
+    def show_db_info(db, debug=False):
+        with covsonar.dbm.sonarDBManager(db, readonly=True, debug=False) as dbm:
             print("covSonar Version:          ", sonarBasics.get_version())
             print("database path:             ", dbm.dbfile)
             print("database version:          ", dbm.get_db_version())
@@ -619,10 +619,17 @@ class sonarBasics(object):
             print("unique samples:            ", dbm.count_samples())
             print("unique sequences:          ", dbm.count_sequences())
 
+    @staticmethod
+    def direct_query(db, sql, outfile=None, debug=False):
+        with covsonar.dbm.sonarDBManager(db, readonly=True, debug=debug) as dbm:
+            result = dbm.direct_query(sql)
+            sonarBasics.exportCSV(result, outfile)
+
     # output
     # csv
     def exportCSV(cursor, outfile=None, na="*** no data ***", tsv=False):
         i = -1
+        print(outfile)
         for i, row in enumerate(cursor):
             if i == 0:
                 outfile = sys.stdout if outfile is None else open(outfile, "w")
@@ -743,13 +750,3 @@ class sonarBasics(object):
                 return open(fname, mode, encoding=encoding)
         except Exception:
             sys.exit("input error: " + fname + " cannot be opened.")
-
-    # @staticmethod
-    # def set_key(dictionary, key, value):
-    #    if key not in dictionary:
-    #        dictionary[key] = value
-    #    elif type(dictionary[key]) == list:
-    #        dictionary[key].append(value)
-    #    else:
-    #        dictionary[key] = [dictionary[key], value]
-    #    return dictionary

@@ -1472,10 +1472,7 @@ class sonarDBManager:
             if not sample_ids:
                 return []
             selected_sample_ids = ", ".join([str(x["id"]) for x in sample_ids])
-            # rows = {x['id']: {"id": x['id']} for x in sample_ids}
-            # print(len(sample_ids))
 
-            #
             # Current solution:
             # After we got the selected IDs
             # We use two-stage query and then combine both results together to produce final result
@@ -1611,6 +1608,13 @@ class sonarDBManager:
         for idx, col in enumerate(cursor.description):
             d[col[0]] = row[idx]
         return d
+
+    def direct_query(self, sql):
+        if re.match(r'^".*"$', sql):
+            sql = sql[1:-1]
+        elif re.match(r"^'.*'$", sql):
+            sql = sql[1:-1]
+        return self.cursor.execute(sql).fetchall()
 
     # Utils.
     def get_db_size(self, decimal_places=3):

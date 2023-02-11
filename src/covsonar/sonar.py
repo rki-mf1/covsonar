@@ -326,6 +326,19 @@ def parse_args(args):
         help="download latest lineage information",
     )
 
+    # direct-query parser
+    parser_direct = subparsers.add_parser(
+        "direct-query",
+        parents=[output_parser, general_parser],
+        help="opens a read-only connection to the given database to perform direct queries",
+    )
+    parser_direct.add_argument(
+        "--sql",
+        help="sqlite query",
+        type=str,
+        required=True,
+    )
+
     # version parser
     parser.add_argument(
         "-v",
@@ -603,12 +616,19 @@ def main(args):  # noqa: C901
         with sonarDBManager(args.db, debug=args.debug) as dbm:
             dbm.optimize(args.db)
 
+    # sqlite
+    if args.tool == "direct-query":
+        sonarBasics.direct_query(
+            args.db, sql=args.sql, outfile=args.out, debug=args.debug
+        )
+
+    # Finished successfully
+    return 0
+
     # dev
     if args.tool == "dev":
         print("***dev mode***")
-        with sonarDBManager(args.db, debug=debug) as dbm:
-            for feature in dbm.get_annotation():
-                print(feature)
+        print("no function to call")
     # Finished successfully
     return 0
 
