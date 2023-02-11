@@ -18,12 +18,12 @@ def test_setup_and_file_exists(tmpfile_name):
     )
 
 
-# def test_autocreate_with_givenRef(tmpfile_name):
-#    fname = tmpfile_name
-#    # ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-#    ref = pkg_resources.resource_filename("covsonar",'data/ref.gb')
-#    print(ref)
-#    assert sonarBasics.setup_db(fname,auto_create=True,reference_gb=ref) is None
+def test_autocreate_with_givenRef(tmpfile_name, monkeypatch):
+    monkeypatch.chdir(Path(__file__).parent)
+    ref = Path("data/ref.gb")
+    assert (
+        sonarBasics.setup_db(tmpfile_name, auto_create=True, reference_gb=ref) is None
+    )
 
 
 def test_notautocreate_and_notsetup(tmpfile_name):

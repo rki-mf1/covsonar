@@ -629,7 +629,6 @@ class sonarBasics(object):
     # csv
     def exportCSV(cursor, outfile=None, na="*** no data ***", tsv=False):
         i = -1
-        print(outfile)
         for i, row in enumerate(cursor):
             if i == 0:
                 outfile = sys.stdout if outfile is None else open(outfile, "w")
