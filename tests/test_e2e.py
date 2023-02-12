@@ -126,7 +126,6 @@ def test_import_update_delete_restore(tmp_path, monkeypatch):
     )
     run_cli(f"match --db {db_path} --showNX -o {tmp_path}/test.update.csv")
     assert filecmp.cmp(f"{tmp_path}/test.update.csv", "data/test.import.csv")
-
     # test restore
     run_cli(f"restore --db {db_path} --sample seq04 -o {tmp_path}/test.restore.fasta")
     assert filecmp.cmp(f"{tmp_path}/test.restore.fasta", "data/test.restore.fasta")

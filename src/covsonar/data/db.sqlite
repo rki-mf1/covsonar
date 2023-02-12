@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS reference (
 	organism VARCHAR,
 	translation_id INTEGER NOT NULL,
 	standard INTEGER NOT NULL,
-	FOREIGN KEY(translation_id) REFERENCES translation(id) ON DELETE CASCADE
+	FOREIGN KEY(translation_id) REFERENCES translation(id)
 );
 CREATE INDEX IF NOT EXISTS idx_reference_id ON reference(id);
 CREATE INDEX IF NOT EXISTS idx_reference_accession ON reference(accession);

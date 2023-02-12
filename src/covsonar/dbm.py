@@ -554,6 +554,7 @@ class sonarDBManager:
             + ");"
         )
         self.cursor.execute(sql, sample_names)
+        self.clean()
 
     def delete_property(self, property_name):
         """
@@ -570,6 +571,7 @@ class sonarDBManager:
             sql = "DELETE FROM property WHERE name = ?;"
             self.cursor.execute(sql, [property_name])
             del self.properties[property_name]
+            self.clean()
 
     def get_sample_id(self, sample_name):
         """
@@ -775,7 +777,6 @@ class sonarDBManager:
                         WHERE  variant.element_id """
             + condition
         )
-
         for row in self.cursor.execute(sql, [sample_name] + list(element_ids)):
             if row["variant.start"] is not None:
                 yield row
@@ -1601,6 +1602,38 @@ class sonarDBManager:
             con.executescript("PRAGMA analysis_limit=400;")
             con.executescript("PRAGMA optimize;")
             con.executescript("VACUUM;")
+
+    def clean(self):
+        sqls = []
+        sqls.append(
+            "DELETE FROM sequence WHERE NOT EXISTS(SELECT NULL FROM sample WHERE sample.seqhash = seqhash)"
+        )
+        sqls.append(
+            "DELETE FROM sample2property WHERE NOT EXISTS(SELECT NULL FROM sample WHERE sample.id = sample_id) OR NOT EXISTS(SELECT NULL FROM property WHERE property.id = property_id)"
+        )
+        sqls.append(
+            "DELETE FROM translation WHERE NOT EXISTS(SELECT NULL FROM reference WHERE reference.translation_id = id)"
+        )
+        sqls.append(
+            "DELETE FROM molecule WHERE NOT EXISTS(SELECT NULL FROM reference WHERE reference.id = reference_id)"
+        )
+        sqls.append(
+            "DELETE FROM element WHERE NOT EXISTS(SELECT NULL FROM molecule WHERE molecule.id = molecule_id)"
+        )
+        sqls.append(
+            "DELETE FROM elempart WHERE NOT EXISTS(SELECT NULL FROM element WHERE element.id = element_id)"
+        )
+        sqls.append(
+            "DELETE FROM variant WHERE NOT EXISTS(SELECT NULL FROM alignment2variant WHERE alignment2variant.variant_id = variant_id)"
+        )
+        sqls.append(
+            "DELETE FROM alignment WHERE NOT EXISTS(SELECT NULL FROM sequence WHERE sequence.seqhash = seqhash) OR NOT EXISTS(SELECT NULL FROM element WHERE element.id = element_id)"
+        )
+        sqls.append(
+            "DELETE FROM alignment2variant WHERE NOT EXISTS(SELECT NULL FROM alignment WHERE alignment.id = alignment_id)"
+        )
+        for sql in sqls:
+            self.cursor.execute(sql)
 
     @staticmethod
     def dict_factory(cursor, row):
