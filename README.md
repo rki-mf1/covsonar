@@ -23,6 +23,10 @@ What's new in covSonar v.2
 [![Github tag](https://badgen.net/github/release/rki-mf1/covsonar/Strapdown.js)](https://github.com/rki-mf1/covsonar/release/)
 
 
+**NEW: [ Cheat Sheat for easier usage ](https://cheatography.com/fuchs/cheat-sheets/covsonar-2/)**
+
+
+
 ## 1. Installation
 
 covSonar2 now can be easily installed by using `pip`, `conda` or `mamba`
