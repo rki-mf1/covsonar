@@ -135,9 +135,9 @@ sonar add-prop --db test.db --name DATE_DRAW --dtype date --descr "sampling date
 ```
 > TIP 🕯️: `sonar add-prop -h ` to see all arguments available.
 
-> NOTE 📌: Property names have to start with letters and have to consist of letters and digits only.
+> NOTE 📌: Property names must start with a letter and may only contain letters, numbers and underscores.
 
-> NOTE 📌: All property names are stored in upper-case letters.
+> NOTE 📌: All property names are converted to upper-case letters.
 
 > NOTE 📌: SAMPLE is reserved keyword that cannot be used as property names.
 
