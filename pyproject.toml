@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "covsonar"
-version = "2.0.0-alpha.2"
+version = "2.0.0-alpha.3"
 description = "A database-driven system for handling genomic sequences and screening genomic profiles."
 authors = ["Stephan Fuchs <FuchsS@rki.de>", "Kunaphas Kongkitimanon <KongkitimanonK@rki.de>", "Matthew Huska <HuskaM@rki.de>"]
 license = "GPL3"
