@@ -212,6 +212,8 @@ We follow the scientific notation for mutations. In the following table *REF* st
 
 > NOTE 📌: By default, the IUPAC characters N (nucleotide level) and X (amino acid level) are interpreted as any polymorphism at the respective reference position. To explicitly search for N or X at specific ones, they use n or x (e.g. *T306n*). 
 
+> NOTE 📌: To include non-informative variant alleles (N resp. X) in the returned genome profiles, use the `--showNX` option. 
+
 Mutation profiles consist of one or multiple mutations and can be queried by `--profile`. Multiple mutations following this argument mean that all notations must be satisfied by the target genome (**AND** logic). Multiple `--profile` arguments can be used to define alternate mutation profiles that are searched simulaatively (**OR** logic). The following examples will illustrate this.
 
 ```sh
@@ -292,7 +294,7 @@ Advanced users familiar with the covSonar database scheme, can use the SQLite qu
 sonar direct-query --sql "SELECT COUNT(*) FROM sequences" --db test.db
 ```
 
-> Note 🕯️: For added security, `direct-query` allows read-only access to the database, not write access.
+> Note 📌: For added security, `direct-query` allows read-only access to the database, not write access.
 
 ### 2.6 Show infos about the used sonar system and database (`info`)
 
