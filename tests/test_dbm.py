@@ -323,7 +323,6 @@ def test_query_profile_failcase(init_readonly_dbm):
 
 
 def test_setup_database(tmpfile_name):
-
     # _failcase
     with pytest.raises(SystemExit) as e:
         sonarDBManager(dbfile=tmpfile_name + "APOLLO")
