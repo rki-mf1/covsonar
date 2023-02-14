@@ -2,19 +2,21 @@
 
 # covSonar2
 
-covSonar is a database-driven system for handling genomic sequences and screening genomic profiles.
+covSonar is a database-driven system for storing, profiling and querying genomic sequences.
 
-What's new in covSonar V.2
+What's new in covSonar v.2
 * New design
-    * Improve workflows
-    * Performance improvements
+    * Improved workflows
+    * Improved database scheme
+    * Improved performance
+    * Improved alignment (now: optimal semi-global)
 * Exciting new features
-	* Support multiple pathogens
-	* Flexible in adding meta information
-* New database design
-	* New database schema
-    * Retrieval efficiency
-	* Significantly smaller than the previous version
+    * Support of multiple pathogens
+    * Support of segmenten genomes
+    * Support of user-defined meta information
+* Extended query lanquage 
+    * more powerful and complex queries
+    * greedy and ungreedy deletion handling
 
 [![Tests Status](https://github.com/rki-mf1/covsonar/actions/workflows/tests.yml/badge.svg)](https://github.com/rki-mf1/covsonar/actions/workflows/tests.yml) [![Pre-release/Test Version](https://github.com/rki-mf1/covsonar/actions/workflows/test-pypi.yml/badge.svg)](https://github.com/rki-mf1/covsonar/actions/workflows/test-pypi.yml) [![Stable Version](https://github.com/rki-mf1/covsonar/actions/workflows/release.yml/badge.svg)](https://github.com/rki-mf1/covsonar/actions/workflows/release.yml)
 
@@ -24,9 +26,9 @@ What's new in covSonar V.2
 ## 1. Installation
 
 covSonar2 now can be easily installed by using `pip`, `conda` or `mamba`
-
-### Stable version.🔖
-Proceed as follows to install covSonar2
+ 
+### Stable version 🔖
+Proceed as follows to install covSonar2 via pip
 
 ```sh
 pip install covsonar
@@ -35,17 +37,20 @@ or via conda
 ```sh
 conda install -c bioconda covsonar
 ```
-
-verify installation
+or via mamba
+```sh
+mamba install -c bioconda covsonar
+```
+and to verify your installation
 ```sh
 sonar --version
 ```
 
-### Dev. version.🚧
+### Developer version 🚧
 
-(Testing or Nightly build or Adding a feature or Fixing a bug)
+Developer versions are for testing, nightly builds, feature implementation or bug fixing.
 
-please check at https://test.pypi.org/project/covsonar/
+For more information, please check at https://test.pypi.org/project/covsonar/
 
 ```sh
 # example command
@@ -54,64 +59,71 @@ pip install -i https://test.pypi.org/simple/ covsonar==2.0.0a1.dev1657097995
 
 ## 2. Usage
 
-In covSonar2, the table below shows the several commands that can be called.
+In covSonar2, the table below shows the different sub-commands that can be called.
 
-| subcommand | purpose                                                             |
-|------------|---------------------------------------------------------------------|
-| setup      | set up a new database.                                  |
-| import     | import genome sequences and sample information to the database     |
-| list-prop  | view sample properties added to the database             |
-| add-prop    | add a sample property to the database                    |
-| delete-prop       | delete a sample property from the database |
-| match   |  get mutations profiles for given accessions                                        |
-| restore   | restore sequence(s) from the database                                         |
-| info   |  show software and database info.                                        |
-| optimize   | optimizes the database                                         |
-| db-upgrade   | upgrade a database to the latest version                                         |
-| update-lineage-info | download latest lineage information                                       |
+| subcommand          | purpose                                                                 |
+|---------------------|-------------------------------------------------------------------------|
+| setup               | set up a new database.                                	                |
+| import              | import genome sequences and sample information to the database          |
+| list-prop           | list available sample properties for a given  database                  |
+| add-prop            | add a new sample property to the database                               |
+| delete-prop         | delete an existing sample property from the database                    |
+| match               | match stored genomes based on mutation profiles and/or sample properties |
+| restore             | restore genome sequence(s) from the stored mutation profiles             |
+| info                |  show software and database info.                                       |
+| optimize            | optimizes the database                                                  |
+| db-upgrade          | upgrade a database to the latest version                                |
+| update-lineage-info | download latest lineage information                                     |
+| direct-query        | use directly SQLite queries                                             |
 
 Each tool provides a help page that can be accessed with the `-h` option.
 
 ```sh
-# display help page
+# show general help page on available sub-commands
 sonar -h
-# display help page for each tool
+# show help page for a specific sub-command
 sonar import -h
 ```
 
-### 2.1 Setup database (setup ⛽)
+### 2.1 Building a database (`setup`)
 
-First, we have to create a new database instance.
+First, we have to create a new database.
 ```sh
 sonar setup --db test.db
 ```
 
-Or we can create a new database instance with predefined properties.
+To create a new database instance with default sample properties use:
 ```sh
 sonar setup --db test.db --auto-create
 ```
-> TIP 🕯️: We can use [DB Browser](https://sqlitebrowser.org/) to visualise or manipulate the database file.
-
-By default, the MN908947.3 (SARS-CoV-2) is used as a reference. If we want to set up a database for a different pathogen, we can add `--gbk` following with Genbank file. (⚠️WARNING: currently, covSonar2 is tailored for SARS-CoV-2, so some functions might not function with other pathogens.)
-
-Example;
+By default, MN908947.3 (SARS-CoV-2) is used as a reference. If we want to set up a database for a different pathogen, we can add `--gbk` followed by a Genbank file containing both the genome sequence and annotation of the designated reference. Example:
 ```sh
 sonar setup --db test.db --auto-create --gbk Ebola.gb
 ```
-> TIP 🕯️: We recommend using a database with only one reference genome.
+> TIP 🕯️:  [how to download genbank file](https://ncbiinsights.ncbi.nlm.nih.gov/2017/05/08/genome-data-download-made-easy/)
 
-> NOTE 📌:  [how to download genbank file](https://ncbiinsights.ncbi.nlm.nih.gov/2017/05/08/genome-data-download-made-easy/)
+> EXPERT TIP 🕯️: We can use [DB Browser](https://sqlitebrowser.org/) to visualise or manipulate the database file directly.
+
 
 ### 2.2 Property management (`list-prop`, `add-prop` and `delete-prop`)
 
-In covSonar2, users can now arbitrarily add meta information or properties into a database to fit a specific project objective.
+In covSonar2, users can add properties to store custom meta information in the database. Based on the information to store, the data type (and optionally query type) has to be defined when adding a new property. The table below lists the supported data types with their default query types.
+
+data type      | description                                  | default query type  |
+---------------|----------------------------------------------|---------------------|
+integer        | property stores integers                     | numeric             |
+float           | property stores decimal numbers              | float                |
+text           | property stores text                         | text                |
+date           | property stores dates in the form YYYY-MM-DD | date                |
+zip            | property stores zip codes                    | zip                 |
+
 
 To add properties, we can use the `add-prop` command to add meta information into the database.
 
 The required arguments are listed below when we use `add-prop` command
 * `--name`, name of sample property
 * `--descr`, description of the new property
-* `--dtype`, data type of the new property (e.g., 'integer', 'float', 'text', 'date', 'zip')
+* `--dtype`, data type of the new property (see table above)
 
 ```sh
 # for example
@@ -121,267 +133,183 @@ sonar add-prop --db test.db --name AGE --dtype integer --descr "age information"
 #
 sonar add-prop --db test.db --name DATE_DRAW --dtype date --descr "sampling date"
 ```
-> TIP 🕯️: `sonar add-prop -h ` to see all available arguments.
+> TIP 🕯️: `sonar add-prop -h ` to see all arguments available.
 
-⚠️ WARNING: We reserve **'sample'** keyword that cannot be used as a property name
-(e.g., ⛔❌`--name sample`) because we use this name as the ID in the database schema.⚠️
+> NOTE 📌: Property names have to start with letters and have to consist of letters and digits only.
 
-To view the added properties, we can use the `list-prop` command to display all information.
+> NOTE 📌: All property names are stored in upper-case letters.
+
+> NOTE 📌: SAMPLE is reserved keyword that cannot be used as property names.
+
+To view added properties, use the `list-prop` command.
 ```sh
 sonar list-prop --db test.db
 ```
-
-The `delete-prop` command is used to delete an unwanted property from the database.
+The `delete-prop` command is used to delete an property from the database that is not longer needed any more.
 
 ```sh
 sonar delete-prop --db test.db  --name SEQ_REASON
 ```
 
-The program will ask for confirmation of the action.
+The program will ask for confirmation of the action, type YES and enter to confirm.
 ```
 Do you really want to delete this property? [YES/no]: YES
 ```
 
-### 2.3 Adding genomes and meta information to the database (import)
+### 2.3 Adding genomes and meta information to the database (`import`)
 
-This example shows how we add sequence along with meta information.
+This example shows how to import genome sequences along with meta information to a given database.
 
-We have sequence file name `valid.fasta` and meta-info file name `day.tsv`.
-
-valid.fasta
+In this example, sequences to import are stored in a fasta formatted file named `valid.fasta`:
 ```
 >IMS-00113
 CCAACCAACTTTCGATCTCTTG
+>IMS-00114
+CTAACCAACTTTCGATCTCTAG
 ```
-day.tsv
+Respective meta information file is stored in a tab-delimited text file named `meta.tsv`:
 ```
 IMS_ID		SAMPLING_DATE	LINEAGE
 IMS-00113	2021-02-04		B.1.1.7
+IMS-00114	2021-04-21		BA.5
 ```
 
-The required argument for the `import` command are listed as follows;
+The required argument for the `import` command are listed as follows.
 
-1. `--fasta` a fasta file containing genome sequences to be imported. A compressed file of fasta is also valid as an input (e.g., `--fasta sample.fasta.gz` or `sample.fasta.xz`).
-
-2. `--tsv` a tab-delimited file containing sample properties to be imported.
-
-3. `--cache` a directory for caching data.
-
-4. `--cols` define column names for sample properties.
-
-So, example
-```sh
-sonar import --db test.db --fasta valid.fasta --tsv day.tsv --threads 10 --cache tmp_cache  --cols sample=IMS_ID
-```
-As you can see, we defined `--cols sample=IMS_ID`, in which `IMS_ID` is the column ID that linked the sample name between the fasta file and meta-info file, and `sample` is the reserved word used to link data between tables in the database.
-
-> TIP 🕯️: user might don't need to create an `ID` property because we use the `sample` keyword as the ID to link data in our database schema and also used in the query command, which you will see in the next section.
-
-> TIP 🕯️: use `--threads` to increase the performance.
-
-To update meta information when we add a new property, we can use the same `import` command, but this time, in the `--tsv` tag, we provide a new meta or old file, for example:
-```sh
-sonar import --db test.db --tsv meta.passed.tsv --threads 200 --cache tmp_cache --cols sample=IMS_ID
-
-```
-> NOTE 🤨: please make sure the `--cols sample=IMS_ID` is correctly referenced. If you have a different column name, please change it according to the meta-info file (for example, `--cols sample=IMS_NEW_ID`)
-
-### 2.4 Query genome sequences based on profiles (match)
-
-Genomic profiles can be defined to align genomes. For this purpose, the variants related to the complete genome of the SARS-CoV-2 isolate Wuhan-Hu-1 (NC_045512.2) must be expressed as follows:
-
-| type       | nucleotide level                                                  | amino acid level              |
-|-----------|-------------------------------------------------------------------|-------------------------------|
-| SNP       | ref_nuc _followed by_ ref_pos _followed by_ alt_nuc (e.g. A3451T) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aa (e.g. S:N501Y) |
-| deletion  | del:first_NT_deleted-last_NT_deleted (e.g. del:11288-11296)                        | protein_symbol:del:first_AA_deleted-last_AA_deleted (e.g. ORF1ab:del:3001-3004) |
-| insertion | ref_nuc _followed by_ ref_pos _followed by_ alt_nucs (e.g. A3451TGAT) | protein_symbol:ref_aa _followed by_ ref_pos _followed by_ alt_aas (e.g. N:A34AK)  |
-
-The positions refer to the reference (first nucleotide in the genome is position 1). Using the option `--profile`, multiple variant definitions can be combined into a nucleotide, amino acid or mixed profile, which means that matching genomes must have all those variations in common. In contrast, alternative variations can be defined by multiple `--profile` options. As an example, `--profile S:N501Y S:E484K` matches genomes sharing the _Nelly_ **AND** _Erik_ variation while `--profile S:N501Y --profile S:E484K` matches to genomes that share either the _Nelly_ **OR** _Erik_ variation **OR** both. Accordingly, using the option **^** profiles can be defined that have not to be present in the matched genomes.
-
-
-There are additional options to adjust the matching.
-
-| option             | description                                                            |
-|--------------------|------------------------------------------------------------------------|
-| --count            | count matching genomes only                                            |
-| --format {csv,tsv,vcf}| output format (default: tsv) |
-
-
-> TIP 🕯️: use `sonar match -h ` to see all available arguments.
-
-Example;
-```sh
-sonar match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
-
-# matching B.1.1.7 genomes in DB 'test.db' that share an additional "Erik" mutation
-sonar match --profile S:E484K --LINEAGE B.1.1.7 --db test.db
-
-# --count to count the result
-sonar match --profile S:E484K --LINEAGE B.1.1.7 --count --db test.db
-
-# matching genomes in DB 'test.db' sharing the "Nelly" mutation
-# and that were sampled on first of January 2020
-sonar match --profile S:N501Y  --DATE 2020-01-01 --db test.db
-
-# matching genomes with specific IDs
-sonar match --sample ID-001 ID-001 ID-002 --db test.db
-```
-
-We use `^` as a **"NOT"** operator. We put it before any conditional statement to negate, exclude or filter the result.
-```sh
-# matching genomes in DB 'mydb' sharing the "Nelly" and the "Erik" mutation but not
-# belonging to the B.1.1.7 lineage
-sonar match --profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db
-
-```
-
-More example; `--profile` match
-```sh
-# AA profile OR  NT profile case
-sonar match --profile S:del:K418 --profile T418A  --db test.db
-# AA profile AND NT profile case
-sonar match --profile ORF8:del:119-120 del:3677-3677  --db test.db
-# exact Match X or N , we use small x for AA and small n for NT
-sonar match --profile S:K418x --db test.db
-# this will match S:K418X
-
-sonar match --profile A2145n --db test.db
-# this will match A2145N
-
-# speacial case, we can combine exact match and any match in alternate postion.
-sonar match  --profile A2145nN --db test.db
-# this will look in ('NG', 'NB', 'NT', 'NM', 'NS', 'NV', 'NA', 'NH',
-# 'ND', 'NY', 'NR', 'NW', 'NK', 'NN', 'NC')
-
-```
-
-More example; property match
-```sh
-# query with integer type
-# by default we use = operator
-sonar match  --AGE 25 --db test.db
-# however, if we want to query with comparison operators (e.g., >, !=, <, >=, <=)
-# , just add " " (double quote) around values.
-sonar match  --AGE ">25" --db test.db
-sonar match  --AGE ">=25" "<=30" --db test.db # AND Combination: >=25 AND <=30
-sonar match  --AGE "!=60" --db test.db
-
-# Range query matches
-sonar match  --DEMIS_ID_PC  10641:10658  --db test.db
-# 10641, 10642, 10643, .... 10658
-
-# Date
-# Sample were sampled in 2020
-sonar match  --DATE 2020-01-01:2020-12-31 --db test.db
-```
-> TIP 🕯️: Don't forget `sonar list-prop --db test.db` to see more details
-
-**Export to CSV/TSV/VCF file**
-
-covSonar can return results in different formats: `--format ["csv", "tsv", "vcf"]`
+* `--fasta`, a fasta file containing genome sequences to be imported. 
+* `--tsv`, a tab-delimited file containing sample properties to be imported.
+* `--cols`, define column names for sample properties if a file containing meta information is provided
 
 ```sh
-# example command
-sonar match --profile S:N501Y S:E484K --LINEAGE ^B.1.1.7 --db test.db --format csv -o out.csv
+sonar import --db test.db --fasta valid.fasta --tsv day.tsv --threads 10  --cols sample=IMS_ID
+```
+> NOTE 📌: When providing meta information, the corresponding file must contain a column containing the sequence IDs to be linked. This column must be defined as sample name column by using `--cols sample=IMS_ID` in our example.
+ 
+> TIP 🕯️: Use `--threads` to define threads to use which increases the performance.
 
-# in vcf format
-sonar match -i S:N501Y S:E484K --lineage Q.1 --db test.db --format vcf -o out.vcf
-
-# In case we have a list of ID and it is stored in a file, so we can use --sample-file
-# tag to load and query according to the listed ID; example of --sample-file
-sonar match --sample-file accessions.txt --db test.db --format vcf -o out.vcf
+To update meta information only, we can use the same `import` command without referencing any fasta file, for example:
+```sh
+sonar import --db test.db --tsv meta.passed.tsv --cols sample=IMS_ID
 ```
 
-> NOTE 📌: accessions.txt has to contain one ID per line.
+### 2.4 Query genome sequences based on mutation profiles and/or meta information (`match`)
 
+Stored genomes can be queried based on their mutation profiles and sample properties. 
+We follow the scientific notation for mutations. In the following table *REF* stands for the reference allele, *ALT* for the variant allele, *pos* for the affected reference position (1-based) or *start* and *end* for the affected reference range (1-based). *PROT* stands for symbol of the respective gene product.
 
-By default, covSonar returns every property to the output file if a user needs to export only some particular column. We can use `--out-column` tag to include only a specific property/column.
+| mutation type     | nucleotide level                         | amino acid level                                     |
+|-------------------|------------------------------------------|------------------------------------------------------|
+| SNP               | *REFposALT* (e.g. A3451T)                | *PROT*:*REFposALT* (e.g. S:N501Y)                    |
+| 1bp Deletion      | *del*:*pos* (e.g. del:11288)             | *PROT*:del:*pos* (e.g. ORF1ab:del:3001)              |
+| multi-bp Deletion | del:*start*-*end* (e.g. del:11288-11300) | *PROT*:del:*start*-*end* (e.g. ORF1ab:del:3001-3004) |
+| Insertion         | *REFposALT* (e.g. A3451TGAT)             | *PROT*:*REFposALT* (e.g. N:A34AK)                    |
 
-for example,
+> NOTE 📌: Any mutation can be negated by prefixing the notation with an **rooftop character (^)**. For example, *^A1345ATGC* only matches target genomes that do not carry this insertion.
+
+> NOTE 📌: Deletion notations are greedy by default. For example, the notation *del:12* corresponds to any deletion that affects reference position 12. To fix a position, an **equal sign (=)** can be prepended. For instance, the notation *del:=12* matches only 1bp deletions at reference position 12. Likewise, the notation *del:1500-=1505* matches deletions that span at least reference positions 1500 to 1505 and definitely terminate at position 1505.
+
+> NOTE 📌: Any mutation can be negated by prefixing the notation with an **caret (^)**. For example, *^A1345ATGC* only matches target genomes that do not carry this insertion.
+
+> NOTE 📌: By default, the IUPAC characters N (nucleotide level) and X (amino acid level) are interpreted as any polymorphism at the respective reference position. To explicitly search for N or X at specific ones, they use n or x (e.g. *T306n*). 
+
+Mutation profiles consist of one or multiple mutations and can be queried by `--profile`. Multiple mutations following this argument mean that all notations must be satisfied by the target genome (**AND** logic). Multiple `--profile` arguments can be used to define alternate mutation profiles that are searched simulaatively (**OR** logic). The following examples will illustrate this.
 
 ```sh
-# only NUC_PROFILE,AA_PROFILE and LINEAGE will save into tsv file
-sonar match --db test.db  --DATE_DRAW 2021-03-01  -o test.tsv --out-column NUC_PROFILE,AA_PROFILE,LINEAGE
-# column name separated by comma
+# querying genomes carrying "Erik" (S:E484K) mutation 
+sonar match --profile S:E484K --db test.db
+
+# querying genomes carrying "Erik" (S:E484K) AND "Nelly" (S:N501Y) mutation 
+sonar match --profile S:E484K S:N501Y --db test.db
+
+# querying genomes carrying "Erik" (S:E484K) OR "Nelly" (S:N501Y) mutation 
+sonar match --profile S:E484K --profile S:N501Y --db test.db
+
+# querying genomes carrying "Erik" (S:E484K) BUT NOT "Nelly" (S:N501Y) mutation 
+sonar match --profile S:E484K ^S:N501Y --db test.db
+
+# querying genomes where reference positions 99 to 102 are deleted
+sonar match --profile del:99-102 --db test.db
+
+# querying genomes that carry a deletion exactly from reference position 99 to exactly 102
+sonar match --profile del:=99-=102 --db test.db
 ```
 
-<u>Parent-Child relationship</u>
+Target genomes can also (additionally) be searched based on sample names (sequence IDs). For this, the respective sample names are listed after the `--sample` argument. Alternatively, a text file containing one sample name per line can be specified after `--sample-file`.
 
-> ⚠️ WARNING: **This function currently works on SARS-CoV-2 only ❗**
+Additionally, target genomes can be queried based on linked meta information (properties). For this, the name of the respective property is used as argument (e.g. `--LINEAGE`). Multiple alternate values can follow. Based on the data types of the respective properties, different operators are allowed:
 
-First, we have to run `update-lineage-info` command to download the latest version of lineages from https://github.com/cov-lineages/pango-designation/ and install it in the database
+| operator | description                                           |valid data types     |
+|----------|-------------------------------------------------------|---------------------|
+| >        | larger than (e.g. >1)                                 | integer, float, date |
+| <        | larger than (e.g. <1)                                 | integer, float       |
+| >=       | larger than or equal to (e.g. >=1)                    | integer, float, date |
+| <=       | smaller than or equal to (e.g. <=1)                   | integer, float, date |
+| !=       | different than (e.g. !=1)                              | integer, float       |
+| :        | range, *from*:*to* (e.g. 2021-01-01:2021-12-31)       | integer, float, date |
+| ^        | not the same as (e.g. ^B.1.1.7)                       | text                |
+| %        | wildcard standing for any character(s) (e.g. %human%) | text                | 
+
+> NOTE 📌: The zip data type is interpreted hierarchically. This means that the search value 106 matches all zip codes starting with 106.
+
+> NOTE 📌: If a property refers to the lineage classifications of SARS-CoV-2 based on Pango nomenclature (https://cov-lineages.org/resources/pangolin.html), the corresponding sub-lineages can be included when querying specific lineages by using `--with-sublineages` followed by the name of the property to be applied to. Make sure that you use the latest pango lineage definitions by running `sonar update-lineage-info` command before.
 
 ```sh
-# example command
-sonar update-lineage-info
+# query genomes collected 2021 and later
+sonar match --SAMPLING >=2021-01-01 --db test.db
+# query genomes in carrying "Erik" (S:E484K) mutation and NOT classified as B.1.1.7 
+sonar match --profile S:E484K --LINEAGE ^B.1.1.7 --db test.db
+# query genomes in carrying "Erik" (S:E484K) mutation and classified as B.1.1.7 or any sub-lineage of B.1.1.7 
+sonar match --profile S:E484K --LINEAGE B.1.1.7 --db test.db --with-sublineage LINEAGE
+# query genomes with any SNP at referebnce genome position 11022
+sonar match --profile A11022N --db test.db
+# query genomes with N at reference genome position 11022
+sonar match --profile A11022n --db test.db
+# query genomes resulting from samples with Ct values of 30 and higher
+sonar match --CT >=30 --db test.db
+# query genomes from patients in the age class 31 to 40
+sonar match --AGE 31:40 --db test.db
+# query genomes with accession seq01 or seq02
+sonar match --sample seq01 seq02
 ```
 
-We want to search all sublineages with a given lineage, covSonar offers `--with-sublineage PROP_COLUMN` (PROP_COLUMN  means the property name that we added to our database).
+By default, mutation profiles of the target genomes (excluding N or X alleles) plus all linked meta information are output as a tab-separated file. The output can be customized by the following options.
 
-In this example; we use `LINEAGE` property to store lineage information.
-```sh
-sonar match --profile S:E484K --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count --db test.db --debug
-```
-This query will return results including 'B.1.1.7', 'Q.4', 'Q.5', 'Q.3', 'Q.6', 'Q.1', 'Q.7', 'Q.2', 'Q.8' lineages.
+| option                   | description                                                                             |
+|--------------------------|-----------------------------------------------------------------------------------------|
+| --count                  | count target genomes only                                                               |
+| --format *{csv,tsv,vcf}* | select output format between csv (comma separated), tsv (tab delimited, default) or vcf |
+| --out-cols *(col_names)* | define columns to show (works only for tsv or csv output format)                         |
+| -o *(file_name)*          | write the results to the specified file instead of displaying them on the screen          |
 
-<u>Wildcard search</u>
 
-covSonar also supports wildcard query (symbol `%`) to handle more complexity of the query. The operator is used in a **lineage query** to search for a specified pattern in lineage. It can be used in combinations of including and excluding command, for example;
+> TIP 🕯️: use `sonar match -h` to see all available query and output options.
 
-```sh
-# edit command at --lineage tag
-sonar match -i S:N501Y S:E484K --LINEAGE ^B.1.1% AY.4% --db test.db --format csv -o out.csv
-```
+### 2.5 Native database queries (`direct-query`)
 
-This query will include all lineages that start with 'AY.4'.
-```
-['AY.4', 'AY.4.1', 'AY.4.2', .... , 'AY.46.5', 'AY.46.6', 'AY.47']
-```
-
-and exclude all lineages that start with 'B.1.1'.
-```
-['B.1.1', 'B.1.1.1', 'B.1.1.10', 'B.1.1.121', ... , 'B.1.177.9', 'B.1.179', 'B.1.187']
-```
-Here are some examples showing different queries with `%`
-
-| query              | description                                       |
-|--------------------|---------------------------------------------------|
-| AY%                | Finds any lineage that starts with "AY"           |
-| %1.1.%             | Finds any lineage that have "1.1." in any position|
-| %.1                | Finds any lineage that ends with ".1"             |
-
-> NOTE 📌: We can also use wildcard with sublineage search. The following example shows when want to exclude all lineage B.1.617.X (X can be 1,2,3 ...) and  we also enable sublineage search, so this result in all lineage and sublineages from B.1.617.X are also filter out.
-    ```
-    sonar match --LINEAGE ^B.1.617% --with-sublineage LINEAGE --db test.db --count --debug
-    ```
-    result in
-    ```
-    NOT IN ('B.1.617.2', 'AY.94', 'AY.43.4', 'AY.39.1', 'AY.122.2', 'AY.122.6', 'AY.9.2.2', 'AY.37', 'AY.112.2', 'AY.40', 'AY.26', 'AY.5.6', 'AY.84', 'AY.28', 'AY.25.2', 'AY.91.1', 'B.1.617.3', 'AY.33', 'AY.95', 'AY.125', 'B.1.617.1', ..... etc.)
-    ```
-
-### 2.5 Show infos about the used sonar system and database (info)
-
-Detailed infos about the used sonar system (e.g. version, reference,  number of imported genomes, unique sequences, available metadata).
+Advanced users familiar with the covSonar database scheme, can use the SQLite query syntax to directly query the database as demonstrated by the following example.
 
 ```sh
-# Show infos about the used sonar system and database 'test.db'
+sonar direct-query --sql "SELECT COUNT(*) FROM sequences" --db test.db
+```
+
+> Note 🕯️: For added security, `direct-query` allows read-only access to the database, not write access.
+
+### 2.6 Show infos about the used sonar system and database (`info`)
+
+The `info` sub-command lists details about the used sonar software and database (e.g. version,  number of imported genome sequences and unique sequences).
+
+```sh
 sonar info --db test.db
 ```
 
-### 2.6 Restore genome sequences from the database (restore)
-Genome sequences can be restored from the database based on their accessions.
-The restored sequences are combined with their original FASTA header and  shown on the screen. The screen output can be redirected to a file easily by using `>`.
+### 2.7 Restore genome sequences from the database (`restore`)
+Genome sequences can be retrieved from the database based on their accessions. Optionally, the sequences can be displayed in quasi-aligned form to the standard reference, with insertions indicated by lowercase letters and deletions indicated by minus (-) signs. The argument "-o" can be used to forward the output to a file.
 
 ```sh
-# Restore genome sequences linked to accessions 'mygenome1' and 'mygenome2' from the
-# database 'test.db' and write these to a fasta file named 'restored.fasta'
-sonar restore --sample mygenome1 mygenome2 --db test.db > restored.fasta
-# as before, but consider all accessions from 'accessions.txt' (the file has to
-# contain one accession per line)
-sonar restore --sample-file accessions.txt --db test.db > restored.fasta
+sonar restore --sample mygenome1 mygenome2 --db test.db -o restored.fasta
 ```
 
-### 2.7 Database management (db-upgrade, optimize)
+### 2.8 Database management (`db-upgrade`, `optimize`)
 Sometimes you might need the `optimize` command to clean the [problems](https://www.sqlite.org/lang_vacuum.html) from database operation (e.g., unused data block or storage overhead ).
 ```sh
 sonar optimize  --db test.db
@@ -408,9 +336,13 @@ Database now version: 4
 Success: Database upgrade was successfully completed
 
 ```
-⚠️ WARNING: Backup the db file before upgrade.
+> WARNING ⚠️: Backup the db file before upgrade. 
 
-### 2.7 Delete sample (delete)
+> WARNING ⚠️: Due to the change in the alignment algorithm used, it is not recommended to upgrade databases from covsonar v.1.x to v.2.x.
+
+### 2.7 Delete sample (`delete`)
+
+As shown by the follwing example, genome sequences can be deleted from the databse based on their sample name (sequence ID).
 
 ```sh
 sonar delete --db test.db --sample ID_1 ID_2 ID_3
