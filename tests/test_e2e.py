@@ -165,11 +165,11 @@ def test_import(tmp_path, monkeypatch):
     shutil.copy(db_path_orig, db_path)
 
     run_cli(
-        f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 2"
+        f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 2 --auto-link"
     )
 
     run_cli(
-        f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 2 --no-update"
+        f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 2 --no-update --auto-link"
     )
 
 

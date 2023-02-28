@@ -153,8 +153,8 @@ def parse_args(args):
         default=[],
     )
     parser_import.add_argument(
-        "--no-autodetect",
-        help="do not auto-detect of columns for sample properties based on identical names",
+        "--auto-link",
+        help="automatically link  TSV columns with database fields based on identical names",
         action="store_true",
     )
     parser_import.add_argument(
@@ -407,7 +407,7 @@ def main(args):  # noqa: C901
             tsv=args.tsv,
             cols=args.cols,
             cachedir=args.cache,
-            autodetect=not args.no_autodetect,
+            autodetect=args.auto_link,
             progress=not args.no_progress,
             update=not args.no_update,
             threads=args.threads,
