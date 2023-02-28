@@ -63,10 +63,10 @@ def test_import_data(testdb, monkeypatch):
         sonarBasics().import_data(
             testdb,
             fasta=[],
-            tsv=[],
+            tsv_files=[],
             cols={},
             cachedir=None,
-            autodetect=False,
+            autolink=False,
             progress=True,
             update=True,
             threads=1,
@@ -82,9 +82,9 @@ def test_import_data(testdb, monkeypatch):
         sonarBasics().import_data(
             testdb,
             fasta=[],
-            tsv=[""],
+            tsv_files=[""],
             cols=["STUDY", "STE"],
-            autodetect=False,
+            autolink=False,
             progress=True,
             update=True,
             debug=True,
@@ -98,9 +98,9 @@ def test_import_data(testdb, monkeypatch):
         sonarBasics().import_data(
             testdb,
             fasta=[],
-            tsv=[""],
+            tsv_files=[""],
             cols=["STE=STUDY", "sample=IMS_ID"],
-            autodetect=False,
+            autolink=False,
             progress=True,
             update=True,
             debug=True,
@@ -114,10 +114,10 @@ def test_import_data(testdb, monkeypatch):
         sonarBasics().import_data(
             testdb,
             fasta=[],
-            tsv=[tsv],
+            tsv_files=[tsv],
             cols=[],
             cachedir=None,
-            autodetect=False,
+            autolink=False,
             progress=True,
             update=True,
             debug=True,
@@ -129,7 +129,7 @@ def test_import_data(testdb, monkeypatch):
     # tsv does not provide any informative column
     with pytest.raises(SystemExit) as e:
         sonarBasics().import_data(
-            testdb, fasta=[], tsv=[tsv], cols=["sample=IMS_ID"], autodetect=False
+            testdb, fasta=[], tsv_files=[tsv], cols=["sample=IMS_ID"], autolink=False
         )
     assert e.type == SystemExit
     assert "tsv does not provide any informative column" in e.value.code
@@ -140,9 +140,9 @@ def test_import_data(testdb, monkeypatch):
         sonarBasics().import_data(
             testdb,
             fasta=[],
-            tsv=[bad_tsv],
+            tsv_files=[bad_tsv],
             cols=["sample=IMS_ID", "SEQ_TYPE=SEQ_TYPE"],
-            autodetect=False,
+            autolink=False,
         )
     assert e.type == SystemExit
     assert "is not an unique column" in e.value.code
@@ -150,7 +150,11 @@ def test_import_data(testdb, monkeypatch):
     # in 'tsv file does not contain required sample column.'
     with pytest.raises(SystemExit) as e:
         sonarBasics().import_data(
-            testdb, fasta=[], tsv=[tsv], cols=["sample=INVISIBLE_COl"], autodetect=True
+            testdb,
+            fasta=[],
+            tsv_files=[tsv],
+            cols=["sample=INVISIBLE_COl"],
+            autolink=True,
         )
     assert e.type == SystemExit
     assert "tsv file does not contain required sample column" in e.value.code

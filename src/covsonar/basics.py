@@ -353,13 +353,20 @@ class sonarBasics(object):
 
     # importing
     @staticmethod
+    def get_csv_colnames(fname, delim=","):
+        with open(fname, "r") as handle:
+            csvdict = csv.DictReader(handle, delimiter=delim)
+            return list(csvdict.fieldnames)
+
+    @staticmethod
     def import_data(  # noqa: C901
         db,
         fasta=[],
-        tsv=[],
+        csv_files=[],
+        tsv_files=[],
         cols=[],
         cachedir=None,
-        autodetect=False,
+        autolink=False,
         progress=False,
         update=True,
         threads=1,
@@ -373,7 +380,7 @@ class sonarBasics(object):
                 logging.info("import mode: updating existing samples")
 
         if not fasta:
-            if not tsv or not update:
+            if (not tsv_files and not csv_files) or not update:
                 logging.info("Nothing to import.")
                 exit(0)
 
@@ -382,68 +389,73 @@ class sonarBasics(object):
             db_properties = set(dbm.properties.keys())
             db_properties.add("sample")
 
-        colnames = {x: x for x in db_properties} if autodetect else {}
+        propnames = {x: x for x in db_properties} if autolink else {}
         for x in cols:
             if x.count("=") != 1:
                 sys.exit(
                     "input error: " + x + " is not a valid sample property assignment."
                 )
             k, v = x.split("=")
+            if k == "SAMPLE":
+                k = "sample"
             if k not in db_properties:
                 sys.exit(
                     "input error: sample property "
                     + k
                     + " is unknown to the selected database. Use list-props to see all valid properties."
                 )
-            colnames[k] = v
+            propnames[k] = v
+            propnamekeys = sorted(propnames.keys())
 
-        if "sample" not in colnames:
+        if "sample" not in propnames:
             sys.exit("input error: a sample column has to be assigned.")
 
+        # csv/tsv file processing
         properties = collections.defaultdict(dict)
-        if tsv:
-            for fname in tsv:
-                with open(fname, "r") as handle, tqdm(
-                    desc="processing " + fname + "...",
-                    total=os.path.getsize(fname),
-                    unit="bytes",
-                    unit_scale=True,
-                    bar_format="{desc} {percentage:3.0f}% [{n_fmt}/{total_fmt}, {elapsed}<{remaining}, {rate_fmt}{postfix}]",
-                    disable=not progress,
-                ) as pbar:
-                    line = handle.readline()
-                    pbar.update(len(line))
-                    fields = line.strip("\r\n").split("\t")
-                    print(fields)
-                    tsv_cols = {}
-                    if not quiet:
-                        print()
-                    for x in sorted(colnames.keys()):
-                        c = fields.count(colnames[x])
-                        if c == 1:
-                            tsv_cols[x] = fields.index(colnames[x])
-                            if not quiet:
-                                print("  " + x + " <- " + colnames[x])
-                        elif c > 1:
-                            sys.exit(
-                                "error: " + colnames[x] + " is not an unique column."
-                            )
-                    if "sample" not in tsv_cols:
-                        sys.exit(
-                            "error: tsv file does not contain required sample column."
-                        )
-                    elif len(tsv_cols) == 1:
-                        sys.exit(
-                            "input error: tsv does not provide any informative column."
-                        )
-                    for line in handle:
-                        pbar.update(len(line))
-                        fields = line.strip("\r\n").split("\t")
-                        sample = fields[tsv_cols["sample"]]
-                        for x in tsv_cols:
-                            if x == "sample":
-                                continue
-                            properties[sample][x] = fields[tsv_cols[x]]
+        metafiles = [(x, ",") for x in csv_files] + [(x, "\t") for x in tsv_files]
+        if metafiles:
+            for fname, delim in metafiles:
+                if not quiet:
+                    print("linking data from", fname)
+                fields = sonarBasics.get_csv_colnames(fname, delim)
+                cols = {}
+                for x in propnamekeys:
+                    c = fields.count(propnames[x])
+                    if c == 1:
+                        cols[x] = propnames[x]
+                        if not quiet:
+                            print("  " + x + " <- " + propnames[x])
+                    elif c > 1:
+                        sys.exit("error: " + propnames[x] + " is not an unique column.")
+                if "sample" not in cols:
+                    print(fields, fields)
+                    print(propnames)
+                    print(cols)
+                    sys.exit("error: tsv file does not contain required sample column.")
+                elif len(cols) == 1:
+                    sys.exit(
+                        "input error: tsv does not provide any informative column."
+                    )
+                if not quiet:
+                    print(
+                        "  missing properties:"
+                        + ", ".join([x for x in propnamekeys if x not in cols])
+                    )
+                skey = cols["sample"]
+                del cols["sample"]
+                with open(fname, "r") as handle:
+                    csvreader = csv.DictReader(handle, delimiter=delim)
+                    for row in csvreader:
+                        sample = row[skey]
+                        for x, v in cols.items():
+                            properties[sample][x] = row[v]
+                if not quiet:
+                    print(
+                        len(properties) * len(cols),
+                        "data points processed for",
+                        len(properties),
+                        "samples.",
+                    )
 
         # setup cache
         cache = covsonar.cache.sonarCache(
@@ -472,11 +484,10 @@ class sonarBasics(object):
                     aligner.process_cached_sample, cache._samplefiles_to_profile
                 ):
                     pbar.update(1)
-
             cache.import_cached_samples()
 
         # importing properties
-        if tsv:
+        if metafiles:
             with covsonar.dbm.sonarDBManager(db, readonly=False, debug=debug) as dbm:
                 for sample_name in tqdm(
                     properties,

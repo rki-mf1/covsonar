@@ -53,10 +53,10 @@ def testdb(setup_db):
     sonarBasics.import_data(
         db,
         fasta=[fasta],
-        tsv=[],
+        tsv_files=[],
         cols={},
         cachedir=None,
-        autodetect=True,
+        autolink=True,
         progress=False,
         update=True,
         debug=False,

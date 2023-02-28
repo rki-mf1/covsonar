@@ -143,7 +143,14 @@ def parse_args(args):
         help="tab-delimited file containing sample properties to import",
         type=str,
         nargs="+",
-        default=None,
+        default=[],
+    )
+    parser_import.add_argument(
+        "--csv",
+        help="comma delimited file containing sample properties to import",
+        type=str,
+        nargs="+",
+        default=[],
     )
     parser_import.add_argument(
         "--cols",
@@ -404,10 +411,11 @@ def main(args):  # noqa: C901
         sonarBasics.import_data(
             db=args.db,
             fasta=args.fasta,
-            tsv=args.tsv,
+            csv_files=args.csv,
+            tsv_files=args.tsv,
             cols=args.cols,
             cachedir=args.cache,
-            autodetect=args.auto_link,
+            autolink=args.auto_link,
             progress=not args.no_progress,
             update=not args.no_update,
             threads=args.threads,
