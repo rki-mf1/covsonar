@@ -1218,8 +1218,8 @@ class sonarDBManager:
             sql = "SELECT sample_id AS id FROM sample2property WHERE " + " AND ".join(
                 conditions
             )
-        elif self.properties[name]["target"] == "variant":  # to be adapted
-            pass
+        elif self.properties[name]["target"] == "variant":  
+            sql = "SELECT sample.id as 'sample.id' FROM variantView LEFT JOIN sequence ON sample.seqhash = sequence.seqhash WHERE \n" + " AND ".join(conditions)
         else:
             sys.exit(
                 "database error: unkown target ("

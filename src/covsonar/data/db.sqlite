@@ -309,14 +309,14 @@ SELECT
   sample.id as "sample.id",
   sample.name as "sample.name",
   sample.seqhash as "sample.seqhash",
-	reference.id as "reference.id",
+  reference.id as "reference.id",
   reference.accession as "reference.accession",
   reference.standard as "reference.standard",
-	molecule.id as "molecule.id",
+  molecule.id as "molecule.id",
   molecule.accession as "molecule.accession",
   molecule.symbol as "molecule.symbol",
   molecule.standard as "molecule.standard",
-	element.id as "element.id",
+  element.id as "element.id",
   element.accession as "element.accession",
   element.symbol as "element.symbol",
   element.standard as "element.standard",
@@ -326,14 +326,23 @@ SELECT
   variant.start as "variant.start",
   variant.end as "variant.end",
   variant.alt as "variant.alt",
-	variant.label as "variant.label",
-  variant.parent_id as "variant.parent_id"
+  variant.label as "variant.label",
+  variant.parent_id as "variant.parent_id",
+  variant2property.property_id as "property_id",
+  variant2property.value_integer as "value_integer",
+  variant2property.value_float as "value_float",
+  variant2property.value_text as "value_text",
+  variant2property.value_zip as "value_zip",
+  variant2property.value_varchar as "value_varchar",
+  variant2property.value_blob as "value_blob",
+  variant2property.value_date as "value_date"
 FROM
 	sample
 LEFT JOIN sequence ON sample.seqhash = sequence.seqhash
 LEFT JOIN alignment ON sequence.seqhash = alignment.seqhash
 LEFT JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
 LEFT JOIN variant ON alignment2variant.variant_id = variant.id
+LEFT JOIN variant2property ON variant2property.variant_id = variant.id
 LEFT JOIN element ON variant.element_id = element.id
 LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
