@@ -282,7 +282,7 @@ class sonarDBManager:
                 + str(name)
                 + "' is reserved and cannot be used as property name"
             )
-        if not re.match("^[a-zA-Z0-9_]+$", name):
+        if not re.match("^[A-Z][A-Z0-9_]+$", name):
             sys.exit(
                 "error: invalid property name (property names can contain only letters, numbers and underscores)"
             )
@@ -1083,6 +1083,75 @@ class sonarDBManager:
 
         return link.join(conditions), vallist
 
+    def add_pango_sublineages(self, *lineages):
+        lineage_pool = set()
+        lineages = list(lineages)
+        while lineages:
+            lineage = lineages.pop()
+            if lineage.startswith("^"):
+                lineage = lineage[1:]
+                op = "^"
+            else:
+                op = ""
+            if lineage.endswith("*"):
+                lineage = lineage[:-1]
+                value = self.lineage_sublineage_dict.get(lineage, [])
+                for val in value.split(","):
+                    if op + val not in lineage_pool:
+                        lineages.append(op + val)
+            lineage_pool.add(op + lineage)
+        return lineage_pool
+
+    def resolve_pango_wildcards(self, *lineages):
+        lineage_pool = set()
+        for lineage in lineages:
+            if "%" not in lineage:
+                lineage_pool.add(lineage)
+            else:
+                lineage = lineage.replace("~", "~~").replace("_", "~_")
+                if lineage.startswith("^"):
+                    op = "^"
+                    lineage = lineage[1:]
+                else:
+                    op = ""
+                if lineage.endswith("*"):
+                    suff = "*"
+                    lineage = lineage[:-1]
+                else:
+                    suff = ""
+                sql = (
+                    "SELECT DISTINCT lineage FROM lineages WHERE "
+                    + "lineage LIKE ? "
+                    + "ESCAPE '~';"
+                )
+                lineage_pool.update(
+                    [
+                        op + x["lineage"] + suff
+                        for x in self.cursor.execute(sql, [lineage]).fetchall()
+                    ]
+                )
+        return lineage_pool
+
+    def query_pango(self, field, *vals, link="AND"):
+        link = " " + link.strip() + " "
+        data = defaultdict(set)
+        conditions = []
+        vallist = []
+        vals = self.resolve_pango_wildcards(*vals)
+        vals = self.add_pango_sublineages(*vals)
+
+        for val in vals:
+            if val.startswith("^"):
+                data["!="].add(val[1:])
+            else:
+                data["="].add(val)
+
+        for operator, valset in data.items():
+            condition, vals = self.get_conditional_expr(field, operator, *valset)
+            conditions.extend(condition)
+            vallist.extend(vals)
+        return link.join(conditions), vallist
+
     def query_metadata(self, name, *vals):
         conditions = ['"property_id" = ?']
         valueList = [self.properties[name]["id"]]
@@ -1114,6 +1183,11 @@ class sonarDBManager:
         # query float
         elif self.properties[name]["querytype"] == "float":
             a, b = self.query_float(targetfield, *vals)
+            conditions.append(a)
+            valueList.extend(b)
+        # query pango
+        elif self.properties[name]["querytype"] == "pango":
+            a, b = self.query_pango(targetfield, *vals)
             conditions.append(a)
             valueList.extend(b)
         else:
@@ -1341,48 +1415,6 @@ class sonarDBManager:
         # collecting sqls for metadata-based filtering
         property_sqls = []
         property_vals = []
-        # IF sublineage search is enable
-        # support: include and exclude
-        if lineage_column:
-            _tmp_include_lin = []  # used to keep all lineages after search.
-            include_lin = properties[lineage_column]  # get list of given lineages
-            logging.info("sublineage mapping is enabled for property %s" % include_lin)
-            while include_lin:
-                in_lin = include_lin.pop(0)
-                if in_lin.startswith("^"):
-                    in_lin = in_lin[1:]
-                    op = "^"
-                else:
-                    op = ""
-
-                # have wildcard in string which mean we have to find all lineage from wildcard query
-                # then we used the wildcard query result to find all sublineages agian.
-                if "%" in in_lin:
-                    _tobeadded_lin = self.get_list_of_lineages(in_lin)
-                    for i in _tobeadded_lin:
-                        i = op + i
-                        include_lin.append(i)  # add more lineage to find in next round.
-
-                value = self.lineage_sublineage_dict.get(
-                    in_lin, "none"
-                )  # provide a default value if the key is missing:
-                if value != "none":
-                    in_lin = op + in_lin
-                    _tmp_include_lin.append(in_lin)
-
-                    _list = value.split(",")
-                    for i in _list:
-                        i = op + i
-                        include_lin.append(i)  # add more lineage to find in next round.
-                        # if we don't find this wildcard so we discard it
-                else:  # None (no child)
-                    in_lin = op + in_lin
-                    _tmp_include_lin.append(in_lin)
-            include_lin = _tmp_include_lin
-            properties[lineage_column] = include_lin
-
-        if self.debug:
-            logging.debug(properties)
 
         if properties:
             for pname, vals in properties.items():
@@ -1583,16 +1615,6 @@ class sonarDBManager:
         else:
             sys.exit("error: '" + format + "' is not a valid output format")
         return self.cursor.execute(sql, property_vals + profile_vals)  # .fetchall()
-
-    def get_list_of_lineages(self, lineage):
-        sql = (
-            "SELECT DISTINCT lineage FROM lineages WHERE lineage LIKE '"
-            + lineage
-            + "';"
-        )
-        rows = self.cursor.execute(sql).fetchall()
-        result = [i["lineage"] for i in rows]
-        return result
 
     # MISC
 

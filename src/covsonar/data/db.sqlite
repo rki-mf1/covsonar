@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS sample (
 CREATE INDEX IF NOT EXISTS idx_sample_name ON sample(name);
 CREATE INDEX IF NOT EXISTS idx_sample_seqhash ON sample(seqhash);
 
+--
+-- property SECTION
+--
+
 CREATE TABLE IF NOT EXISTS property (
 	id INTEGER PRIMARY KEY,
 	name VARCHAR NOT NULL UNIQUE,

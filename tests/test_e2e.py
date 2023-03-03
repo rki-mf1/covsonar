@@ -194,7 +194,7 @@ def test_valid_end(tmp_path, monkeypatch):
     run_cli(
         f"match --db {db_path} --DATE_DRAW 2021-03-01:2022-03-15 -o {tmp_path}/temp5.tsv"
     )
-    run_cli(f"match --db {db_path} --LINEAGE B.1.1.7 --with-sublineage LINEAGE --count")
+    run_cli(f"match --db {db_path} --LINEAGE B.1.1.7* --count")
 
 
 # the following functions, we try to extend the test cases to make
@@ -205,11 +205,9 @@ def test_valid_extend(tmp_path, monkeypatch):
 
     db_path = "data/test-with-seqs.db"
     # sonar.parse_args(["--version"])
+    run_cli(f"match --db {db_path} --LINEAGE ^B.1.1.7* --count -o {tmp_path}/temp.tsv")
     run_cli(
-        f"match --db {db_path} --LINEAGE ^B.1.1.7 --with-sublineage LINEAGE --count -o {tmp_path}/temp.tsv"
-    )
-    run_cli(
-        f"match --db {db_path} --LINEAGE ^B.1.1% AY.4% --with-sublineage LINEAGE -o {tmp_path}/temp1.tsv "
+        f"match --db {db_path} --LINEAGE ^B.1.1%* AY.4%* LINEAGE -o {tmp_path}/temp1.tsv "
     )
     run_cli(f"match --db {db_path} --format csv -o {tmp_path}/out.csv")
     run_cli(f"match --db {db_path} --format vcf -o {tmp_path}/out.vcf")
@@ -331,9 +329,7 @@ def test_valid_extend3(monkeypatch, capsys):
             "--db",
             db_path,
             "--LINEAGE",
-            "^BA.5",
-            "--with-sublineage",
-            "LINEAGE",
+            "^BA.5*",
             "--count",
         ]
     )

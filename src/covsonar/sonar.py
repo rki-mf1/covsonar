@@ -209,7 +209,7 @@ def parse_args(args):
         metavar="STR",
         help="data type of the new property",
         type=str,
-        choices=["integer", "float", "text", "date", "zip"],
+        choices=["integer", "float", "text", "date", "zip", "pango"],
         required=True,
     )
     parser_addprops.add_argument(
@@ -217,7 +217,7 @@ def parse_args(args):
         metavar="STR",
         help="query type of the new property",
         type=str,
-        choices=["numeric", "float", "date", "text", "zip"],
+        choices=["numeric", "float", "date", "text", "zip", "pango"],
         default=None,
     )
     parser_addprops.add_argument(
@@ -485,6 +485,9 @@ def main(args):  # noqa: C901
                     args.qtype = "date"
                 elif args.dtype == "zip":
                     args.qtype = "zip"
+                elif args.dtype == "pango":
+                    args.dtype = "test"
+                    args.qtype = "pango"
             dbm.add_property(
                 args.name, args.dtype, args.qtype, args.descr, args.default
             )
