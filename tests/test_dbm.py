@@ -10,10 +10,18 @@ from src.covsonar.dbm import sonarDBManager
 def test_add_property_that_exists(init_writeable_dbm):
     with pytest.raises(SystemExit) as pytest_wrapped_e:
         init_writeable_dbm.add_property(
-            "newprop", datatype="string", querytype="string", description="new prop"
+            "newprop",
+            datatype="string",
+            querytype="string",
+            description="new prop",
+            subject="sample",
         )
         init_writeable_dbm.add_property(
-            "NEWPROP", datatype="string", querytype="string", description="new prop"
+            "NEWPROP",
+            datatype="string",
+            querytype="string",
+            description="new prop",
+            subject="sample",
         )
     assert pytest_wrapped_e.type == SystemExit
     assert (
@@ -53,6 +61,7 @@ def test_db_writeablity(testdb):
                 "text",
                 "text",
                 "my new prop stores text information",
+                "sample",
             )
         assert pytest_wrapped_e.type == SystemExit
         assert (
@@ -61,7 +70,11 @@ def test_db_writeablity(testdb):
         )
     with sonarDBManager(testdb, readonly=False) as dbm:
         dbm.add_property(
-            "YET_ANOTHER_PROP", "text", "text", "my new prop stores text information"
+            "YET_ANOTHER_PROP",
+            "text",
+            "text",
+            "my new prop stores text information",
+            "sample",
         )
         assert "YET_ANOTHER_PROP" in dbm.properties
         dbm.delete_property("YET_ANOTHER_PROP")

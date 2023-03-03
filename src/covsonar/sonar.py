@@ -227,6 +227,13 @@ def parse_args(args):
         type=str,
         default=None,
     )
+    parser_addprops.add_argument(
+        "--subject",
+        metavar="VAR",
+        help="choose between sample or variant property (by default: sample)",
+        choices=["sample", "variant"],
+        default="sample",
+    )
 
     # delete-prop parser
     parser_delprops = subparsers.add_parser(
@@ -432,6 +439,7 @@ def main(args):  # noqa: C901
             cols = [
                 "name",
                 "argument",
+                "subject",
                 "description",
                 "data type",
                 "query type",
@@ -447,6 +455,7 @@ def main(args):  # noqa: C901
                 rows.append([])
                 rows[-1].append(prop)
                 rows[-1].append("--" + prop)
+                rows[-1].append(dbm.properties[prop]["target"])
                 rows[-1].append(fill(dbm.properties[prop]["description"], width=25))
                 rows[-1].append(dt)
                 rows[-1].append(dbm.properties[prop]["querytype"])
@@ -489,7 +498,12 @@ def main(args):  # noqa: C901
                     args.dtype = "text"
                     args.qtype = "pango"
             dbm.add_property(
-                args.name, args.dtype, args.qtype, args.descr, args.default
+                args.name,
+                args.dtype,
+                args.qtype,
+                args.descr,
+                args.subject,
+                args.default,
             )
         logging.info("Inserted successfully: %s", args.name)
 

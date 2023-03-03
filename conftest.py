@@ -29,12 +29,12 @@ def setup_db(tmp_path_factory):
     dbfile = str(tmp_path_factory.mktemp("data") / "test.db")
     sonarBasics.setup_db(dbfile, quiet=True)
     with sonarDBManager(dbfile, readonly=False) as dbm:
-        dbm.add_property("LINEAGE", "text", "text", " ")
-        dbm.add_property("CITY", "zip", "zip", " ")
-        dbm.add_property("Ct", "integer", "integer", " ")
-        dbm.add_property("CONC", "float", "float", " ")
-        dbm.add_property("SAMPLING", "date", "date", " ")
-        dbm.add_property("SEQ_TYPE", "text", "text", " ")
+        dbm.add_property("LINEAGE", "text", "text", " ", "sample")
+        dbm.add_property("CITY", "zip", "zip", " ", "sample")
+        dbm.add_property("Ct", "integer", "integer", " ", "sample")
+        dbm.add_property("CONC", "float", "float", " ", "sample")
+        dbm.add_property("SAMPLING", "date", "date", " ", "sample")
+        dbm.add_property("SEQ_TYPE", "text", "text", " ", "sample")
     return dbfile
 
 

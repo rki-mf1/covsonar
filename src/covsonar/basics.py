@@ -66,33 +66,42 @@ class sonarBasics(object):
                         "date",
                         "date",
                         "date sample has been imported to the database",
+                        "sample",
                     )
                     dbm.add_property(
                         "modified",
                         "date",
                         "date",
                         "date when sample data has been modified lastly",
+                        "sample",
                     )
                     dbm.add_property(
                         "nuc_profile",
                         "text",
                         "text",
                         "stores the nucleotide level profiles",
+                        "sample",
                     )
                     dbm.add_property(
-                        "aa_profile", "text", "text", "stores the aa level profiles"
+                        "aa_profile",
+                        "text",
+                        "text",
+                        "stores the aa level profiles",
+                        "sample",
                     )
                     dbm.add_property(
                         "nuc_n_profile",
                         "text",
                         "text",
                         "stores the nucleotide(with N) level profiles",
+                        "sample",
                     )
                     dbm.add_property(
                         "aa_x_profile",
                         "text",
                         "text",
                         "stores the aa(with X) level profiles",
+                        "sample",
                     )
 
                     # if enable, create PREDEFINED properties
@@ -103,20 +112,30 @@ class sonarBasics(object):
                             "date",
                             "date",
                             "Submission/Processing date",
+                            "sample",
                         )
                         dbm.add_property(
                             "COUNTRY",
                             "text",
                             "text",
                             "Country where a sample belongs to",
+                            "sample",
                         )
-                        dbm.add_property("HOST", "text", "text", "e.g., HUMAN")
-                        dbm.add_property("ZIP", "text", "text", "zip code e.g., 33602")
-                        dbm.add_property("LAB", "text", "text", "lab id e.g., 11069")
                         dbm.add_property(
-                            "LINEAGE", "text", "text", "e.g., BA.2 or B.1.1.7"
+                            "HOST", "text", "text", "e.g., HUMAN", "sample"
                         )
-                        dbm.add_property("TECHNOLOGY", "text", "text", "e.g., ILLUMINA")
+                        dbm.add_property(
+                            "ZIP", "text", "text", "zip code e.g., 33602", "sample"
+                        )
+                        dbm.add_property(
+                            "LAB", "text", "text", "lab id e.g., 11069", "sample"
+                        )
+                        dbm.add_property(
+                            "LINEAGE", "text", "text", "e.g., BA.2 or B.1.1.7", "sample"
+                        )
+                        dbm.add_property(
+                            "TECHNOLOGY", "text", "text", "e.g., ILLUMINA", "sample"
+                        )
 
                     # adding reference
                     if not reference_gb:

@@ -267,12 +267,14 @@ class sonarDBManager:
         sql = "INSERT OR IGNORE INTO translation (id, codon, aa) VALUES(?, ?, ?);"
         self.cursor.execute(sql, [translation_table, codon, aa])
 
-    def add_property(self, name, datatype, querytype, description, standard=None):
+    def add_property(
+        self, name, datatype, querytype, description, subject, standard=None
+    ):
         """
         adds a new property and returns the property id.
 
         >>> dbm = getfixture('init_writeable_dbm')
-        >>> id = dbm.add_property("NEW_PROP", "text", "text", "my new prop stores text information")
+        >>> id = dbm.add_property("NEW_PROP", "text", "text", "my new prop stores text information", "sample")
 
         """
         name = name.upper()
@@ -293,13 +295,17 @@ class sonarDBManager:
                 + " already exists in the given database."
             )
         try:
-            sql = "INSERT INTO property (name, datatype, querytype, description, standard) VALUES(?, ?, ?, ?, ?);"
-            self.cursor.execute(sql, [name, datatype, querytype, description, standard])
+            sql = "INSERT INTO property (name, datatype, querytype, description, target, standard) VALUES(?, ?, ?, ?, ?, ?);"
+            self.cursor.execute(
+                sql, [name, datatype, querytype, description, subject, standard]
+            )
             self.__properties = False
             pid = self.properties[name]["id"]
             if standard is not None:
                 sql = (
-                    "INSERT INTO sample2property (property_id, value_"
+                    "INSERT INTO "
+                    + self.properties[name]["target"]
+                    + "2property (property_id, value_"
                     + self.properties[name]["datatype"]
                     + ", sample_id) SELECT ?, ?, id FROM sample WHERE 1"
                 )
@@ -362,7 +368,9 @@ class sonarDBManager:
 
         """
         sql = (
-            "INSERT OR REPLACE INTO sample2property (sample_id, property_id, value_"
+            "INSERT OR REPLACE INTO "
+            + self.properties[property_name]["target"]
+            + "2property (sample_id, property_id, value_"
             + self.properties[property_name]["datatype"]
             + ") VALUES(?, ?, ?);"
         )
@@ -566,7 +574,11 @@ class sonarDBManager:
 
         """
         if property_name in self.properties:
-            sql = "DELETE FROM sample2property WHERE property_id = ?;"
+            sql = (
+                "DELETE FROM "
+                + self.properties[property_name]["target"]
+                + "2property WHERE property_id = ?;"
+            )
             self.cursor.execute(sql, [self.properties[property_name]["id"]])
             sql = "DELETE FROM property WHERE name = ?;"
             self.cursor.execute(sql, [property_name])
@@ -799,12 +811,15 @@ class sonarDBManager:
         sql = (
             "SELECT COUNT("
             + d
-            + " value_"
+            + "value_"
             + self.properties[property_name]["datatype"]
-            + ") as count FROM sample2property "
+            + ") as count FROM "
+            + self.properties[property_name]["target"]
+            + "2property "
             + c
             + ";"
         )
+        print(sql)
         return self.cursor.execute(sql, v).fetchone()["count"]
 
     def get_translation_dict(self, translation_id):
@@ -1199,11 +1214,22 @@ class sonarDBManager:
                 + "'."
             )
 
-        return (
-            'SELECT "sample_id" AS id FROM sample2property WHERE '
-            + " AND ".join(conditions),
-            valueList,
-        )
+        if self.properties[name]["target"] == "sample":
+            sql = "SELECT sample_id AS id FROM sample2property WHERE " + " AND ".join(
+                conditions
+            )
+        elif self.properties[name]["target"] == "variant":  # to be adapted
+            pass
+        else:
+            sys.exit(
+                "database error: unkown target ("
+                + self.properties[name]["target"]
+                + ") stored for property "
+                + name
+                + "."
+            )
+
+        return (sql, valueList)
 
     def query_profile(self, *vars, reference_accession=None):  # noqa: C901
         iupac_nt_code = {
@@ -1632,6 +1658,9 @@ class sonarDBManager:
         )
         sqls.append(
             "DELETE FROM sample2property WHERE NOT EXISTS(SELECT NULL FROM sample WHERE sample.id = sample_id) OR NOT EXISTS(SELECT NULL FROM property WHERE property.id = property_id)"
+        )
+        sqls.append(
+            "DELETE FROM variant2property WHERE NOT EXISTS(SELECT NULL FROM variant WHERE variant.id = variant_id) OR NOT EXISTS(SELECT NULL FROM property WHERE property.id = property_id)"
         )
         sqls.append(
             "DELETE FROM translation WHERE NOT EXISTS(SELECT NULL FROM reference WHERE reference.translation_id = id)"
