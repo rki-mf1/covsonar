@@ -487,7 +487,7 @@ def main(args):  # noqa: C901
                     args.qtype = "zip"
                 elif args.dtype == "pango":
                     args.dtype = "text"
-                    args.qtype = "pango"   
+                    args.qtype = "pango"
             dbm.add_property(
                 args.name, args.dtype, args.qtype, args.descr, args.default
             )
