@@ -99,6 +99,7 @@ class sonarCache:
         self._samplefiles_to_profile = set()
         self._refs = set()
         self._lifts = set()
+        self._cds = set()
         self._tt = set()
 
     def __enter__(self):
@@ -184,6 +185,9 @@ class sonarCache:
     def get_lift_fname(self, refid):
         return os.path.join(self.ref_dir, str(refid) + ".lift")
 
+    def get_cds_fname(self, refid):
+        return os.path.join(self.ref_dir, str(refid) + ".lcds")
+
     def get_tt_fname(self, refid):
         return os.path.join(self.ref_dir, str(refid) + ".tt")
 
@@ -216,6 +220,7 @@ class sonarCache:
         algnfile,
         varfile,
         liftfile,
+        cdsfile,
         properties,
     ):
         """
@@ -239,6 +244,7 @@ class sonarCache:
             "algn_file": algnfile,
             "var_file": varfile,
             "lift_file": liftfile,
+            "cds_file": cdsfile,
             "properties": properties,
         }
         fname = self.get_sample_fname(name)  # full path
@@ -295,6 +301,36 @@ class sonarCache:
         if translation_id not in self._tt:
             self.write_pickle(fname, dbm.get_translation_dict(translation_id))
             self._tt.add(translation_id)
+        return fname
+
+    def cache_cds(self, refid, refmol_acc):
+        """
+                The function takes in a reference id, a reference molecule accession number,
+                and a reference sequence. It then checks to see if the reference molecule accession number is in the set of molecules that
+                have been cached. If it is not, it iterates through all of the coding sequences for that molecule and creates a
+                dataframe for each one.
+        .
+                It then saves the dataframe to a pickle file and adds the reference molecule accession number to
+                the set of molecules that have been cached.
+                It then returns the name of the pickle file
+        """
+        fname = self.get_cds_fname(refid)
+        if refmol_acc not in self._cds:
+            rows = []
+            cols = ["elemid", "pos", "end"]
+            for cds in self.iter_cds(refmol_acc):
+                elemid = cds["id"]
+                coords = []
+                for rng in cds["ranges"]:
+                    coords.extend(list(rng))
+                for coord in coords:
+                    rows.append([elemid, coord, 0])
+                rows[-1][2] = 1
+                df = pd.DataFrame.from_records(rows, columns=cols, coerce_float=False)
+                df.to_pickle(fname)
+                if self.debug:
+                    df.to_csv(fname + ".csv")
+            self._cds.add(refmol_acc)
         return fname
 
     def cache_lift(self, refid, refmol_acc, sequence):
@@ -553,6 +589,7 @@ class sonarCache:
             data["liftfile"] = self.cache_lift(
                 refseq_id, data["refmol"], self.get_refseq(data["refmol"])
             )
+            data["cdsfile"] = self.cache_cds(refseq_id, data["refmol"])
             data["algnfile"] = self.get_algn_fname(
                 data["seqhash"] + "@" + self.get_refhash(data["refmol"])
             )
@@ -569,6 +606,7 @@ class sonarCache:
             data["reffile"] = None
             data["ttfile"] = None
             data["liftfile"] = None
+            data["cdsfile"] = None
             data["algnfile"] = None
             data["varfile"] = None
 
@@ -609,6 +647,7 @@ class sonarCache:
                                     vardat[1],
                                     vardat[2],
                                     vardat[5],
+                                    frameshift=vardat[6],
                                 )
                             if line != "//":
                                 sys.exit(
@@ -642,14 +681,17 @@ class sonarCache:
 
         # sequence recovery based on nucleotide variations
         prefix = ""
+        gaps = {".", " "}
+
         for vardata in dbm.iter_dna_variants(
             sample_data["name"], sample_data["sourceid"]
         ):
-            if vardata["variant.alt"] == " ":
+            if vardata["variant.alt"] in gaps:
                 for i in range(vardata["variant.start"], vardata["variant.end"]):
                     seq[i] = ""
             elif vardata["variant.alt"] == ".":
-                seq[vardata["variant.start"]] = ""
+                for i in range(vardata["variant.start"], vardata["variant.end"]):
+                    seq[i] = ""
             elif vardata["variant.start"] >= 0:
                 seq[vardata["variant.start"]] = vardata["variant.alt"]
             else:

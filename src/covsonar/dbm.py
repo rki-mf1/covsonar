@@ -268,7 +268,14 @@ class sonarDBManager:
         self.cursor.execute(sql, [translation_table, codon, aa])
 
     def add_property(
-        self, name, datatype, querytype, description, subject, standard=None
+        self,
+        name,
+        datatype,
+        querytype,
+        description,
+        subject,
+        standard=None,
+        check_name=True,
     ):
         """
         adds a new property and returns the property id.
@@ -284,7 +291,7 @@ class sonarDBManager:
                 + str(name)
                 + "' is reserved and cannot be used as property name"
             )
-        if not re.match("^[A-Z][A-Z0-9_]+$", name):
+        if check_name and not re.match("^[A-Z][A-Z0-9_]+$", name):
             sys.exit(
                 "error: invalid property name (property names can contain only letters, numbers and underscores)"
             )
@@ -525,7 +532,16 @@ class sonarDBManager:
         return eid
 
     def insert_variant(
-        self, alignment_id, element_id, ref, alt, start, end, label, parent_id=""
+        self,
+        alignment_id,
+        element_id,
+        ref,
+        alt,
+        start,
+        end,
+        label,
+        parent_id="",
+        frameshift=0,
     ):
         """
         Inserts a variant if it does not exist in the database. Based on the type of the element the element id refers to,
@@ -535,12 +551,12 @@ class sonarDBManager:
         Returns the rowid of the inserted variant.
 
         >>> dbm = getfixture('init_writeable_dbm')
-        >>> rowid = dbm.insert_variant(1, 1, "A", "T", 0, 1, "A1T")
+        >>> rowid = dbm.insert_variant(1, 1, "A", "T", 0, 1, "A1T", "", 0)
 
         """
-        sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, label, parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?);"
+        sql = "INSERT OR IGNORE INTO variant (id, element_id, start, end, ref, alt, label, parent_id, frameshift) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);"
         self.cursor.execute(
-            sql, [None, element_id, start, end, ref, alt, label, parent_id]
+            sql, [None, element_id, start, end, ref, alt, label, parent_id, frameshift]
         )
         vid = self.get_variant_id(element_id, start, end, ref, alt)
         sql = "INSERT OR IGNORE INTO alignment2variant (alignment_id, variant_id) VALUES(?, ?);"
@@ -819,7 +835,6 @@ class sonarDBManager:
             + c
             + ";"
         )
-        print(sql)
         return self.cursor.execute(sql, v).fetchone()["count"]
 
     def get_translation_dict(self, translation_id):
@@ -1218,8 +1233,11 @@ class sonarDBManager:
             sql = "SELECT sample_id AS id FROM sample2property WHERE " + " AND ".join(
                 conditions
             )
-        elif self.properties[name]["target"] == "variant":  
-            sql = "SELECT sample.id as 'sample.id' FROM variantView LEFT JOIN sequence ON sample.seqhash = sequence.seqhash WHERE \n" + " AND ".join(conditions)
+        elif self.properties[name]["target"] == "variant":
+            sql = (
+                "SELECT sample.id as 'sample.id' FROM variantView LEFT JOIN sequence ON sample.seqhash = sequence.seqhash WHERE \n"
+                + " AND ".join(conditions)
+            )
         else:
             sys.exit(
                 "database error: unkown target ("

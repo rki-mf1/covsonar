@@ -59,7 +59,15 @@ class sonarAligner(object):
             result.get_cigar().decode.decode(),
         )
 
-    def extract_vars_from_cigar(self, qryseq, refseq, cigar, elemid):  # noqa: C901
+    def extract_vars_from_cigar(  # noqa: C901
+        self, qryseq, refseq, cigar, elemid, cds_file
+    ):
+
+        # get annotation for frameshift detection
+        cds_df = pd.read_pickle(cds_file)
+        cds_set = set(cds_df[cds_df["end"] == 0])
+
+        # extract
         refpos = 0
         qrypos = 0
         prefix = False
@@ -85,6 +93,7 @@ class sonarAligner(object):
                             alt,
                             elemid,
                             ref + str(refpos + 1) + alt,
+                            "0",
                         )
                     )
                     refpos += 1
@@ -94,11 +103,18 @@ class sonarAligner(object):
                 if (
                     refpos == 0 and prefix is False
                 ) or qrypos == qrylen:  # deletion at sequence terminus
-                    for x in range(varlen):
-                        vars.append(
-                            (refseq[x], str(refpos), str(refpos + 1), ".", elemid, " ")
+                    vars.append(
+                        (
+                            refseq[refpos : refpos + varlen],
+                            str(refpos),
+                            str(refpos + varlen),
+                            ".",
+                            elemid,
+                            "del:" + str(refpos + 1) + "-" + str(refpos + varlen),
+                            "0",
                         )
-                        refpos += 1
+                    )
+                    refpos += varlen
                 elif varlen == 1:  # 1bp deletion
                     vars.append(
                         (
@@ -108,10 +124,13 @@ class sonarAligner(object):
                             " ",
                             elemid,
                             "del:" + str(refpos + 1),
+                            self.detect_frameshifts(
+                                refpos, refpos + 1, " ", cds_df, cds_set
+                            ),
                         )
                     )
                     refpos += 1
-                else:  # multi-bp deletion
+                else:  # multi-bp inner deletion
                     vars.append(
                         (
                             refseq[refpos : refpos + varlen],
@@ -120,18 +139,25 @@ class sonarAligner(object):
                             " ",
                             elemid,
                             "del:" + str(refpos + 1) + "-" + str(refpos + varlen),
+                            self.detect_frameshifts(
+                                refpos, refpos + varlen, " ", cds_df, cds_set
+                            ),
                         )
                     )
                     refpos += varlen
             # insertion handling
             elif vartype == "I":
-                if refpos == 0:  # to consider insertion berfore sequence start
+                if refpos == 0:  # to consider insertion before sequence start
                     ref = "."
                     alt = qryseq[:varlen]
                     prefix = True
+                    fs = "0"
                 else:
                     ref = refseq[refpos - 1]
                     alt = qryseq[qrypos - 1 : qrypos + varlen]
+                    fs = self.detect_frameshifts(
+                        refpos - 1, refpos, alt, cds_df, cds_set
+                    )
                 vars.append(
                     (
                         ref,
@@ -140,6 +166,7 @@ class sonarAligner(object):
                         alt,
                         elemid,
                         ref + str(refpos) + alt,
+                        fs,
                     )
                 )
                 qrypos += varlen
@@ -174,8 +201,12 @@ class sonarAligner(object):
         qryseq = self.read_seqcache(data["seq_file"])
         refseq = self.read_seqcache(data["ref_file"])
         _, __, cigar = self.align(qryseq, refseq)
+
         nuc_vars = [
-            x for x in self.extract_vars_from_cigar(qryseq, refseq, cigar, elemid)
+            x
+            for x in self.extract_vars_from_cigar(
+                qryseq, refseq, cigar, elemid, data["cds_file"]
+            )
         ]
         vars = "\n".join(["\t".join(x) for x in nuc_vars])
         if nuc_vars:
@@ -209,13 +240,29 @@ class sonarAligner(object):
             aa.append(tt[codon])
         return "".join(aa)
 
+    def detect_frameshifts(self, start, end, alt, cds_df, coding_sites_set):
+        # handling deletions
+        if alt == " " or alt == "":
+            coords = set(range(start, end))
+            cds_df["gap"] = cds_df.apply(lambda x: 1 if x.pos in coords else 0, axis=1)
+            groups = cds_df.groupby(
+                [cds_df["elemid"], (cds_df["gap"].shift() != cds_df["gap"]).cumsum()]
+            ).agg({"gap": sum})
+            for _, row in groups.iterrows():
+                if row["gap"] % 3 != 0:
+                    return "1"
+        # handling insertions
+        elif (len(alt) - 1) % 3 > 0 and start in coding_sites_set:
+            return "1"
+        return "0"
+
     def lift_vars(self, nuc_vars, lift_file, tt_file):  # noqa: C901
         df = pd.read_pickle(lift_file)
         with open(tt_file, "rb") as handle:
             tt = pickle.load(handle, encoding="bytes")
         for nuc_var in nuc_vars:
             if nuc_var[3] == ".":
-                continue
+                continue  # ignore uncovered terminal regions
             for i in range(int(nuc_var[1]), int(nuc_var[2])):
                 alt = "-" if nuc_var[3] == " " else nuc_var[3]
                 df.loc[df["nucPos1"] == i, "alt1"] = alt
@@ -238,7 +285,7 @@ class sonarAligner(object):
             label = row["aa"] + str(pos) + row["altAa"]
             yield row["aa"], str(pos - 1), str(pos), row["altAa"], str(
                 row["elemid"]
-            ), label
+            ), label, "0"
 
         # deletions
         prev_row = None
@@ -261,7 +308,7 @@ class sonarAligner(object):
                     label = "del:" + str(start + 1) + "-" + str(end)
                 yield prev_row["aa"], str(start), str(end), " ", str(
                     prev_row["elemid"]
-                ), label
+                ), label, "0"
                 prev_row = row
         if prev_row is not None:
             start = prev_row["aaPos"]
@@ -272,65 +319,4 @@ class sonarAligner(object):
                 label = "del:" + str(start + 1) + "-" + str(end)
             yield prev_row["aa"], str(start), str(end), " ", str(
                 prev_row["elemid"]
-            ), label
-
-    def extract_vars(self, qry_seq, ref_seq, elemid):  # pragma: no cover # noqa: C901
-        """
-        var extractor from aligned sequence strings
-        @deprecated("use another method")
-        this will be removed soon
-        """
-        query_length = len(qry_seq)
-        if query_length != len(ref_seq):
-            sys.exit("error: sequences differ in length")
-        qry_seq += " "
-        ref_seq += " "
-        i = 0
-        offset = 0
-        while i < query_length:
-            # match
-            if qry_seq[i] == ref_seq[i]:
-                pass
-            # deletion
-            elif qry_seq[i] == "-":
-                s = i
-                while qry_seq[i + 1] == "-":
-                    i += 1
-                start = s - offset
-                end = i + 1 - offset
-                if (
-                    start == 0 or end == query_length
-                ):  # handle deletions at sequence termini
-                    for k in range(start, end):
-                        ref = ref_seq[k]
-                        pos = k - offset + 1
-                        yield ref, str(pos - 1), str(pos), ".", elemid, " "
-                else:  # 'real' (inner) deletions
-                    if end - start == 1:
-                        label = "del:" + str(start + 1)
-                    else:
-                        label = "del:" + str(start + 1) + "-" + str(end)
-                    yield ref_seq[s : i + 1], str(start), str(end), " ", elemid, label
-
-            # insertion
-            elif ref_seq[i] == "-":
-                s = i - 1
-                while ref_seq[i + 1] == "-":
-                    i += 1
-                # insertion at pos 0
-                if s == -1:
-                    ref = "."
-                    alt = qry_seq[: i + 1]
-                else:
-                    ref = ref_seq[s]
-                    alt = qry_seq[s : i + 1]
-                pos = s - offset + 1
-                yield ref, str(pos - 1), str(pos), alt, elemid, ref + str(pos) + alt
-                offset += i - s
-            # snps
-            else:
-                ref = ref_seq[i]
-                alt = qry_seq[i]
-                pos = i - offset + 1
-                yield ref, str(pos - 1), str(pos), alt, elemid, ref + str(pos) + alt
-            i += 1
+            ), label, "0"

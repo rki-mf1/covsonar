@@ -170,11 +170,14 @@ CREATE TABLE IF NOT EXISTS variant (
 	end INTEGER NOT NULL,
 	parent_id INTEGER,
 	label TEXT NOT NULL,
+	frameshift INTEGER NOT NULL,
 	UNIQUE(element_id, start, end, ref, alt)
 	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_variant_element_id ON variant (element_id);
 CREATE INDEX IF NOT EXISTS idx_variant_element_start ON variant (start);
+CREATE INDEX IF NOT EXISTS idx_variant_element_frameshift ON variant (frameshift);
+
 
 CREATE TABLE IF NOT EXISTS alignment (
 	id INTEGER PRIMARY KEY,
@@ -327,6 +330,7 @@ SELECT
   variant.end as "variant.end",
   variant.alt as "variant.alt",
   variant.label as "variant.label",
+  variant.frameshift as "variant.frameshift",
   variant.parent_id as "variant.parent_id",
   variant2property.property_id as "property_id",
   variant2property.value_integer as "value_integer",

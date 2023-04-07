@@ -62,11 +62,12 @@ class sonarBasics(object):
                     # adding pre-defined sample properties
                     # adding pre-defined sample properties
                     dbm.add_property(
-                        "imported",
+                        ".imported",
                         "date",
                         "date",
                         "date sample has been imported to the database",
                         "sample",
+                        check_name=False,
                     )
                     dbm.add_property(
                         "modified",
@@ -74,6 +75,7 @@ class sonarBasics(object):
                         "date",
                         "date when sample data has been modified lastly",
                         "sample",
+                        check_name=False,
                     )
                     dbm.add_property(
                         "nuc_profile",
@@ -81,6 +83,7 @@ class sonarBasics(object):
                         "text",
                         "stores the nucleotide level profiles",
                         "sample",
+                        check_name=False,
                     )
                     dbm.add_property(
                         "aa_profile",
@@ -88,6 +91,7 @@ class sonarBasics(object):
                         "text",
                         "stores the aa level profiles",
                         "sample",
+                        check_name=False,
                     )
                     dbm.add_property(
                         "nuc_n_profile",
@@ -95,6 +99,7 @@ class sonarBasics(object):
                         "text",
                         "stores the nucleotide(with N) level profiles",
                         "sample",
+                        check_name=False,
                     )
                     dbm.add_property(
                         "aa_x_profile",
@@ -102,6 +107,7 @@ class sonarBasics(object):
                         "text",
                         "stores the aa(with X) level profiles",
                         "sample",
+                        check_name=False,
                     )
 
                     # if enable, create PREDEFINED properties
@@ -342,6 +348,7 @@ class sonarBasics(object):
 
                 # adding cds annotation
                 elif feat.type == "CDS":
+                    parts = sonarBasics.process_segments(feat.location.parts, True)
                     gb_data["cds"].append(
                         {
                             "accession": feat.qualifiers["protein_id"][0],
@@ -352,11 +359,17 @@ class sonarBasics(object):
                             "gene": feat.qualifiers["gene"][0],
                             "sequence": feat.qualifiers["translation"][0],
                             "description": feat.qualifiers["product"][0],
-                            "parts": sonarBasics.process_segments(
-                                feat.location.parts, True
-                            ),
+                            "parts": parts,
                         }
                     )
+                    if sum([abs(x[1] - x[0]) for x in parts]) % 3 != 0:
+                        sys.exit(
+                            "gbk error: length of cds '"
+                            + feat.qualifiers["protein_id"][0]
+                            + "' is not a multiple of 3 ("
+                            + str(sum([abs(x[1] - x[2]) for x in parts]))
+                            + ")."
+                        )
             yield gb_data
 
     # seq handling
@@ -409,30 +422,33 @@ class sonarBasics(object):
             db_properties.add("sample")
 
         propnames = {x: x for x in db_properties} if autolink else {}
-        for x in cols:
-            if x.count("=") != 1:
-                sys.exit(
-                    "input error: " + x + " is not a valid sample property assignment."
-                )
-            k, v = x.split("=")
-            if k == "SAMPLE":
-                k = "sample"
-            if k not in db_properties:
-                sys.exit(
-                    "input error: sample property "
-                    + k
-                    + " is unknown to the selected database. Use list-props to see all valid properties."
-                )
-            propnames[k] = v
-            propnamekeys = sorted(propnames.keys())
-
-        if "sample" not in propnames:
-            sys.exit("input error: a sample column has to be assigned.")
 
         # csv/tsv file processing
         properties = collections.defaultdict(dict)
         metafiles = [(x, ",") for x in csv_files] + [(x, "\t") for x in tsv_files]
         if metafiles:
+            for x in cols:
+                if x.count("=") != 1:
+                    sys.exit(
+                        "input error: "
+                        + x
+                        + " is not a valid sample property assignment."
+                    )
+                k, v = x.split("=")
+                if k == "SAMPLE":
+                    k = "sample"
+                if k not in db_properties:
+                    sys.exit(
+                        "input error: sample property "
+                        + k
+                        + " is unknown to the selected database. Use list-props to see all valid properties."
+                    )
+                propnames[k] = v
+                propnamekeys = sorted(propnames.keys())
+
+            if "sample" not in propnames:
+                sys.exit("input error: a sample column has to be assigned.")
+
             for fname, delim in metafiles:
                 if not quiet:
                     print("linking data from", fname)
@@ -447,9 +463,6 @@ class sonarBasics(object):
                     elif c > 1:
                         sys.exit("error: " + propnames[x] + " is not an unique column.")
                 if "sample" not in cols:
-                    print(fields, fields)
-                    print(propnames)
-                    print(cols)
                     sys.exit("error: tsv file does not contain required sample column.")
                 elif len(cols) == 1:
                     sys.exit(
