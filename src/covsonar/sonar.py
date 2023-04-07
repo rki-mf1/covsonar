@@ -262,13 +262,6 @@ def parse_args(args):
         default=[],
     )
     parser_match.add_argument(
-        "--with-sublineage",
-        metavar="STR",
-        help="use sublineage mapping for the specified property, which must refer to pangolin virus lineages for SARS-CoV-2.",
-        type=str,
-        default=None,
-    )
-    parser_match.add_argument(
         "--showNX",
         help="include non-informative polymorphisms in resulting mutation profiles (X for AA and N for NT)",
         action="store_true",
@@ -586,19 +579,6 @@ def main(args):  # noqa: C901
                 if hasattr(args, pname):
                     props[pname] = getattr(args, pname)
 
-            # check property refering to pangolin classification
-            if args.with_sublineage:
-                if args.with_sublineage in dbm.properties:
-                    lincol = args.with_sublineage
-                else:
-                    sys.exit(
-                        "input error: property "
-                        + args.with_sublineage
-                        + " is unknown to the database."
-                    )
-            else:
-                lincol = None
-
             # check column output and property name
             if len(args.out_cols) > 0:
                 if all(item in dbm.properties for item in args.out_cols):
@@ -627,7 +607,6 @@ def main(args):  # noqa: C901
             args.db,
             args.profile,
             samples,
-            lincol,
             props,
             outfile=args.out,
             output_column=args.out_cols,

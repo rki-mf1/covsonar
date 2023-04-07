@@ -1448,7 +1448,6 @@ class sonarDBManager:
         self,
         *profiles,
         samples=[],
-        lineage_column=None,
         properties=None,
         reference_accession=None,
         showNX=False,

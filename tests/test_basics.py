@@ -43,7 +43,6 @@ def test_match(testdb):
             testdb,
             profiles=[],
             samples=[],
-            lincol=None,
             propdict={},
             reference=None,
             outfile=None,

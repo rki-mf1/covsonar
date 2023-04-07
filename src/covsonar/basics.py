@@ -541,7 +541,6 @@ class sonarBasics(object):
         db,
         profiles=[],
         samples=[],
-        lincol=None,
         propdict={},
         reference=None,
         outfile=None,
@@ -556,7 +555,6 @@ class sonarBasics(object):
             cursor = dbm.match(
                 *profiles,
                 samples=samples,
-                lineage_column=lincol,
                 properties=propdict,
                 reference_accession=reference,
                 format=format,
