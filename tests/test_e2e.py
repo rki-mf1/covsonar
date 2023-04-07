@@ -137,6 +137,19 @@ def test_import_update_delete_restore(tmp_path, monkeypatch):
     )
 
 
+def test_frameshift_detection(tmp_path, monkeypatch):
+    """The test example provided by other devs, after the import command"""
+    monkeypatch.chdir(Path(__file__).parent)
+
+    db_path_orig = Path("data/test.db")
+    db_path = tmp_path / "frameshift-test.db"
+
+    shutil.copy(db_path_orig, db_path)
+
+    # test import
+    run_cli(f"import --db {db_path} --fasta data/seq-with-fs.fasta.xz --threads 2")
+
+
 def test_direct_query(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
     monkeypatch.chdir(Path(__file__).parent)
