@@ -62,50 +62,10 @@ class sonarBasics(object):
                     # adding pre-defined sample properties
                     # adding pre-defined sample properties
                     dbm.add_property(
-                        ".imported",
+                        ".IMPORTED",
                         "date",
                         "date",
                         "date sample has been imported to the database",
-                        "sample",
-                        check_name=False,
-                    )
-                    dbm.add_property(
-                        "modified",
-                        "date",
-                        "date",
-                        "date when sample data has been modified lastly",
-                        "sample",
-                        check_name=False,
-                    )
-                    dbm.add_property(
-                        "nuc_profile",
-                        "text",
-                        "text",
-                        "stores the nucleotide level profiles",
-                        "sample",
-                        check_name=False,
-                    )
-                    dbm.add_property(
-                        "aa_profile",
-                        "text",
-                        "text",
-                        "stores the aa level profiles",
-                        "sample",
-                        check_name=False,
-                    )
-                    dbm.add_property(
-                        "nuc_n_profile",
-                        "text",
-                        "text",
-                        "stores the nucleotide(with N) level profiles",
-                        "sample",
-                        check_name=False,
-                    )
-                    dbm.add_property(
-                        "aa_x_profile",
-                        "text",
-                        "text",
-                        "stores the aa(with X) level profiles",
                         "sample",
                         check_name=False,
                     )
@@ -544,7 +504,7 @@ class sonarBasics(object):
         propdict={},
         reference=None,
         outfile=None,
-        output_column="all",
+        output_column=[],
         format="csv",
         debug="False",
         showNX=False,
@@ -582,10 +542,15 @@ class sonarBasics(object):
 
     # restore
     @staticmethod
-    def restore(
+    def restore(  # noqa: C901
         db, *samples, reference_accession=None, aligned=False, outfile=None, debug=False
     ):
         with covsonar.dbm.sonarDBManager(db, readonly=True, debug=debug) as dbm:
+            if not samples:
+                samples = [x for x in dbm.iter_sample_names()]
+            if not samples:
+                print("No samples stored in the given database.")
+                sys.exit(0)
             handle = sys.stdout if outfile is None else open(outfile, "w")
             gap = "-" if aligned else ""
             gapalts = {" ", "."}
@@ -637,7 +602,7 @@ class sonarBasics(object):
                 if len(records) > 0:
                     handle.write("\n".join(records) + "\n")
 
-    # restore
+    # other
     @staticmethod
     def delete(db, *samples, debug):
         with covsonar.dbm.sonarDBManager(db, readonly=False, debug=debug) as dbm:

@@ -546,16 +546,13 @@ def main(args):  # noqa: C901
             with sonarBasics.open_file(file, compressed="auto") as handle:
                 for line in handle:
                     samples.add(line.strip())
-        if len(samples) == 0:
-            logging.info("Nothing to restore.")
-        else:
-            sonarBasics.restore(
-                args.db,
-                *samples,
-                aligned=args.aligned,
-                outfile=args.out,
-                debug=args.debug,
-            )
+        sonarBasics.restore(
+            args.db,
+            *samples,
+            aligned=args.aligned,
+            outfile=args.out,
+            debug=args.debug,
+        )
 
     # update-lineage-info
     elif args.tool == "update-lineage-info":

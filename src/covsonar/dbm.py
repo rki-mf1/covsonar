@@ -621,6 +621,14 @@ class sonarDBManager:
         row = self.cursor.execute(sql, [sample_name]).fetchone()
         return (row["id"], row["seqhash"]) if row else (None, None)
 
+    def iter_sample_names(self):
+        """
+        iterates over all sample names stored in the database.
+        """
+        sql = "SELECT name FROM sample WHERE 1;"
+        for row in self.cursor.execute(sql):
+            yield row["name"]
+
     def get_alignment_id(self, seqhash, element_id):
         """
         Returns the rowid of a sample based on the respective seqhash and element. If no
@@ -1555,14 +1563,14 @@ class sonarDBManager:
             # 1. Query properties
             # 2. Query  AA/NT profile
             fields = ['"sample.name"'] + ['"' + x + '"' for x in self.properties]
-            sql = "SELECT name as " + ", ".join(fields) + "FROM sample "
+            sql = "SELECT name as " + ", ".join(fields) + " FROM sample "
 
             joins = [
                 "LEFT JOIN (SELECT sample_id, value_"
                 + y["datatype"]
-                + " as "
+                + ' as "'
                 + x
-                + " FROM sample2property WHERE property_id = "
+                + '" FROM sample2property WHERE property_id = '
                 + str(y["id"])
                 + ") as t"
                 + str(y["id"])
@@ -1582,42 +1590,51 @@ class sonarDBManager:
             _1_rows = sorted(_1_rows, key=lambda x: x["sample.name"])
 
             _2_final_sql = (
-                " SELECT name AS 'sample.name', nt_profile._profile AS NUC_PROFILE, aa_profile._profile AS AA_PROFILE \
-                    FROM \
-                            ( \
-                              SELECT  \"sample.id\", group_concat("
+                'SELECT name AS "sample.name", \
+                    COALESCE(nt_profile._profile, "") AS NUC_PROFILE, \
+                    COALESCE(aa_profile._profile, "") AS AA_PROFILE, \
+                    COALESCE(nt_profile._frameshifts, "") AS FRAMESHIFTS \
+                FROM sample \
+                LEFT JOIN \
+                    ((SELECT "sample.id", group_concat('
                 + m
-                + '"variant.label") AS _profile \
-                              FROM variantView WHERE "sample.id" IN ('
+                + ' "variant.label") AS _profile, group_concat(CASE WHEN '
+                + m
+                + ' "variant.frameshift" = 1 THEN "variant.label" END) AS _frameshifts \
+                        FROM variantView \
+                    WHERE "sample.id" IN ('
                 + selected_sample_ids
-                + ") AND "
+                + ") \
+                        AND "
                 + genome_element_condition
                 + nn
                 + tg
-                + ' GROUP BY "sample.id" \
-                            ) nt_profile, \
-                            ( \
-                              SELECT  "sample.id", group_concat('
+                + ' \
+                    GROUP BY "sample.id") \
+                    ) nt_profile \
+                ON sample.id = nt_profile."sample.id" \
+                LEFT JOIN \
+                    (SELECT "sample.id", group_concat('
                 + m
-                + '"element.symbol" || ":" || "variant.label") AS _profile \
-                              FROM variantView WHERE "sample.id" IN ('
+                + ' "element.symbol" || ":" || "variant.label") AS _profile \
+                        FROM variantView \
+                    WHERE "sample.id" IN ('
                 + selected_sample_ids
-                + ") AND "
+                + ") \
+                        AND "
                 + cds_element_condition
                 + nx
-                + ' GROUP BY "sample.id" \
-                            ) aa_profile, \
-                            sample \
-                    WHERE nt_profile."sample.id" = aa_profile."sample.id" AND  nt_profile."sample.id" = sample.id  \
-                          AND sample.id  IN ('
-                + selected_sample_ids
-                + ")"
+                + ' \
+                    GROUP BY "sample.id" \
+                    ) aa_profile \
+                ON sample.id = aa_profile."sample.id"'
             )
 
             _2_rows = {
                 x["sample.name"]: x
                 for x in self.cursor.execute(_2_final_sql).fetchall()
             }
+
             # To combine:
             # We update list of dict (update on result from query #2)
             # merge all results
@@ -1628,9 +1645,11 @@ class sonarDBManager:
                 if sample in _2_rows:
                     _1_rows[key]["NUC_PROFILE"] = _2_rows[sample]["NUC_PROFILE"]
                     _1_rows[key]["AA_PROFILE"] = _2_rows[sample]["AA_PROFILE"]
+                    _1_rows[key]["FRAMESHIFTS"] = _2_rows[sample]["FRAMESHIFTS"]
                 else:
                     _1_rows[key]["NUC_PROFILE"] = None
                     _1_rows[key]["AA_PROFILE"] = None
+                    _1_rows[key]["FRAMESHIFTS"] = None
             _1_rows = list(filter(None, _1_rows))
 
             # filter column
