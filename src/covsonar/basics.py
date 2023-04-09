@@ -43,7 +43,7 @@ class sonarBasics(object):
     @staticmethod
     def setup_db(  # noqa: C901
         fname,
-        auto_create=False,
+        auto_create_props=False,
         default_setup=True,
         reference_gb=None,
         debug=False,
@@ -55,7 +55,7 @@ class sonarBasics(object):
             covsonar.dbm.sonarDBManager.setup(fname, debug=debug)
 
             # loading default data
-            if default_setup or auto_create:
+            if default_setup or auto_create_props:
                 with covsonar.dbm.sonarDBManager(
                     fname, readonly=False, debug=debug
                 ) as dbm:
@@ -71,7 +71,7 @@ class sonarBasics(object):
                     )
 
                     # if enable, create PREDEFINED properties
-                    if auto_create:
+                    if auto_create_props:
                         dbm.add_property("DATE_DRAW", "date", "date", "Sampling date")
                         dbm.add_property(
                             "PROCESSING_DATE",
@@ -462,7 +462,7 @@ class sonarBasics(object):
 
         # importing sequences
         if fasta:
-            cache.add_fasta(*fasta, propdict=properties)
+            cache.add_fasta(*fasta, properties=properties)
             aligner = covsonar.align.sonarAligner()
             l = len(cache._samplefiles_to_profile)
             with WorkerPool(n_jobs=threads, start_method="fork") as pool, tqdm(
@@ -501,7 +501,7 @@ class sonarBasics(object):
         db,
         profiles=[],
         samples=[],
-        propdict={},
+        properties={},
         reference=None,
         outfile=None,
         output_column=[],
@@ -515,7 +515,7 @@ class sonarBasics(object):
             cursor = dbm.match(
                 *profiles,
                 samples=samples,
-                properties=propdict,
+                properties=properties,
                 reference_accession=reference,
                 format=format,
                 output_column=output_column,
@@ -626,9 +626,9 @@ class sonarBasics(object):
             print("unique sequences:          ", dbm.count_sequences())
 
     @staticmethod
-    def direct_query(db, sql, outfile=None, debug=False):
+    def direct_query(db, query, outfile=None, debug=False):
         with covsonar.dbm.sonarDBManager(db, readonly=True, debug=debug) as dbm:
-            result = dbm.direct_query(sql)
+            result = dbm.direct_query(query)
             sonarBasics.exportCSV(result, outfile)
 
     # output

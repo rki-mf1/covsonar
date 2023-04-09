@@ -22,13 +22,17 @@ def test_autocreate_with_givenRef(tmpfile_name, monkeypatch):
     monkeypatch.chdir(Path(__file__).parent)
     ref = Path("data/ref.gb")
     assert (
-        sonarBasics.setup_db(tmpfile_name, auto_create=True, reference_gb=ref) is None
+        sonarBasics.setup_db(tmpfile_name, auto_create_props=True, reference_gb=ref)
+        is None
     )
 
 
 def test_notautocreate_and_notsetup(tmpfile_name):
     fname = tmpfile_name
-    assert sonarBasics.setup_db(fname, auto_create=False, default_setup=False) is None
+    assert (
+        sonarBasics.setup_db(fname, auto_create_props=False, default_setup=False)
+        is None
+    )
 
 
 def test_basicObject():
@@ -43,7 +47,7 @@ def test_match(testdb):
             testdb,
             profiles=[],
             samples=[],
-            propdict={},
+            properties={},
             reference=None,
             outfile=None,
             format="HDFS",

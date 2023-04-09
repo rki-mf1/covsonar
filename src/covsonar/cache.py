@@ -520,7 +520,7 @@ class sonarCache:
     def get_properties(self, fasta_header):
         return {x.group(1): x.group(2) for x in self._propregex.finditer(fasta_header)}
 
-    def add_fasta(self, *fnames, propdict=defaultdict(dict)):  # noqa: C901
+    def add_fasta(self, *fnames, properties=defaultdict(dict)):  # noqa: C901
         default_properties = {
             x: self.properties[x]["standard"] for x in self.properties
         }
@@ -536,13 +536,13 @@ class sonarCache:
                         props = default_properties
                         for k, v in data["properties"].items():
                             props[k] = v
-                        for k, v in propdict[data["sampleid"]].items():
+                        for k, v in properties[data["sampleid"]].items():
                             props[k] = v
                         data["properties"] = props
                     elif not self.allow_updates:
                         continue
                     else:
-                        for k, v in propdict[data["sampleid"]].items():
+                        for k, v in properties[data["sampleid"]].items():
                             data["properties"][k] = v
 
                     # check reference

@@ -13,14 +13,14 @@ def test_check_file_not_exist(tmpfile_name):
         sonar.check_file(fname)
     assert pytest_wrapped_e.type == SystemExit
     assert (
-        pytest_wrapped_e.value.code == "input error: " + fname + " is not a valid file."
+        pytest_wrapped_e.value.code == "Error: The file '" + fname + "' does not exist."
     )
 
 
 def test_check_file_exist(monkeypatch):
     monkeypatch.chdir(Path(__file__).parent)
     fname = "data/test.fasta"
-    assert sonar.check_file(fname) is None
+    assert sonar.check_file(fname) is True
 
 
 def test_check_db_not_exist(monkeypatch):

@@ -26,7 +26,9 @@ def test_help():
 
 
 def test_setup_db(tmp_path):
-    parsed_args = sonar.parse_args(["setup", "--db", str(tmp_path / "test.db"), "-a"])
+    parsed_args = sonar.parse_args(
+        ["setup", "--db", str(tmp_path / "test.db"), "--auto-create-props"]
+    )
     retval = sonar.main(parsed_args)
     assert retval == 0
 
@@ -39,8 +41,7 @@ def test_valid_beginning(tmp_path, monkeypatch):
     monkeypatch.chdir(Path(__file__).parent)
 
     db_path = str(tmp_path / "test.db")
-    sonar.main(sonar.parse_args(split_cli(f"setup --db {db_path}")))
-
+    run_cli(f"setup --db {db_path}")
     run_cli(f"add-prop --db {db_path} --name SENDING_LAB --dtype integer --descr descr")
     run_cli(f"add-prop --db {db_path} --name DATE_DRAW --dtype date --descr descr")
     run_cli(f"add-prop --db {db_path} --name SEQ_TYPE --dtype text --descr descr")
@@ -377,7 +378,6 @@ def test_info(tmp_path, monkeypatch):
     shutil.copy(db_path_orig, db_path)
     run_cli(f" info --db {db_path}")
     run_cli(f" list-prop --db {db_path}")
-    run_cli(f" dev --db {db_path}")
 
 
 def test_db_management(tmp_path, monkeypatch):
