@@ -104,7 +104,6 @@ class sonarLinmgr:
         return "".join(items)
 
     def process_lineage_data(self):
-
         aliasor = Aliasor(self.alias_file)
         df_lineages = pd.read_csv(self.lineage_file)
         lineages = df_lineages.lineage.unique()

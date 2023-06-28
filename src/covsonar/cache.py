@@ -5,6 +5,7 @@
 import base64
 from collections import defaultdict
 import hashlib
+from itertools import zip_longest
 import os
 import pickle
 import pprint
@@ -14,6 +15,7 @@ import sys
 from tempfile import mkdtemp
 from tempfile import TemporaryDirectory
 import traceback
+from typing import Any, DefaultDict, Dict, Iterator, List, Optional, Tuple, Union
 
 import pandas as pd
 from tqdm import tqdm
@@ -26,20 +28,36 @@ pp = pprint.PrettyPrinter(indent=4)
 
 
 class sonarCache:
-    """ """
+    """A class for managing a file-based cache for data processing."""
 
     def __init__(
         self,
-        db=None,
-        outdir=None,
-        refacc=None,
-        logfile=None,
-        allow_updates=True,
-        ignore_errors=False,
-        temp=False,
-        debug=False,
-        disable_progress=False,
+        db: Optional[str] = None,
+        outdir: Optional[str] = None,
+        refacc: Optional[str] = None,
+        logfile: Optional[str] = None,
+        allow_updates: bool = True,
+        ignore_errors: bool = False,
+        temp: bool = False,
+        debug: bool = False,
+        disable_progress: bool = False,
     ):
+        """
+        Initialize the sonarCache object.
+
+        Args:
+            db (str): The database to import.
+            outdir (str): The output directory to cache data.
+            refacc (str): The reference accession.
+            logfile (str): The log file to use.
+            allow_updates (bool): Whether to allow updates or not.
+            ignore_errors (bool): Whether to skip import errors and keep on going.
+            temp (bool): Whether to set cache dir temporary or not.
+            debug (bool): Whether to enable debug mode or not.
+            disable_progress (bool): Whether to disable progress display or not.
+        """
+
+        # arg-derived information
         self.db = db
         self.allow_updates = allow_updates
         self.debug = debug
@@ -48,6 +66,7 @@ class sonarCache:
         self.ignore_errors = ignore_errors
         self.disable_progress = disable_progress
 
+        # database-derived information
         with sonarDBManager(self.db, debug=self.debug) as dbm:
             self.refmols = dbm.get_molecule_data(
                 '"molecule.accession"',
@@ -67,11 +86,14 @@ class sonarCache:
                 for x in self.refmols.values()
             }
             self.properties = dbm.properties
+
+        # compiled regex pattern
         self._propregex = re.compile(
             r"\[(" + "|".join(self.properties.keys()) + r")=([^\[\]=]+)\]"
         )
         self._molregex = re.compile(r"\[molecule=([^\[\]=]+)\]")
 
+        # (file) paths
         self.basedir = (
             os.path.abspath(mkdtemp(prefix=".sonarCache_"))
             if not outdir
@@ -79,6 +101,7 @@ class sonarCache:
         )
         if not os.path.exists(self.basedir):
             os.makedirs(self.basedir)
+
         self.logfile = (
             open(os.path.join(self.basedir, logfile), "a+") if logfile else None
         )
@@ -92,15 +115,19 @@ class sonarCache:
         os.makedirs(self.basedir, exist_ok=True)
         os.makedirs(self.seq_dir, exist_ok=True)
         os.makedirs(self.ref_dir, exist_ok=True)
-        # os.makedirs(self.algn_dir, exist_ok=True)
         os.makedirs(self.var_dir, exist_ok=True)
         os.makedirs(self.sample_dir, exist_ok=True)
+
+        # memories for processed files
         self._samplefiles = set()
         self._samplefiles_to_profile = set()
         self._refs = set()
         self._lifts = set()
         self._cds = set()
         self._tt = set()
+
+        # others
+        self.subdir_len = 2
 
     def __enter__(self):
         return self
@@ -112,127 +139,215 @@ class sonarCache:
             self.logfile.close()
 
     @staticmethod
-    def slugify(string):
+    def slugify(string: str) -> str:
+        """
+        Slugify a string.
+
+        Args:
+            string (str): The input string.
+
+        Returns:
+            str: The slugified string.
+        """
         return (
             base64.urlsafe_b64encode(string.encode("UTF-8")).decode("UTF-8").rstrip("=")
         )
 
-    # Do we need this function?
-    # @staticmethod
-    # def deslugify(string):
-    #    while len(string) % 3 != 0:
-    #        string += "="
-    #    return base64.urlsafe_b64decode(string).decode("utf-8")
-
-    def log(self, msg, die=False, errtype="error"):
-        if self.logfile:
-            self.logfile.write(msg)
-        elif not die:
-            sys.stderr.write(msg)
-        else:
-            exit(errtype + ": " + msg)
-
     @staticmethod
-    def write_pickle(fname, data):
+    def write_pickle(fname: str, data: Any) -> None:
+        """
+        Write data to a pickle file.
+
+        Args:
+            fname (str): The file name.
+            data (Any): The data to be pickled.
+        """
         with open(fname, "wb") as handle:
             pickle.dump(data, handle)
 
     @staticmethod
-    def read_pickle(fname):
+    def read_pickle(fname: str) -> Any:
+        """
+        Read data from a pickle file.
+
+        Args:
+            fname (str): The file name.
+
+        Returns:
+            any: The unpickled data.
+        """
         with open(fname, "rb") as handle:
             return pickle.load(handle, encoding="bytes")
 
-    # Do we need this function?
-    # @staticmethod
-    # def pickle_collision(fname, data):
-    #     if os.path.isfile(fname) and load_pickle(fname) != data:
-    #        return True
-    #    return False
+    def file_collision(self, fname: str, data: Any) -> bool:
+        """
+        Check if the contents of a file collide with the provided data.
 
-    @staticmethod
-    def file_collision(fname, data):
+        Args:
+            fname (str): The file name.
+            data (any): The data to compare with the file contents.
+
+        Returns:
+            bool: True if there is a collision, False otherwise.
+        """
         with open(fname, "r") as handle:
             if handle.read() != data:
                 return True
         return False
 
-    # Do we need this function?
-    # def sample_collision(self, key, datadict):
-    #    if sonarCache.read_pickle(key) != datadict:
-    #        return True
-    #    return False
+    def get_seq_fname(self, seqhash: str) -> str:
+        """
+        Get the file name for a sequence file.
 
-    # Do we need this function?
-    # def write_smk_config(self):
-    #    data = {
-    #        "debug": self.debug,
-    #        "sample_dir": self.sample_dir,
-    #        "seq_dir": self.seq_dir,
-    #        "algn_dir": self.algn_dir,
-    #        "var_dir": self.var_dir,
-    #    }
+        Args:
+            seqhash (str): The sequence hash.
 
-    #    with open(self.smk_config, "w") as handle:
-    #        yaml.dump(data, handle)
-
-    def get_seq_fname(self, seqhash):
+        Returns:
+            str: The file name.
+        """
         fn = self.slugify(seqhash)
-        return os.path.join(self.seq_dir, fn[:2], fn + ".seq")
+        return os.path.join(self.seq_dir, fn[: self.subdir_len], fn + ".seq")
 
-    def get_ref_fname(self, refid):
+    def get_ref_fname(self, refid: int) -> str:
+        """
+        Get the file name for a reference file.
+
+        Args:
+            refid (int): The reference ID.
+
+        Returns:
+            str: The file name.
+        """
         return os.path.join(self.ref_dir, str(refid) + ".seq")
 
-    def get_lift_fname(self, refid):
+    def get_lift_fname(self, refid: int) -> str:
+        """
+        Get the file name for a lift file.
+
+        Args:
+            refid (int): The reference ID.
+
+        Returns:
+            str: The file name.
+        """
         return os.path.join(self.ref_dir, str(refid) + ".lift")
 
-    def get_cds_fname(self, refid):
-        return os.path.join(self.ref_dir, str(refid) + ".lcds")
+    def get_cds_fname(self, refid: int) -> str:
+        """
+        Get the file name for a coding sequence (CDS) file.
 
-    def get_tt_fname(self, refid):
+        Args:
+            refid (int): The reference ID.
+
+        Returns:
+            str: The file name.
+        """
+        return os.path.join(self.ref_dir, str(refid) + ".cds")
+
+    def get_tt_fname(self, refid: int) -> str:
+        """
+        Get the file name for a translation table file.
+
+        Args:
+            refid (int): The reference ID.
+
+        Returns:
+            str: The file name.
+        """
         return os.path.join(self.ref_dir, str(refid) + ".tt")
 
-    def get_algn_fname(self, seqhash):
-        fn = self.slugify(seqhash)
-        return os.path.join(self.algn_dir, fn[:2], fn + ".algn")
+    def get_algn_fname(self, seqhash: str) -> str:
+        """
+        Get the file name for an alignment file.
 
-    def get_var_fname(self, seqhash):
-        fn = self.slugify(seqhash)
-        return os.path.join(self.var_dir, fn[:2], fn + ".var")
+        Args:
+            seqhash (str): The sequence hash.
 
-    def get_sample_fname(self, sample_name):
+        Returns:
+            str: The file name.
+        """
+        fn = self.slugify(seqhash)
+        return os.path.join(self.algn_dir, fn[: self.subdir_len], fn + ".algn")
+
+    def get_var_fname(self, seqhash: str) -> str:
+        """
+        Get the file name for a variant file.
+
+        Args:
+            seqhash (str): The sequence hash.
+
+        Returns:
+            str: The file name.
+        """
+        fn = self.slugify(seqhash)
+        return os.path.join(self.var_dir, fn[: self.subdir_len], fn + ".var")
+
+    def get_sample_fname(self, sample_name: str) -> str:
+        """
+        Get the file name for a sample file.
+
+        Args:
+            sample_name (str): The sample name.
+
+        Returns:
+            str: The file name.
+        """
         fn = self.slugify(hashlib.sha1(sample_name.encode("utf-8")).hexdigest())
-        return os.path.join(self.sample_dir, fn[:2], fn + ".sample")
+        return os.path.join(self.sample_dir, fn[: self.subdir_len], fn + ".sample")
 
     def cache_sample(
         self,
-        name,
-        sampleid,
-        seqhash,
-        header,
-        refmol,
-        refmolid,
-        sourceid,
-        translation_id,
-        algnid,
-        seqfile,
-        reffile,
-        ttfile,
-        algnfile,
-        varfile,
-        liftfile,
-        cdsfile,
-        properties,
-    ):
+        name: str,
+        seqhash: str,
+        header: str,
+        refmol: str,
+        refmolid: int,
+        refseq_id: int,
+        sourceid: int,
+        translation_id: int,
+        sampleid: Optional[int] = None,
+        algnid: Optional[int] = None,
+        seqfile: Optional[str] = None,
+        reffile: Optional[str] = None,
+        ttfile: Optional[str] = None,
+        algnfile: Optional[str] = None,
+        varfile: Optional[str] = None,
+        liftfile: Optional[str] = None,
+        cdsfile: Optional[str] = None,
+        properties: Dict[str, str] = None,
+    ) -> str:
         """
-        The function takes in a bunch of arguments and returns a filename.
-        :return: A list of dictionaries. Each dictionary contains the information for a single sample.
-        """
+        Cache a sample by saving its information to a file.
 
+        Args:
+            name (str): The sample name.
+            seqhash (str): The sequence hash.
+            header (str): The sample header.
+            refmol (str): The reference molecule.
+            refmolid (int): The reference molecule ID.
+            refseq_id: The reference sequence ID.
+            sourceid (int): The source ID.
+            translation_id (int): The translation ID.
+            sampleid (int): The sample ID, optional.
+            algnid (int): The alignment ID, optional.
+            seqfile (str): The sequence file path, optional
+            reffile (str): The reference file path, optional
+            ttfile (str): The translation table file path, optional
+            algnfile (str): The alignment file path, optional
+            varfile (str): The variant file path, optional
+            liftfile (str): The lift file path, optional
+            cdsfile (str): The CDS file path, optional
+            properties (dict): The sample properties, optional.
+
+        Returns:
+            str: The file name where the sample is cached.
+        """
         data = {
             "name": name,
             "sampleid": sampleid,
             "refmol": refmol,
             "refmolid": refmolid,
+            "refseq_id": refseq_id,
             "sourceid": sourceid,
             "translationid": translation_id,
             "algnid": algnid,
@@ -247,40 +362,59 @@ class sonarCache:
             "cds_file": cdsfile,
             "properties": properties,
         }
-        fname = self.get_sample_fname(name)  # full path
-        try:
-            self.write_pickle(fname, data)
-        except OSError:
-            os.makedirs(os.path.dirname(fname), exist_ok=True)
-            self.write_pickle(fname, data)
+
+        fname = self.get_sample_fname(name)  # get full file path
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
+        self.write_pickle(fname, data)
 
         self._samplefiles.add(fname)
+
         if algnid is None:
-            self._samplefiles_to_profile.add(fname)
+            self._samplefiles_to_profile.add(fname)  # select sample file for alignment
+
         return fname
 
-    def iter_samples(self):
+    def iter_samples(self) -> Iterator[Dict[str, Any]]:
+        """
+        Iterate over all cached samples.
+
+        Yields:
+            dict: A dictionary containing the information for a single sample.
+        """
         for fname in self._samplefiles:
             yield self.read_pickle(fname)
 
-    def cache_sequence(self, seqhash, sequence):
+    def cache_sequence(self, seqhash: str, sequence: str) -> str:
+        """
+        Cache a sequence by saving it to a file.
+
+        Args:
+            seqhash (str): The sequence hash.
+            sequence (str): The sequence.
+
+        Returns:
+            str: The file name where the sequence is cached.
+        """
         fname = self.get_seq_fname(seqhash)
-        if os.path.isfile(fname):
-            if self.file_collision(fname, sequence):
-                sys.exit(
-                    "seqhash collision: sequences differ for seqhash " + seqhash + "."
-                )
-        else:
-            try:
-                with open(fname, "w") as handle:
-                    handle.write(sequence)
-            except OSError:
-                os.makedirs(os.path.dirname(fname), exist_ok=True)
-                with open(fname, "w") as handle:
-                    handle.write(sequence)
+        if os.path.isfile(fname) and self.file_collision(fname, sequence):
+            sys.exit("seqhash collision: sequences differ for seqhash " + seqhash + ".")
+
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
+        with open(fname, "w") as handle:
+            handle.write(sequence)
         return fname
 
-    def cache_reference(self, refid, sequence):
+    def cache_reference(self, refid: int, sequence: str) -> str:
+        """
+        Cache a reference by saving it to a file.
+
+        Args:
+            refid (int): The reference ID.
+            sequence (str): The reference sequence.
+
+        Returns:
+            str: The file name where the reference is cached.
+        """
         fname = self.get_ref_fname(refid)
         if refid not in self._refs:
             with open(fname, "w") as handle:
@@ -288,64 +422,81 @@ class sonarCache:
             self._refs.add(refid)
         return fname
 
-    def cache_translation_table(self, translation_id, dbm):
+    def cache_translation_table(self, translation_id: int, dbm: sonarDBManager) -> str:
         """
-        If the translation table
-        is not in the cache, it is retrieved from the database and written to a file
+        Cache a translation table by saving it to a file.
 
-        :param translation_id: The id of the translation table
-        :param dbm: the database manager
-        :return: A file name.
+        Args:
+            translation_id (int): The translation table ID.
+            dbm (sonarDBManager): The database manager.
+
+        Returns:
+            str: The file name where the translation table is cached.
         """
-        fname = self.get_tt_fname(translation_id)  # write under /cache/ref/
+        fname = self.get_tt_fname(translation_id)
         if translation_id not in self._tt:
             self.write_pickle(fname, dbm.get_translation_dict(translation_id))
             self._tt.add(translation_id)
         return fname
 
-    def cache_cds(self, refid, refmol_acc):
+    @staticmethod
+    def get_cds_coord_list(cds: dict) -> List[int]:
         """
-                The function takes in a reference id, a reference molecule accession number,
-                and a reference sequence. It then checks to see if the reference molecule accession number is in the set of molecules that
-                have been cached. If it is not, it iterates through all of the coding sequences for that molecule and creates a
-                dataframe for each one.
-        .
-                It then saves the dataframe to a pickle file and adds the reference molecule accession number to
-                the set of molecules that have been cached.
-                It then returns the name of the pickle file
+        Return a ordered list of all genomic positions for the repsctive CDS.
+
+        Args:
+            cds (dict): The cds dictionary.
+
+        Returns:
+            List[int]:
+                list of integers representig the genomic coding positions in order.
+        """
+        coords = []
+        for data in cds["ranges"]:
+            if data[-1] == 1:
+                coords.extend(list(range(data[0], data[1])))
+            else:
+                coords.extend(list(range(data[0], data[1]))[::-1])
+        return coords
+
+    def cache_cds(self, refid: int, refmol_acc: str) -> str:
+        """
+        Cache coding sequences (CDS) by saving them to a file.
+
+        Args:
+            refid (int): The reference ID.
+            refmol_acc (str): The reference molecule accession number.
+
+        Returns:
+            str: The file name where the CDS are cached.
         """
         fname = self.get_cds_fname(refid)
         if refmol_acc not in self._cds:
-            rows = []
             cols = ["elemid", "pos", "end"]
+            rows = []
             for cds in self.iter_cds(refmol_acc):
                 elemid = cds["id"]
-                coords = []
-                for rng in cds["ranges"]:
-                    coords.extend(list(rng))
-                for coord in coords:
-                    rows.append([elemid, coord, 0])
+                for pos in self.get_cds_coord_list(cds):
+                    rows.append([elemid, pos, 0])
                 rows[-1][2] = 1
-                df = pd.DataFrame.from_records(rows, columns=cols, coerce_float=False)
-                df.to_pickle(fname)
-                if self.debug:
-                    df.to_csv(fname + ".csv")
+            df = pd.DataFrame(rows, columns=cols)
+            df.to_pickle(fname)
             self._cds.add(refmol_acc)
         return fname
 
-    def cache_lift(self, refid, refmol_acc, sequence):
+    def cache_lift(self, refid: int, refmol_acc: str, sequence: str) -> str:
         """
-                The function takes in a reference id, a reference molecule accession number,
-                and a reference sequence. It then checks to see if the reference molecule accession number is in the set of molecules that
-                have been cached. If it is not, it iterates through all of the coding sequences for that molecule and creates a
-                dataframe for each one.
-        .
-                It then saves the dataframe to a pickle file and adds the reference molecule accession number to
-                the set of molecules that have been cached.
-                It then returns the name of the pickle file
+        Cache lift information by saving it to a file.
+
+        Args:
+            refid (int): The reference ID.
+            refmol_acc (str): The reference molecule accession number.
+            sequence(str): The reference sequence.
+
+        Returns:
+            str: The file name where the lift information is cached.
         """
         fname = self.get_lift_fname(refid)
-        rows = []
         if refmol_acc not in self._lifts:
             cols = [
                 "elemid",
@@ -362,38 +513,45 @@ class sonarCache:
                 "aaPos",
                 "aa",
             ]
+            rows = []
             for cds in self.iter_cds(refmol_acc):
                 elemid = cds["id"]
                 symbol = cds["symbol"]
-                seq = cds["sequence"] + "*"
-                codon = 0
-                i = 0
-                coords = []
-                for rng in cds["ranges"]:
-                    coords.extend(list(rng))
-                while len(coords) % 3 != 0:
-                    coords.append("")
-                coords_len = len(coords)
-                while len(seq) < coords_len / 3:
-                    seq += "-"
-                while len(sequence) < coords_len:
-                    sequence += "-"
-                for i, coord in enumerate(
-                    [coords[x : x + 3] for x in range(0, len(coords), 3)]
-                ):
-                    codon = [sequence[coord[0]], sequence[coord[1]], sequence[coord[2]]]
-                    rows.append(
-                        [elemid] + coord + codon + codon + [symbol, i, seq[i].strip()]
+                coords = [
+                    list(group)
+                    for group in zip_longest(
+                        *[iter(self.get_cds_coord_list(cds))] * 3, fillvalue="-"
                     )
-                df = pd.DataFrame.from_records(rows, columns=cols, coerce_float=False)
-                df = df.reindex(df.columns.tolist(), axis=1)
-                df.to_pickle(fname)
-                if self.debug:
-                    df.to_csv(fname + ".csv")
+                ]  # provide a list of triplets for all CDS coordinates
+                seq = list(reversed(cds["sequence"] + "*"))
+                for aa_pos, nuc_pos_list in enumerate(coords):
+                    rows.append(
+                        [elemid]
+                        + nuc_pos_list
+                        + [
+                            sequence[nuc_pos_list[0]],
+                            sequence[nuc_pos_list[1]],
+                            sequence[nuc_pos_list[2]],
+                        ]
+                        * 2
+                        + [symbol, aa_pos, seq.pop()]
+                    )
+            df = pd.DataFrame(rows, columns=cols)
+            df.to_pickle(fname)
             self._lifts.add(refmol_acc)
         return fname
 
-    def process_fasta_entry(self, header, seq):
+    def process_fasta_entry(self, header: str, seq: str) -> Dict[str, Union[str, int]]:
+        """
+        Process a single entry from a FASTA file and extract the relevant information.
+
+        Args:
+            header (str): The header of the FASTA entry.
+            seq (str): The sequence of the FASTA entry.
+
+        Returns:
+            dict: A dictionary containing the sample information.
+        """
         sample_id = header.replace("\t", " ").replace("|", " ").split(" ")[0]
         refmol = self.get_refmol(header)
         if not refmol:
@@ -418,9 +576,15 @@ class sonarCache:
             "properties": self.get_properties(header),
         }
 
-    def iter_fasta(self, *fnames):
+    def iter_fasta(self, *fnames: str) -> Iterator[Dict[str, Union[str, int]]]:
         """
-        This function iterates over the fasta files and returns a dictionary for each record
+        Iterate over FASTA files and extract sample information from each entry.
+
+        Args:
+            fnames (str): The paths of the FASTA files.
+
+        Yields:
+            dict: A dictionary containing the information for a single sample.
         """
         for fname in fnames:
             with sonarBasics.open_file(fname, compressed="auto") as handle, tqdm(
@@ -446,22 +610,51 @@ class sonarCache:
                 if seq:
                     yield self.process_fasta_entry(header, "".join(seq))
 
-    def get_refmol(self, fasta_header):
+    def get_refmol(self, fasta_header: str) -> Optional[str]:
+        """
+        Get the reference molecule accession number from the FASTA header.
+
+        Args:
+            fasta_header (str): The header of the FASTA entry.
+
+        Returns:
+            str/None: The molecule accession number if found in the database, or None if not found int he dabase, or the default molecule accession number if no molecule accession found in the FASTA.
+        """
         mol = self._molregex.search(fasta_header)
-        if not mol:
+        if mol:
             try:
                 return self.refmols[mol]["accession"]
             except Exception:
-                None
+                return None
         return self.default_refmol_acc
 
-    def get_refseq(self, refmol_acc):
+    def get_refseq(self, refmol_acc: str) -> Optional[str]:
+        """
+        Get the reference sequence for a given reference molecule accession number.
+
+        Args:
+            refmol_acc (str): The reference molecule accession number.
+
+        Returns:
+            str/None: The reference sequence if found in the database, or None if not found.
+        """
         try:
             return self.sources[refmol_acc]["sequence"]
         except Exception:
             return None
 
-    def iter_cds(self, refmol_acc):
+    def iter_cds(
+        self, refmol_acc: str
+    ) -> Iterator[Dict[str, Union[int, str, List[Tuple[int, int, int]]]]]:
+        """
+        Iterate over the coding sequences (CDS) for a given reference molecule.
+
+        Args:
+            refmol_acc (str): The reference molecule accession number.
+
+        Yields:
+            dict: A dictionary containing the information for a single coding sequence.
+        """
         cds = {}
         prev_elem = None
         with sonarDBManager(self.db, debug=self.debug) as dbm:
@@ -476,14 +669,14 @@ class sonarCache:
                     yield cds
                     cds = {}
                     prev_elem = row["element.id"]
-                if cds == {}:
+                if not cds:
                     cds = {
                         "id": row["element.id"],
                         "accession": row["element.accession"],
                         "symbol": row["element.symbol"],
                         "sequence": row["element.sequence"],
                         "ranges": [
-                            range(
+                            (
                                 row["elempart.start"],
                                 row["elempart.end"],
                                 row["elempart.strand"],
@@ -492,7 +685,7 @@ class sonarCache:
                     }
                 else:
                     cds["ranges"].append(
-                        range(
+                        (
                             row["elempart.start"],
                             row["elempart.end"],
                             row["elempart.strand"],
@@ -501,13 +694,31 @@ class sonarCache:
         if cds:
             yield cds
 
-    def get_refseq_id(self, refmol_acc):
+    def get_refseq_id(self, refmol_acc: str) -> Optional[int]:
+        """
+        Get the reference sequence ID for a given reference molecule accession number.
+
+        Args:
+            refmol_acc (str): The reference molecule accession number.
+
+        Returns:
+            int/None: The reference sequence ID if found, or None if not found.
+        """
         try:
             return self.sources[refmol_acc]["id"]
         except Exception:
             return None
 
-    def get_refhash(self, refmol_acc):
+    def get_refhash(self, refmol_acc: str) -> Optional[str]:
+        """
+        Get the sequence hash for a given reference molecule accession number.
+
+        Args:
+            refmol_acc (str): The reference molecule accession number.
+
+        Returns:
+            str/None: The sequence hash if found, or None if not found.
+        """
         try:
             if "seqhash" not in self.sources[refmol_acc]:
                 self.sources[refmol_acc]["seqhash"] = sonarBasics.hash(
@@ -517,14 +728,38 @@ class sonarCache:
         except Exception:
             return None
 
-    def get_properties(self, fasta_header):
+    def get_properties(self, fasta_header: str) -> Dict[str, str]:
+        """
+        Get the properties from the FASTA header.
+
+        Args:
+            fasta_header (str): The header of the FASTA entry.
+
+        Returns:
+            dict: A dictionary of properties extracted from the header.
+        """
         return {x.group(1): x.group(2) for x in self._propregex.finditer(fasta_header)}
 
-    def add_fasta(self, *fnames, properties=defaultdict(dict)):  # noqa: C901
+    def add_fasta(
+        self,
+        *fnames: str,
+        properties: DefaultDict[str, Dict[str, str]] = defaultdict(dict),
+    ) -> None:
+        """
+        Add entries from a given FASTA file to the cache.
+
+        Args:
+            *fnames (str): Variable-length argument list of FASTA file names.
+            properties (defaultdict): Additional properties to associate with the samples.
+
+        Raises:
+            OSError: If there is an error while reading or writing the cache files.
+            ValueError: If the sample refers to an unknown reference molecule.
+        """
         default_properties = {
             x: self.properties[x]["standard"] for x in self.properties
         }
-        with sonarDBManager(self.db, debug=self.debug) as dbm:
+        with sonarDBManager(self.db, debug=self.debug, readonly=False) as dbm:
             for fname in fnames:
                 for data in self.iter_fasta(fname):
                     # check sample
@@ -533,34 +768,62 @@ class sonarCache:
 
                     # check properties
                     if data["sampleid"] is None:
-                        props = default_properties
-                        for k, v in data["properties"].items():
-                            props[k] = v
-                        for k, v in properties[data["sampleid"]].items():
-                            props[k] = v
+                        props = default_properties.copy()
+                        props.update(data["properties"])
+                        props.update(properties[data["sampleid"]])
                         data["properties"] = props
                     elif not self.allow_updates:
                         continue
                     else:
-                        for k, v in properties[data["sampleid"]].items():
-                            data["properties"][k] = v
+                        data["properties"].update(properties[data["sampleid"]])
 
                     # check reference
-                    refseq_id = self.get_refseq_id(data["refmol"])
-                    self.write_checkref_log(data, refseq_id)
+                    data["refseq_id"] = self.get_refseq_id(data["refmol"])
+                    self.write_checkref_log(data, data["refseq_id"])
 
                     # check alignment
-                    data["algnid"] = dbm.get_alignment_id(data["seqhash"], refseq_id)
-                    data = self.assign_data(data, seqhash, refseq_id, dbm)
+                    data["algnid"] = dbm.get_alignment_id(
+                        data["seqhash"], data["sourceid"]
+                    )
+                    data = self.add_data_files(
+                        data, seqhash, dbm
+                    )  # seqhash is provided for validation
                     del data["sequence"]
                     self.cache_sample(**data)
 
-    def write_checkref_log(self, data, refseq_id):
-        """this function linked to the add_fasta"""
+    def log(self, msg: str, die: bool = False, errtype: str = "error") -> None:
+        """
+        Write the log message to the appropriate destination.
+
+        Args:
+            msg (str): The log message to be written.
+            die (bool): Optional. If True, the program will exit after writing the log message. Default is False.
+            errtype (str): Optional. The error type associated with the log message. Only used when die=True. Default is "error".
+        """
+        if self.logfile:
+            self.logfile.write(msg)
+        elif not die:
+            sys.stderr.write(msg)
+        else:
+            sys.exit(errtype + ": " + msg)
+
+    def write_checkref_log(
+        self, data: Dict[str, Any], refseq_id: Optional[int] = None
+    ) -> None:
+        """
+        Write a log entry for a reference sequence check.
+
+        Args:
+            data (dict): The data dict of the sample.
+            refseq_id (int): The reference sequence ID, optional.
+
+        Raises:
+            ValueError: If the reference sequence is unknown and `ignore_errors` is False (via self.log function).
+        """
         if not refseq_id:
             if not self.ignore_errors:
                 self.log(
-                    "fasta header refers to an unknown refrence ("
+                    "fasta header refers to an unknown reference ("
                     + data["header"]
                     + ")",
                     True,
@@ -575,21 +838,30 @@ class sonarCache:
                     + ")"
                 )
 
-    def assign_data(self, data, seqhash, refseq_id, dbm):
-        """this function linked to the add_fasta.
-        refseq_id is ID from element table.
-        ref_acc is accession in reference table.
+    def add_data_files(
+        self, data: Dict[str, Any], seqhash: str, dbm: sonarDBManager
+    ) -> Dict[str, Any]:
+        """
+        Assign additional data files to a given data dict of a sample.
+
+        Args:
+            data (dict): The data for the sample.
+            seqhash (str): The sequence hash, optional.
+            dbm (sonarDBManager): The sonarDBManager instance.
+
+        Returns:
+            (dict) The updated data dictionary.
         """
         if data["algnid"] is None:
             data["seqfile"] = self.cache_sequence(data["seqhash"], data["sequence"])
             data["reffile"] = self.cache_reference(
-                refseq_id, self.get_refseq(data["refmol"])
+                data["refseq_id"], self.get_refseq(data["refmol"])
             )
             data["ttfile"] = self.cache_translation_table(data["translation_id"], dbm)
             data["liftfile"] = self.cache_lift(
-                refseq_id, data["refmol"], self.get_refseq(data["refmol"])
+                data["refseq_id"], data["refmol"], self.get_refseq(data["refmol"])
             )
-            data["cdsfile"] = self.cache_cds(refseq_id, data["refmol"])
+            data["cdsfile"] = self.cache_cds(data["refseq_id"], data["refmol"])
             data["algnfile"] = self.get_algn_fname(
                 data["seqhash"] + "@" + self.get_refhash(data["refmol"])
             )
@@ -602,7 +874,6 @@ class sonarCache:
             else:
                 data["seqhash"] = None
                 data["seqfile"] = None
-
             data["reffile"] = None
             data["ttfile"] = None
             data["liftfile"] = None
@@ -612,7 +883,14 @@ class sonarCache:
 
         return data
 
-    def import_cached_samples(self):  # noqa: C901
+    def import_cached_samples(self) -> None:
+        """
+        Import the cached samples into the database.
+
+        Raises:
+            OSError: If there is an error while reading the cache files.
+            ValueError: If the original sequence of a sample cannot be restored from the stored genomic profile.
+        """
         refseqs = {}
         with sonarDBManager(self.db, readonly=False, debug=self.debug) as dbm:
             for sample_data in tqdm(
@@ -625,15 +903,13 @@ class sonarCache:
             ):
                 try:
                     # nucleotide level import
-                    if not sample_data["seqhash"] is None:
+                    if sample_data["seqhash"] is not None:
                         dbm.insert_sample(sample_data["name"], sample_data["seqhash"])
-                        # Please consider from change sample_data["refmolid"] (moleculeID)
-                        # to sample_data["sourceid"] in insert_alignment function argument.
-                        # if we want to support multiple references.
                         algnid = dbm.insert_alignment(
                             sample_data["seqhash"], sample_data["sourceid"]
                         )
-                    if not sample_data["var_file"] is None:
+
+                    if sample_data["var_file"] is not None:
                         with open(sample_data["var_file"], "r") as handle:
                             for line in handle:
                                 if line == "//":
@@ -641,22 +917,23 @@ class sonarCache:
                                 vardat = line.strip("\r\n").split("\t")
                                 dbm.insert_variant(
                                     algnid,
-                                    vardat[4],
-                                    vardat[0],
-                                    vardat[3],
-                                    vardat[1],
-                                    vardat[2],
-                                    vardat[5],
-                                    frameshift=vardat[6],
+                                    element_id=vardat[0],
+                                    ref=vardat[1],
+                                    alt=vardat[2],
+                                    start=vardat[3],
+                                    end=vardat[4],
+                                    frameshift=vardat[5],
+                                    label=vardat[6],
                                 )
                             if line != "//":
-                                sys.exit(
+                                raise OSError(
                                     "cache error: corrupted file ("
                                     + sample_data["var_file"]
                                     + ")"
                                 )
+
                     # paranoia test
-                    if not sample_data["seqhash"] is None:
+                    if sample_data["seqhash"] is not None:
                         self.paranoid_test(refseqs, sample_data, dbm)
 
                 except Exception as e:
@@ -667,8 +944,23 @@ class sonarCache:
                     pp.pprint(sample_data)
                     sys.exit("unknown import error")
 
-    def paranoid_test(self, refseqs, sample_data, dbm):
-        """link to import_cached_samples"""
+    def paranoid_test(
+        self, refseqs: Dict[str, str], sample_data: Dict[str, Any], dbm: sonarDBManager
+    ) -> None:
+        """
+        Perform a test to verify the integrity of the imported sample.
+
+        Args:
+            refseqs (dict): A dictionary to cache reference sequences.
+            sample_data (dict): The data for the sample.
+            dbm (sonarDBManager): The sonarDBManager session to use.
+
+        Raises:
+            ValueError: If the original sequence of a sample cannot be restored from the stored genomic profile.
+
+        Returns:
+            True
+        """
         # Consider: change from refmolid (moleculeID) to sourceid
         # to support multiple references.
         try:
@@ -686,20 +978,22 @@ class sonarCache:
         for vardata in dbm.iter_dna_variants(
             sample_data["name"], sample_data["sourceid"]
         ):
+            # insert deletions
             if vardata["variant.alt"] in gaps:
                 for i in range(vardata["variant.start"], vardata["variant.end"]):
                     seq[i] = ""
-            elif vardata["variant.alt"] == ".":
-                for i in range(vardata["variant.start"], vardata["variant.end"]):
-                    seq[i] = ""
+            # insert snps or insertions
             elif vardata["variant.start"] >= 0:
                 seq[vardata["variant.start"]] = vardata["variant.alt"]
+            # insert insertions before position 0
             else:
                 prefix = vardata["variant.alt"]
+        # assemble stored sequence
         seq = prefix + "".join(seq)
-
+        # read original input sequence
         with open(sample_data["seq_file"], "r") as handle:
             orig_seq = handle.read()
+        # compare
         if seq != orig_seq:
             aligner = sonarAligner()
             with TemporaryDirectory() as tempdir:
@@ -709,9 +1003,7 @@ class sonarCache:
                     handle.write(seq)
                 with open(reffile, "w") as handle:
                     handle.write(orig_seq)
-                ref, qry, cigar = aligner.align(
-                    aligner.read_seqcache(qryfile), aligner.read_seqcache(reffile)
-                )
+                ref, qry, cigar = aligner.align(seq, orig_seq)
             with open("paranoid.alignment.fna", "w") as handle:
                 handle.write(
                     ">original_"
@@ -724,13 +1016,14 @@ class sonarCache:
                     + qry
                     + "\n"
                 )
-            sys.exit(
+            raise ValueError(
                 "import error: original sequence of sample "
                 + sample_data["name"]
                 + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna):"
                 + " "
                 + cigar
             )
+        return True
 
 
 if __name__ == "__main__":

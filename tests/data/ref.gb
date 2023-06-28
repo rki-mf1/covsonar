@@ -43,13 +43,13 @@ FEATURES             Location/Qualifiers
                      /collection_date="Dec-2019"
      5'UTR           1..265
      gene            266..21555
-                     /gene="orf1ab"
+                     /gene="ORF1ab"
      CDS             join(266..13468,13468..21555)
-                     /gene="orf1ab"
+                     /gene="ORF1ab"
                      /ribosomal_slippage
                      /note="pp1ab; translated by -1 ribosomal frameshift"
                      /codon_start=1
-                     /product="orf1ab polyprotein"
+                     /product="ORF1ab polyprotein"
                      /protein_id="QHD43415.1"
                      /translation="MESLVPGFNEKTHVQLSLPVLQVRDVLVRGFGDSVEEVLSEARQ
                      HLKDGTCGLVEVEKGVLPQLEQPYVFIKRSDARTAPHGHVMVELVAELEGIQYGRSGE

@@ -1546,7 +1546,6 @@ class sonarDBManager:
 
         # standard query
         if format == "csv" or format == "tsv":
-
             # select samples
             sql = sample_selection_sql
             sample_ids = self.cursor.execute(
@@ -1589,46 +1588,51 @@ class sonarDBManager:
             _1_rows = self.cursor.execute(_1_final_sql).fetchall()
             _1_rows = sorted(_1_rows, key=lambda x: x["sample.name"])
 
-            _2_final_sql = (
-                'SELECT name AS "sample.name", \
-                    COALESCE(nt_profile._profile, "") AS NUC_PROFILE, \
-                    COALESCE(aa_profile._profile, "") AS AA_PROFILE, \
-                    COALESCE(nt_profile._frameshifts, "") AS FRAMESHIFTS \
-                FROM sample \
-                LEFT JOIN \
-                    ((SELECT "sample.id", group_concat('
-                + m
-                + ' "variant.label") AS _profile, group_concat(CASE WHEN '
-                + m
-                + ' "variant.frameshift" = 1 THEN "variant.label" END) AS _frameshifts \
-                        FROM variantView \
-                    WHERE "sample.id" IN ('
-                + selected_sample_ids
-                + ") \
-                        AND "
-                + genome_element_condition
-                + nn
-                + tg
-                + ' \
-                    GROUP BY "sample.id") \
-                    ) nt_profile \
-                ON sample.id = nt_profile."sample.id" \
-                LEFT JOIN \
-                    (SELECT "sample.id", group_concat('
-                + m
-                + ' "element.symbol" || ":" || "variant.label") AS _profile \
-                        FROM variantView \
-                    WHERE "sample.id" IN ('
-                + selected_sample_ids
-                + ") \
-                        AND "
-                + cds_element_condition
-                + nx
-                + ' \
-                    GROUP BY "sample.id" \
-                    ) aa_profile \
-                ON sample.id = aa_profile."sample.id"'
-            )
+            _2_final_sql = f"""
+                            SELECT s.name AS "sample.name",
+                                COALESCE(nt_profile._profile, '') AS NUC_PROFILE,
+                                COALESCE(aa_profile._profile, '') AS AA_PROFILE,
+                                COALESCE(nt_profile._frameshifts, '') AS FRAMESHIFTS
+                            FROM sample s
+                            LEFT JOIN (
+                                SELECT sv."sample.id",
+                                    GROUP_CONCAT(sv._sorted_profile) AS _profile,
+                                    GROUP_CONCAT(CASE WHEN sv."variant.frameshift" = 1 THEN sv._sorted_frameshift END) AS _frameshifts
+                                FROM (
+                                    SELECT sv."sample.id",
+                                        sv."variant.frameshift",
+                                        sv."variant.label" AS _sorted_profile,
+                                        CASE WHEN sv."variant.frameshift" = 1 THEN sv."variant.label" END AS _sorted_frameshift
+                                    FROM (
+                                        SELECT sv."sample.id",
+                                            {m}sv."variant.label",
+                                            sv."variant.frameshift"
+                                        FROM variantView sv
+                                        WHERE sv."sample.id" IN ({selected_sample_ids})
+                                        AND {genome_element_condition}{nn}{tg}
+                                        ORDER BY sv."element.id", sv."variant.start"
+                                    ) sv
+                                ) sv
+                                GROUP BY sv."sample.id"
+                            ) nt_profile ON s.id = nt_profile."sample.id"
+                            LEFT JOIN (
+                                SELECT sv."sample.id",
+                                    GROUP_CONCAT(sv._sorted_profile) AS _profile
+                                FROM (
+                                    SELECT sv."sample.id",
+                                        _sorted_profile
+                                    FROM (
+                                        SELECT sv."sample.id",
+                                            {m}sv."element.symbol" || ":" || sv."variant.label" AS _sorted_profile
+                                        FROM variantView sv
+                                        WHERE sv."sample.id" IN ({selected_sample_ids})
+                                        AND {cds_element_condition}{nx}
+                                        ORDER BY sv."element.id", sv."variant.start"
+                                    ) sv
+                                ) sv
+                                GROUP BY sv."sample.id"
+                            ) aa_profile ON s.id = aa_profile."sample.id"
+                        """
 
             _2_rows = {
                 x["sample.name"]: x

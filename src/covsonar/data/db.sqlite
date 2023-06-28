@@ -175,8 +175,8 @@ CREATE TABLE IF NOT EXISTS variant (
 	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_variant_element_id ON variant (element_id);
-CREATE INDEX IF NOT EXISTS idx_variant_element_start ON variant (start);
-CREATE INDEX IF NOT EXISTS idx_variant_element_frameshift ON variant (frameshift);
+CREATE INDEX IF NOT EXISTS idx_variant_start ON variant (start);
+CREATE INDEX IF NOT EXISTS idx_variant_frameshift ON variant (frameshift);
 
 
 CREATE TABLE IF NOT EXISTS alignment (
@@ -198,6 +198,12 @@ CREATE TABLE IF NOT EXISTS alignment2variant (
 ) WITHOUT ROWID;
 CREATE INDEX idx_a2v_alignment_id ON alignment2variant (alignment_id);
 CREATE INDEX idx_a2v_variant_id ON alignment2variant (variant_id);
+
+CREATE TABLE "lineages" (
+	"lineage"	TEXT,
+	"sublineage"	TEXT,
+	PRIMARY KEY("lineage")
+);
 
 --
 -- VIEWS
@@ -350,12 +356,6 @@ LEFT JOIN variant2property ON variant2property.variant_id = variant.id
 LEFT JOIN element ON variant.element_id = element.id
 LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
-
-CREATE TABLE "lineages" (
-	"lineage"	TEXT,
-	"sublineage"	TEXT,
-	PRIMARY KEY("lineage")
-);
 
 --
 -- TRIGGER

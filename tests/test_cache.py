@@ -17,7 +17,6 @@ def test_get_refseq_id_failcase(tmpfile_name, testdb):
 
 
 def test_write_checkref_log(testdb, tmpfile_name, tmp_path, capsys):
-
     # tmpfile_name = "./tesst.txt"
     data = {"header": "HEader", "name": "NAme"}
     # ignore_errors
@@ -66,18 +65,18 @@ def test_get_add_fasta(tmp_path, monkeypatch):
     # assert result is None
 
 
-def test_assign_data(monkeypatch):
+def test_add_data_files(monkeypatch):
     monkeypatch.chdir(Path(__file__).parent)
     testdb = "data/test-with-seqs.db"
     data = {
         "seqhash": "wVHEydRZjNKWn3ubf/+OMXxQ1WQ",
         "algnid": 1,
+        "refseq_id": 0,
         "sequence": "wVHEydRZjNKWn3ubf/+OMXxQ1WQ",
     }
     seqhash = "Test201"
-    refseq_id = "MN908947.3"
     with sonarDBManager(testdb) as dbm:
-        return_data = sonarCache(db=testdb).assign_data(data, seqhash, refseq_id, dbm)
+        return_data = sonarCache(db=testdb).add_data_files(data, seqhash, dbm)
 
     logging.debug(return_data)
     data1_truth = {
@@ -94,10 +93,11 @@ def test_assign_data(monkeypatch):
     data = {
         "seqhash": "Test201",
         "algnid": 1,
+        "refseq_id": 0,
         "sequence": "wVHEydRZjNKWn3ubf/+OMXxQ1WQ",
     }
     with sonarDBManager(testdb) as dbm:
-        return_data = sonarCache(db=testdb).assign_data(data, seqhash, refseq_id, dbm)
+        return_data = sonarCache(db=testdb).add_data_files(data, seqhash, dbm)
     data2_truth = {
         "seqfile": None,
         "seqhash": None,
@@ -124,27 +124,26 @@ def test_paranoid_test(monkeypatch, testdb):
         _return = sonarCache(db=testdb).paranoid_test(refseqs=refseqs,sample_data=sample_data,dbm=dbm)
     """
     monkeypatch.chdir(Path(__file__).parent)
-    # tsv = "data/meta.tsv"
 
-    # fail case, needed to recheck this again.
+    # fail case
     with open("data/cache-test/ref-seq") as f:
         data = f.read()
     refseqs = eval(data)
     with open("data/cache-test/sample-data") as f:
         data = f.read()
     sample_data = eval(data)
-    with pytest.raises(SystemExit) as pytest_wrapped_e:
+
+    with pytest.raises(ValueError) as pytest_wrapped_e:
         with sonarDBManager(testdb) as dbm:
             sonarCache(db=testdb).paranoid_test(
                 refseqs=refseqs, sample_data=sample_data, dbm=dbm
             )
-    assert pytest_wrapped_e.type == SystemExit
-    assert "cannot be restored" in pytest_wrapped_e.value.code
+    assert pytest_wrapped_e.type == ValueError
+    assert "cannot be restored" in str(pytest_wrapped_e.value)
     os.remove("paranoid.alignment.fna")
 
 
 def test_cache_sequence(testdb, monkeypatch):
-
     # fail case
     monkeypatch.chdir(Path(__file__).parent)
 

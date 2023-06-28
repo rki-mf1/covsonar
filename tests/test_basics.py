@@ -164,7 +164,6 @@ def test_import_data(testdb, monkeypatch):
 
 
 def test_open_file(tmpfile_name):
-
     # input error: " + fname + " does not exist.
     with pytest.raises(SystemExit) as e:
         sonarBasics().open_file(tmpfile_name, compressed="xz")
