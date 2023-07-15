@@ -4,13 +4,14 @@ import re
 
 import pytest
 from src.covsonar.basics import sonarBasics
+from src.covsonar.utils import sonarUtils
 
 
 def test_setup_and_file_exists(tmpfile_name):
     fname = tmpfile_name
     open(fname, "w").close()
     with pytest.raises(SystemExit) as pytest_wrapped_e:
-        sonarBasics.setup_db(fname)
+        sonarUtils.setup_db(fname)
     assert pytest_wrapped_e.type == SystemExit
     assert (
         re.match(r"^setup error: .* does already exist.$", pytest_wrapped_e.value.code)
@@ -22,28 +23,24 @@ def test_autocreate_with_givenRef(tmpfile_name, monkeypatch):
     monkeypatch.chdir(Path(__file__).parent)
     ref = Path("data/ref.gb")
     assert (
-        sonarBasics.setup_db(tmpfile_name, auto_create_props=True, reference_gb=ref)
-        is None
+        sonarUtils.setup_db(tmpfile_name, default_props=True, reference_gb=ref) is None
     )
 
 
 def test_notautocreate_and_notsetup(tmpfile_name):
     fname = tmpfile_name
-    assert (
-        sonarBasics.setup_db(fname, auto_create_props=False, default_setup=False)
-        is None
-    )
+    assert sonarUtils.setup_db(fname, reference_gb=None, default_props=False) is None
 
 
 def test_basicObject():
-    obj = sonarBasics()
-    assert isinstance(obj, sonarBasics) is True
+    obj = sonarUtils()
+    assert isinstance(obj, sonarUtils) is True
 
 
 def test_match(testdb):
     # "Wrong outputformat."
     with pytest.raises(SystemExit) as e:
-        sonarBasics().match(
+        sonarUtils().match(
             testdb,
             profiles=[],
             samples=[],
@@ -61,13 +58,13 @@ def test_import_data(testdb, monkeypatch):
     """ """
     monkeypatch.chdir(Path(__file__).parent)
     tsv = "data/meta.tsv"
-    # fasta = "data/test.fasta"
+    fasta = "data/test.fasta"
     with pytest.raises(SystemExit) as e:
-        sonarBasics().import_data(
+        sonarUtils().import_data(
             testdb,
             fasta=[],
             tsv_files=[],
-            cols={},
+            prop_links={},
             cachedir=None,
             autolink=False,
             progress=True,
@@ -82,11 +79,11 @@ def test_import_data(testdb, monkeypatch):
 
     # " not a valid property assignment."
     with pytest.raises(SystemExit) as e:
-        sonarBasics().import_data(
+        sonarUtils().import_data(
             testdb,
-            fasta=[],
-            tsv_files=[""],
-            cols=["STUDY", "STE"],
+            fasta=[fasta],
+            tsv_files=[],
+            prop_links=["STUDY", "STE"],
             autolink=False,
             progress=True,
             update=True,
@@ -94,15 +91,18 @@ def test_import_data(testdb, monkeypatch):
             quiet=True,
         )
     assert e.type == SystemExit
-    assert "STUDY is not a valid sample property assignment" in e.value.code
+    assert (
+        e.value.code
+        == "input error: STUDY is not a valid column-to-property assignment."
+    )
 
     # unknown column to the selected DB
     with pytest.raises(SystemExit) as e:
-        sonarBasics().import_data(
+        sonarUtils().import_data(
             testdb,
-            fasta=[],
-            tsv_files=[""],
-            cols=["STE=STUDY", "sample=IMS_ID"],
+            fasta=[fasta],
+            tsv_files=[],
+            prop_links=["STE=STUDY", "sample=IMS_ID"],
             autolink=False,
             progress=True,
             update=True,
@@ -114,11 +114,11 @@ def test_import_data(testdb, monkeypatch):
 
     # sample column has to be assigned.
     with pytest.raises(SystemExit) as e:
-        sonarBasics().import_data(
+        sonarUtils().import_data(
             testdb,
             fasta=[],
             tsv_files=[tsv],
-            cols=[],
+            prop_links=[],
             cachedir=None,
             autolink=False,
             progress=True,
@@ -127,49 +127,49 @@ def test_import_data(testdb, monkeypatch):
             quiet=True,
         )
     assert e.type == SystemExit
-    assert "sample column has to be assigned" in e.value.code
+    assert "input error: missing 'sample' column assignment." in e.value.code
 
     # tsv does not provide any informative column
     with pytest.raises(SystemExit) as e:
-        sonarBasics().import_data(
-            testdb, fasta=[], tsv_files=[tsv], cols=["sample=IMS_ID"], autolink=False
+        sonarUtils().import_data(
+            testdb,
+            fasta=[],
+            tsv_files=[tsv],
+            prop_links=["sample=IMS_ID"],
+            autolink=False,
         )
     assert e.type == SystemExit
-    assert "tsv does not provide any informative column" in e.value.code
+    assert (
+        "input error: the file does not provide any informative column." == e.value.code
+    )
 
     # is not an unique column
     bad_tsv = "data/meta.bad.tsv"
     with pytest.raises(SystemExit) as e:
-        sonarBasics().import_data(
+        sonarUtils().import_data(
             testdb,
             fasta=[],
             tsv_files=[bad_tsv],
-            cols=["sample=IMS_ID", "SEQ_TYPE=SEQ_TYPE"],
+            prop_links=["sample=IMS_ID", "SEQ_TYPE=SEQ_TYPE"],
             autolink=False,
         )
     assert e.type == SystemExit
-    assert "is not an unique column" in e.value.code
+    assert "error: SEQ_TYPE is not a unique column." == e.value.code
 
     # in 'tsv file does not contain required sample column.'
     with pytest.raises(SystemExit) as e:
-        sonarBasics().import_data(
+        sonarUtils().import_data(
             testdb,
             fasta=[],
             tsv_files=[tsv],
-            cols=["sample=INVISIBLE_COl"],
+            prop_links=["sample=INVISIBLE_COl"],
             autolink=True,
         )
     assert e.type == SystemExit
-    assert "tsv file does not contain required sample column" in e.value.code
+    assert "input error: missing 'sample' column assignment." == e.value.code
 
 
 def test_open_file(tmpfile_name):
-    # input error: " + fname + " does not exist.
-    with pytest.raises(SystemExit) as e:
-        sonarBasics().open_file(tmpfile_name, compressed="xz")
-    assert e.type == SystemExit
-    assert "does not exist" in e.value.code
-
     # create dump file. xz
     xz_file = tmpfile_name + ".xz"
     msg = "The quick brown fox jumps over the lazy dog"
@@ -177,11 +177,5 @@ def test_open_file(tmpfile_name):
         iFile.write(msg.encode())
 
     # decompress data
-    answer = sonarBasics().open_file(xz_file, compressed="xz")
-    assert answer.read() == msg
-
-    # "input error: " + fname + " cannot be opened."
-    with pytest.raises(SystemExit) as e:
-        answer = sonarBasics().open_file(xz_file, compressed="zip", encoding="utf-2022")
-    assert e.type == SystemExit
-    assert "cannot be opened" in e.value.code
+    with sonarBasics.open_file_autodetect(xz_file) as handle:
+        assert handle.read() == msg

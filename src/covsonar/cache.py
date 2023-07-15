@@ -20,9 +20,9 @@ from typing import Any, DefaultDict, Dict, Iterator, List, Optional, Tuple, Unio
 import pandas as pd
 from tqdm import tqdm
 
-from .align import sonarAligner
-from .basics import sonarBasics
-from .dbm import sonarDBManager
+from covsonar.align import sonarAligner
+from covsonar.basics import sonarBasics
+from covsonar.dbm import sonarDBManager
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -562,8 +562,8 @@ class sonarCache:
                 + self._molregex.search(header)
                 + ")."
             )
-        seq = sonarBasics.harmonize(seq)
-        seqhash = sonarBasics.hash(seq)
+        seq = sonarBasics.harmonize_seq(seq)
+        seqhash = sonarBasics.hash_seq(seq)
         refmolid = self.refmols[refmol]["molecule.id"]
         return {
             "name": sample_id,
@@ -587,7 +587,7 @@ class sonarCache:
             dict: A dictionary containing the information for a single sample.
         """
         for fname in fnames:
-            with sonarBasics.open_file(fname, compressed="auto") as handle, tqdm(
+            with sonarBasics.open_file_autodetect(fname) as handle, tqdm(
                 desc="processing " + fname + "...",
                 total=os.path.getsize(fname),
                 unit="bytes",
@@ -721,7 +721,7 @@ class sonarCache:
         """
         try:
             if "seqhash" not in self.sources[refmol_acc]:
-                self.sources[refmol_acc]["seqhash"] = sonarBasics.hash(
+                self.sources[refmol_acc]["seqhash"] = sonarBasics.hash_seq(
                     self.sources[refmol_acc]["sequence"]
                 )
             return self.sources[refmol_acc]["seqhash"]

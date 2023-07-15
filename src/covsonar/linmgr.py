@@ -5,14 +5,13 @@
 
 import importlib.resources
 import json
+import logging
 import os
 import shutil
 from tempfile import mkdtemp
 
 import pandas as pd
 import requests
-
-from . import logging
 
 try:  # noqa: C901
     from pango_aliasor.aliasor import Aliasor

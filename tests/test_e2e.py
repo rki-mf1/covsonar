@@ -27,7 +27,7 @@ def test_help():
 
 def test_setup_db(tmp_path):
     parsed_args = sonar.parse_args(
-        ["setup", "--db", str(tmp_path / "test.db"), "--auto-create-props"]
+        ["setup", "--db", str(tmp_path / "test.db"), "--default-props"]
     )
     retval = sonar.main(parsed_args)
     assert retval == 0
@@ -226,11 +226,15 @@ def test_valid_extend(tmp_path, monkeypatch):
     run_cli(f"match --db {db_path} --format csv -o {tmp_path}/out.csv")
     run_cli(f"match --db {db_path} --format vcf -o {tmp_path}/out.vcf")
     run_cli(
+        f"match --db {db_path} --format csv --frameshifts-only -o {tmp_path}/out_fs_only.csv"
+    )
+    run_cli(
         f"restore --db {db_path} --sample IMS-10025-CVDP-00960 IMS-10087-CVDP-D484F3AD-CD8F-473C-8A5E-DB5D6A710BE5 IMS-10004-CVDP-0672526C-BAEA-4FE9-A57B-941CBCC13343 IMS-10013-CVDP-69DF29F4-D7E3-4954-94F4-65C20BE7B850 IMS-10013-CVDP-37E0BD5A-03D8-42CE-95C0-7B900B714B95 -o {tmp_path}/out.fasta"
     )
 
     assert filecmp.cmp(f"{tmp_path}/out.csv", "data/out.csv")
     assert filecmp.cmp(f"{tmp_path}/out.vcf", "data/out.vcf")
+    assert filecmp.cmp(f"{tmp_path}/out_fs_only.csv", "data/out_fs_only.csv")
 
 
 def test_valid_extend2(monkeypatch, capsys):

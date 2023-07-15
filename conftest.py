@@ -2,7 +2,7 @@ import os
 import tempfile
 
 import pytest
-from src.covsonar.basics import sonarBasics
+from src.covsonar.utils import sonarUtils
 from src.covsonar.dbm import sonarDBManager
 
 
@@ -27,7 +27,7 @@ def mock_workerpool_imap_unordered(monkeypatch):
 def setup_db(tmp_path_factory):
     """Fixture to set up a temporay session-lasting test database with test data"""
     dbfile = str(tmp_path_factory.mktemp("data") / "test.db")
-    sonarBasics.setup_db(dbfile, quiet=True)
+    sonarUtils.setup_db(dbfile, quiet=True)
     with sonarDBManager(dbfile, readonly=False) as dbm:
         dbm.add_property("LINEAGE", "text", "text", " ", "sample")
         dbm.add_property("CITY", "zip", "zip", " ", "sample")
@@ -50,11 +50,11 @@ def testdb(setup_db):
     db = setup_db
     script_dir = os.path.dirname(os.path.abspath(__file__))
     fasta = os.path.join(script_dir, "tests", "data", "test.fasta")
-    sonarBasics.import_data(
+    sonarUtils.import_data(
         db,
         fasta=[fasta],
         tsv_files=[],
-        cols={},
+        prop_links={},
         cachedir=None,
         autolink=True,
         progress=False,

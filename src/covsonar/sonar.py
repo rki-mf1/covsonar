@@ -3,6 +3,7 @@
 # author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
 import argparse
+import logging
 import os
 import sys
 from textwrap import fill
@@ -10,11 +11,12 @@ from typing import Optional
 
 from tabulate import tabulate
 
-from covsonar import logging
 from covsonar.basics import sonarBasics
 from covsonar.cache import sonarCache  # noqa: F401
 from covsonar.dbm import sonarDBManager
 from covsonar.linmgr import sonarLinmgr
+from covsonar.utils import sonarUtils
+
 
 # Constants
 VERSION = sonarBasics.get_version()
@@ -231,8 +233,8 @@ def create_subparser_setup(
         "setup", help="set up a new database", parents=parent_parsers
     )
     parser.add_argument(
-        "--auto-create-props",
-        help="automatically add commonly used properties to the new database",
+        "--default-props",
+        help="add commonly used properties to the new database",
         action="store_true",
     )
     parser.add_argument(
@@ -474,6 +476,11 @@ def create_subparser_match(
         action="store_true",
     )
     parser.add_argument(
+        "--frameshifts-only",
+        help="match only mutation profiles with frameshift mutations",
+        action="store_true",
+    )
+    parser.add_argument(
         "--out-cols",
         metavar="STR",
         help="define output columns for CSV and TSV files (by default all available columns are shown)",
@@ -676,9 +683,7 @@ def handle_setup(args: argparse.Namespace, debug: bool):
     """
     if args.gbk:
         check_file(args.gbk)
-    sonarBasics.setup_db(
-        args.db, args.auto_create_props, reference_gb=args.gbk, debug=debug
-    )
+    sonarUtils.setup_db(args.db, args.default_props, reference_gb=args.gbk, debug=debug)
 
 
 def handle_db_upgrade(args: argparse.Namespace, debug: bool):
@@ -707,12 +712,12 @@ def handle_import(args: argparse.Namespace, debug: bool):
         args (argparse.Namespace): Parsed command line arguments.
         debug_mode (bool): Flag to enable or disable debug mode.
     """
-    sonarBasics.import_data(
+    sonarUtils.import_data(
         db=args.db,
         fasta=args.fasta,
         csv_files=args.csv,
         tsv_files=args.tsv,
-        cols=args.cols,
+        prop_links=args.cols,
         cachedir=args.cache,
         autolink=args.auto_link,
         progress=not args.no_progress,
@@ -775,7 +780,7 @@ def handle_add_prop(args: argparse.Namespace, debug: bool):
         args (argparse.Namespace): Parsed command line arguments.
         debug_mode (bool): Flag to enable or disable debug mode.
     """
-    with sonarDBManager(args.db, readonly=False, debug=args.debug) as db_manager:
+    with sonarDBManager(args.db, readonly=False, debug=debug) as db_manager:
         if args.qtype is None:
             if args.dtype == "integer":
                 args.qtype = "numeric"
@@ -865,13 +870,13 @@ def handle_delete(args: argparse.Namespace, debug: bool):
     samples = set([x.strip() for x in args.sample])
     for fname in args.sample_file:
         check_file(fname)
-        with sonarBasics.open_file(fname, compressed="auto") as handle:
+        with sonarBasics.open_file_autodetect(fname) as handle:
             for line in handle:
                 samples.add(line.strip())
     if len(samples) == 0:
         logging.info("Nothing to delete.")
     else:
-        sonarBasics.delete(args.db, *samples, debug=args.debug)
+        sonarUtils.delete_sample(args.db, samples, debug=debug)
 
 
 def handle_restore(args: argparse.Namespace, debug: bool):
@@ -895,15 +900,15 @@ def handle_restore(args: argparse.Namespace, debug: bool):
     samples = set([x.strip() for x in args.sample])
     for file in args.sample_file:
         check_file(file)
-        with sonarBasics.open_file(file, compressed="auto") as handle:
+        with sonarBasics.open_file_autodetect(file) as handle:
             for line in handle:
                 samples.add(line.strip())
-    sonarBasics.restore(
+    sonarUtils.restore_seq(
         args.db,
-        *samples,
+        samples,
         aligned=args.aligned,
         outfile=args.out,
-        debug=args.debug,
+        debug=debug,
     )
 
 
@@ -944,7 +949,7 @@ def handle_info(args: argparse.Namespace, debug: bool):
     Raises:
         FileNotFoundError: If the database file is not found.
     """
-    sonarBasics.show_db_info(args.db)
+    sonarUtils.show_db_info(args.db)
 
 
 def handle_match(args: argparse.Namespace, debug: bool):
@@ -987,7 +992,7 @@ def handle_match(args: argparse.Namespace, debug: bool):
     if args.sample_file:
         for sample_file in args.sample_file:
             check_file(sample_file)
-            with sonarBasics.open_file(sample_file, compressed="auto") as file:
+            with sonarBasics.open_file_autodetect(sample_file) as file:
                 for line in file:
                     samples.add(line.strip())
 
@@ -995,16 +1000,17 @@ def handle_match(args: argparse.Namespace, debug: bool):
     output_format = "count" if args.count else args.format
 
     # Perform matching
-    sonarBasics.match(
+    sonarUtils.match(
         db=args.db,
         profiles=args.profile,
         samples=samples,
         properties=properties,
         outfile=args.out,
         output_column=args.out_cols,
-        debug=args.debug,
+        debug=debug,
         format=output_format,
         showNX=args.showNX,
+        frameshifts_only=args.frameshifts_only,
     )
 
 
@@ -1041,7 +1047,7 @@ def handle_direct_query(args: argparse.Namespace, debug: bool):
     Raises:
         FileNotFoundError: If the database file is not found.
     """
-    sonarBasics.direct_query(args.db, query=args.sql, outfile=args.out, debug=debug)
+    sonarUtils.direct_query(args.db, query=args.sql, outfile=args.out, debug=debug)
 
 
 def execute_commands(args, debug):  # noqa: C901

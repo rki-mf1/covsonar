@@ -4,6 +4,7 @@
 
 from collections import defaultdict
 import itertools
+import logging
 import os
 import pkgutil
 import re
@@ -16,7 +17,6 @@ from Bio.SeqFeature import CompoundLocation
 from Bio.SeqFeature import FeatureLocation
 import pandas as pd
 
-from . import logging
 
 # COMPATIBILITY
 SUPPORTED_DB_VERSION = 4
@@ -518,7 +518,7 @@ class sonarDBManager:
                 start,
                 end,
                 strand,
-                sequence,
+                str(sequence),
                 standard,
                 parent_id,
             ],
@@ -1459,6 +1459,7 @@ class sonarDBManager:
         properties=None,
         reference_accession=None,
         showNX=False,
+        frameshifts_only=False,
         ignoreTerminalGaps=False,
         output_column=[],
         format="csv",
@@ -1473,8 +1474,6 @@ class sonarDBManager:
                     sql, val = self.query_metadata(pname, *vals)
                     property_sqls.append(sql)
                     property_vals.extend(val)
-
-        property_sqls = " INTERSECT ".join(property_sqls)
 
         # collecting sqls for genomic profile based filtering
         profile_sqls = []
@@ -1494,26 +1493,26 @@ class sonarDBManager:
             )
         else:
             profile_sqls = ""
-        if property_sqls and profile_sqls:
-            if len(profiles) > 1:
-                sample_selection_sql = (
-                    property_sqls + " INTERSECT SELECT * FROM (" + profile_sqls + ")"
-                )
-            else:
-                sample_selection_sql = property_sqls + " INTERSECT " + profile_sqls
-        elif property_sqls or profile_sqls:
-            sample_selection_sql = property_sqls + profile_sqls
-        elif not samples:
-            sample_selection_sql = "SELECT id FROM sample"
-        else:
-            sample_selection_sql = (
+
+        # assembling sample id queries
+        sqls = property_sqls
+        if len(profiles) == 1:
+            sqls.append(profile_sqls)
+        elif len(profiles) > 1:
+            sqls.append("SELECT * FROM (" + profile_sqls + ")")
+        if samples:
+            sqls.append(
                 "SELECT id FROM sample WHERE name IN ("
                 + " , ".join(['"' + x + '"' for x in samples])
                 + ")"
             )
-            property_sqls = []
-            property_vals = []
 
+        if not sqls:
+            sample_selection_sql = "SELECT id FROM sample"
+        else:
+            sample_selection_sql = " INTERSECT ".join(sqls)
+
+        # assembling element conditions
         genome_element_condition = [
             str(x) for x in self.get_element_ids(reference_accession, "source")
         ]
@@ -1647,13 +1646,18 @@ class sonarDBManager:
                     continue
                 sample = _1_rows[key]["sample.name"]
                 if sample in _2_rows:
+                    if frameshifts_only and _2_rows[sample]["FRAMESHIFTS"] == "":
+                        _1_rows[key] = None
+                        continue
                     _1_rows[key]["NUC_PROFILE"] = _2_rows[sample]["NUC_PROFILE"]
                     _1_rows[key]["AA_PROFILE"] = _2_rows[sample]["AA_PROFILE"]
                     _1_rows[key]["FRAMESHIFTS"] = _2_rows[sample]["FRAMESHIFTS"]
-                else:
+                elif not frameshifts_only:
                     _1_rows[key]["NUC_PROFILE"] = None
                     _1_rows[key]["AA_PROFILE"] = None
                     _1_rows[key]["FRAMESHIFTS"] = None
+                else:
+                    _1_rows[key] = None
             _1_rows = list(filter(None, _1_rows))
 
             # filter column
