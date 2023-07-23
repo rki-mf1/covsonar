@@ -5,7 +5,7 @@ import shutil
 
 import pytest
 from src.covsonar.cache import sonarCache
-from src.covsonar.dbm import sonarDBManager
+from src.covsonar.dbm import sonarDbManager
 
 
 def test_get_refseq_id_failcase(tmpfile_name, testdb):
@@ -75,7 +75,7 @@ def test_add_data_files(monkeypatch):
         "sequence": "wVHEydRZjNKWn3ubf/+OMXxQ1WQ",
     }
     seqhash = "Test201"
-    with sonarDBManager(testdb) as dbm:
+    with sonarDbManager(testdb) as dbm:
         return_data = sonarCache(db=testdb).add_data_files(data, seqhash, dbm)
 
     logging.debug(return_data)
@@ -96,7 +96,7 @@ def test_add_data_files(monkeypatch):
         "refseq_id": 0,
         "sequence": "wVHEydRZjNKWn3ubf/+OMXxQ1WQ",
     }
-    with sonarDBManager(testdb) as dbm:
+    with sonarDbManager(testdb) as dbm:
         return_data = sonarCache(db=testdb).add_data_files(data, seqhash, dbm)
     data2_truth = {
         "seqfile": None,
@@ -120,7 +120,7 @@ def test_paranoid_test(monkeypatch, testdb):
         data = f.read()
     sample_data = eval(data)
 
-    with sonarDBManager(testdb) as dbm:
+    with sonarDbManager(testdb) as dbm:
         _return = sonarCache(db=testdb).paranoid_test(refseqs=refseqs,sample_data=sample_data,dbm=dbm)
     """
     monkeypatch.chdir(Path(__file__).parent)
@@ -134,7 +134,7 @@ def test_paranoid_test(monkeypatch, testdb):
     sample_data = eval(data)
 
     with pytest.raises(ValueError) as pytest_wrapped_e:
-        with sonarDBManager(testdb) as dbm:
+        with sonarDbManager(testdb) as dbm:
             sonarCache(db=testdb).paranoid_test(
                 refseqs=refseqs, sample_data=sample_data, dbm=dbm
             )

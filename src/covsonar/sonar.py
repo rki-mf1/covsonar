@@ -13,7 +13,7 @@ from tabulate import tabulate
 
 from covsonar.basics import sonarBasics
 from covsonar.cache import sonarCache  # noqa: F401
-from covsonar.dbm import sonarDBManager
+from covsonar.dbm import sonarDbManager
 from covsonar.linmgr import sonarLinmgr
 from covsonar.utils import sonarUtils
 
@@ -68,7 +68,7 @@ def parse_args(args=None):
     )
     subparsers, _ = create_subparser_delete(subparsers, database_parser, sample_parser)
     subparsers, subparser_match = create_subparser_match(
-        subparsers, database_parser, sample_parser, output_parser
+        subparsers, database_parser, reference_parser, sample_parser, output_parser
     )
     subparsers, _ = create_subparser_restore(
         subparsers, database_parser, sample_parser, output_parser
@@ -94,7 +94,7 @@ def parse_args(args=None):
     user_namespace = args_namespace()
     known_args, _ = parser.parse_known_args(args=args, namespace=user_namespace)
     if is_match_selected(known_args):
-        with sonarDBManager(
+        with sonarDbManager(
             known_args.db, readonly=True, debug=known_args.debug
         ) as db_manager:
             for property in db_manager.properties.values():
@@ -699,7 +699,7 @@ def handle_db_upgrade(args: argparse.Namespace, debug: bool):
     while decision not in ("YES", "no"):
         decision = input("Do you really want to perform this action? [YES/no]: ")
     if decision == "YES":
-        sonarDBManager.upgrade_db(args.db)
+        sonarDbManager.upgrade_db(args.db)
     else:
         logging.info("No operation is performed")
 
@@ -739,7 +739,7 @@ def handle_list_prop(args: argparse.Namespace, debug: bool):
         args (argparse.Namespace): Parsed command line arguments.
         debug_mode (bool): Flag to enable or disable debug mode.
     """
-    with sonarDBManager(args.db, debug=debug) as db_manager:
+    with sonarDbManager(args.db, debug=debug) as db_manager:
         if not db_manager.properties:
             print("*** no properties ***")
             sys.exit(0)
@@ -780,7 +780,7 @@ def handle_add_prop(args: argparse.Namespace, debug: bool):
         args (argparse.Namespace): Parsed command line arguments.
         debug_mode (bool): Flag to enable or disable debug mode.
     """
-    with sonarDBManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
         if args.qtype is None:
             if args.dtype == "integer":
                 args.qtype = "numeric"
@@ -822,7 +822,7 @@ def handle_delete_prop(args: argparse.Namespace, debug: bool):
     Raises:
     SystemExit: If the specified property name is not found in the database.
     """
-    with sonarDBManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
         if args.name not in db_manager.properties:
             sys.exit("Input error: Unknown property.")
 
@@ -930,7 +930,7 @@ def handle_update_pangolin(args: argparse.Namespace, debug: bool):
     with sonarLinmgr() as lineage_manager:
         lineage_data = lineage_manager.update_lineage_data()
 
-    with sonarDBManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
         db_manager.add_update_lineage(lineage_data)
         logging.info("Update has been completed successfully")
 
@@ -971,7 +971,7 @@ def handle_match(args: argparse.Namespace, debug: bool):
         SystemExit: If any unknown output columns are selected.
     """
     properties = {}
-    with sonarDBManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
         for property_name in db_manager.properties:
             if hasattr(args, property_name):
                 properties[property_name] = getattr(args, property_name)
@@ -1003,6 +1003,7 @@ def handle_match(args: argparse.Namespace, debug: bool):
     sonarUtils.match(
         db=args.db,
         profiles=args.profile,
+        reference=args.reference,
         samples=samples,
         properties=properties,
         outfile=args.out,
@@ -1028,7 +1029,7 @@ def handle_optimize(args: argparse.Namespace, debug: bool):
     Raises:
         FileNotFoundError: If the database file is not found.
     """
-    with sonarDBManager(args.db, debug=debug) as db_manager:
+    with sonarDbManager(args.db, debug=debug) as db_manager:
         db_manager.optimize(args.db)
 
 
@@ -1047,7 +1048,12 @@ def handle_direct_query(args: argparse.Namespace, debug: bool):
     Raises:
         FileNotFoundError: If the database file is not found.
     """
-    sonarUtils.direct_query(args.db, query=args.sql, outfile=args.out, debug=debug)
+    if len(args.sql) > 1 and (
+        (args.sql.startswith('"') and args.sql.endswith('"'))
+        or (args.sql.startswith("'") and args.sql.endswith("'"))
+    ):
+        sql = args.sql[1:-1]
+    sonarUtils.direct_query(args.db, query=sql, outfile=args.out, debug=debug)
 
 
 def execute_commands(args, debug):  # noqa: C901
@@ -1065,7 +1071,7 @@ def execute_commands(args, debug):  # noqa: C901
     elif args.command == "db-upgrade":
         handle_db_upgrade(args, debug)
     else:
-        with sonarDBManager(args.db, readonly=True) as db_manager:
+        with sonarDbManager(args.db, readonly=True) as db_manager:
             db_manager.check_db_compatibility()
 
     if args.command == "import":

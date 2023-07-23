@@ -42,11 +42,6 @@ def test_match(testdb):
     with pytest.raises(SystemExit) as e:
         sonarUtils().match(
             testdb,
-            profiles=[],
-            samples=[],
-            properties={},
-            reference=None,
-            outfile=None,
             format="HDFS",
             debug="False",
         )

@@ -354,7 +354,7 @@ def test_valid_extend3(monkeypatch, capsys):
     result = sonar.main(parsed_args)
     captured = capsys.readouterr()
     assert result == 0
-    assert captured.out.strip() == "3"
+    assert captured.out.strip() == "2"
 
     parsed_args = sonar.parse_args(
         [

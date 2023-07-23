@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 from covsonar.align import sonarAligner
 from covsonar.basics import sonarBasics
-from covsonar.dbm import sonarDBManager
+from covsonar.dbm import sonarDbManager
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -67,7 +67,7 @@ class sonarCache:
         self.disable_progress = disable_progress
 
         # database-derived information
-        with sonarDBManager(self.db, debug=self.debug) as dbm:
+        with sonarDbManager(self.db, debug=self.debug) as dbm:
             self.refmols = dbm.get_molecule_data(
                 '"molecule.accession"',
                 '"molecule.id"',
@@ -422,13 +422,13 @@ class sonarCache:
             self._refs.add(refid)
         return fname
 
-    def cache_translation_table(self, translation_id: int, dbm: sonarDBManager) -> str:
+    def cache_translation_table(self, translation_id: int, dbm: sonarDbManager) -> str:
         """
         Cache a translation table by saving it to a file.
 
         Args:
             translation_id (int): The translation table ID.
-            dbm (sonarDBManager): The database manager.
+            dbm (sonarDbManager): The database manager.
 
         Returns:
             str: The file name where the translation table is cached.
@@ -657,7 +657,7 @@ class sonarCache:
         """
         cds = {}
         prev_elem = None
-        with sonarDBManager(self.db, debug=self.debug) as dbm:
+        with sonarDbManager(self.db, debug=self.debug) as dbm:
             for row in dbm.get_annotation(
                 reference_accession=refmol_acc,
                 molecule_accession=refmol_acc,
@@ -759,7 +759,7 @@ class sonarCache:
         default_properties = {
             x: self.properties[x]["standard"] for x in self.properties
         }
-        with sonarDBManager(self.db, debug=self.debug, readonly=False) as dbm:
+        with sonarDbManager(self.db, debug=self.debug, readonly=False) as dbm:
             for fname in fnames:
                 for data in self.iter_fasta(fname):
                     # check sample
@@ -839,7 +839,7 @@ class sonarCache:
                 )
 
     def add_data_files(
-        self, data: Dict[str, Any], seqhash: str, dbm: sonarDBManager
+        self, data: Dict[str, Any], seqhash: str, dbm: sonarDbManager
     ) -> Dict[str, Any]:
         """
         Assign additional data files to a given data dict of a sample.
@@ -847,7 +847,7 @@ class sonarCache:
         Args:
             data (dict): The data for the sample.
             seqhash (str): The sequence hash, optional.
-            dbm (sonarDBManager): The sonarDBManager instance.
+            dbm (sonarDbManager): The sonarDbManager instance.
 
         Returns:
             (dict) The updated data dictionary.
@@ -892,7 +892,7 @@ class sonarCache:
             ValueError: If the original sequence of a sample cannot be restored from the stored genomic profile.
         """
         refseqs = {}
-        with sonarDBManager(self.db, readonly=False, debug=self.debug) as dbm:
+        with sonarDbManager(self.db, readonly=False, debug=self.debug) as dbm:
             for sample_data in tqdm(
                 self.iter_samples(),
                 total=len(self._samplefiles),
@@ -945,7 +945,7 @@ class sonarCache:
                     sys.exit("unknown import error")
 
     def paranoid_test(
-        self, refseqs: Dict[str, str], sample_data: Dict[str, Any], dbm: sonarDBManager
+        self, refseqs: Dict[str, str], sample_data: Dict[str, Any], dbm: sonarDbManager
     ) -> None:
         """
         Perform a test to verify the integrity of the imported sample.
@@ -953,7 +953,7 @@ class sonarCache:
         Args:
             refseqs (dict): A dictionary to cache reference sequences.
             sample_data (dict): The data for the sample.
-            dbm (sonarDBManager): The sonarDBManager session to use.
+            dbm (sonarDbManager): The sonarDbManager session to use.
 
         Raises:
             ValueError: If the original sequence of a sample cannot be restored from the stored genomic profile.

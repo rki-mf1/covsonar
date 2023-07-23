@@ -3,7 +3,7 @@ import tempfile
 
 import pytest
 from src.covsonar.utils import sonarUtils
-from src.covsonar.dbm import sonarDBManager
+from src.covsonar.dbm import sonarDbManager
 
 
 # PYTEST FIXTURES
@@ -28,7 +28,7 @@ def setup_db(tmp_path_factory):
     """Fixture to set up a temporay session-lasting test database with test data"""
     dbfile = str(tmp_path_factory.mktemp("data") / "test.db")
     sonarUtils.setup_db(dbfile, quiet=True)
-    with sonarDBManager(dbfile, readonly=False) as dbm:
+    with sonarDbManager(dbfile, readonly=False) as dbm:
         dbm.add_property("LINEAGE", "text", "text", " ", "sample")
         dbm.add_property("CITY", "zip", "zip", " ", "sample")
         dbm.add_property("Ct", "integer", "integer", " ", "sample")
@@ -68,12 +68,12 @@ def testdb(setup_db):
 @pytest.fixture
 def init_readonly_dbm(testdb):
     """Fixture to set up a read-only dbm object"""
-    with sonarDBManager(testdb, readonly=True) as dbm:
+    with sonarDbManager(testdb, readonly=True) as dbm:
         yield dbm
 
 
 @pytest.fixture
 def init_writeable_dbm(testdb):
     """Fixture to set up a wirte-able dbm object"""
-    with sonarDBManager(testdb, readonly=False) as dbm:
+    with sonarDbManager(testdb, readonly=False) as dbm:
         yield dbm

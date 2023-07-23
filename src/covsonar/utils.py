@@ -19,7 +19,7 @@ from tqdm import tqdm
 from covsonar.align import sonarAligner
 from covsonar.basics import sonarBasics
 from covsonar.cache import sonarCache
-from covsonar.dbm import sonarDBManager
+from covsonar.dbm import sonarDbManager
 
 # Logging
 sonarBasics.set_logging_config()
@@ -30,6 +30,9 @@ class sonarUtils:
     """
     A class used to perform operations on a covSonar database.
     """
+
+    def __init__(self):
+        pass
 
     # DATABASE HANDLING
     @staticmethod
@@ -57,12 +60,11 @@ class sonarUtils:
         if os.path.isfile(fname):
             sys.exit(f"setup error: {fname} does already exist.")
         if reference_gb and not os.path.isfile(reference_gb):
-            sys.exit(f"setup error: {fname} does not exist.")
+            sys.exit(f"setup error: The given genbank file {fname} does not exist.")
 
         # creating database
         try:
-            sonarDBManager.setup(fname, debug=debug)
-
+            sonarDbManager.setup(fname, debug=debug)
             with sonarUtils.connect_to_db(fname, readonly=False, debug=debug) as dbm:
                 # adding build-in props
                 sonarUtils._create_reserved_properties(dbm)
@@ -90,7 +92,7 @@ class sonarUtils:
     @staticmethod
     def connect_to_db(
         db: str, readonly: bool = True, debug: bool = False
-    ) -> sonarDBManager:
+    ) -> sonarDbManager:
         """
         Connect to database.
 
@@ -100,16 +102,16 @@ class sonarUtils:
             debug (bool, optional): Enable debug mode. Defaults to False.
 
         Returns:
-            sonarDBManager: Database manager instance.
+            sonarDbManager: Database manager instance.
         """
-        return sonarDBManager(db, readonly=readonly, debug=debug)
+        return sonarDbManager(db, readonly=readonly, debug=debug)
 
     @staticmethod
-    def _create_reserved_properties(dbm: sonarDBManager) -> None:
+    def _create_reserved_properties(dbm: sonarDbManager) -> None:
         """Creates default properties in the database.
 
         Args:
-            dbm (sonarDBManager): Database manager instance.
+            dbm (sonarDbManager): Database manager instance.
         """
         dbm.add_property(
             ".IMPORTED",
@@ -121,11 +123,11 @@ class sonarUtils:
         )
 
     @staticmethod
-    def _create_predefined_properties(dbm: sonarDBManager) -> None:
+    def _create_predefined_properties(dbm: sonarDbManager) -> None:
         """Creates predefined properties in the database.
 
         Args:
-            dbm (sonarDBManager): Database manager instance.
+            dbm (sonarDbManager): Database manager instance.
         """
         properties = [
             ("DATE_DRAW", "date", "date", "Sampling date"),
@@ -153,11 +155,11 @@ class sonarUtils:
         )
 
     @staticmethod
-    def _add_reference(dbm: sonarDBManager, records: List[Dict[str, Any]]) -> None:
+    def _add_reference(dbm: sonarDbManager, records: List[Dict[str, Any]]) -> None:
         """Adds references to the database.
 
         Args:
-            dbm (sonarDBManager): Database manager instance.
+            dbm (sonarDbManager): Database manager instance.
             records (List[Dict[str, Any]]): List of reference records.
         """
         ref_id = dbm.add_reference(
@@ -183,12 +185,12 @@ class sonarUtils:
 
     @staticmethod
     def _add_molecule(
-        dbm: sonarDBManager, ref_id: int, i: int, record: Dict[str, Any]
+        dbm: sonarDbManager, ref_id: int, i: int, record: Dict[str, Any]
     ) -> int:
         """Adds reference molecules and elements to the database.
 
         Args:
-            dbm (sonarDBManager): Database manager instance.
+            dbm (sonarDbManager): Database manager instance.
             ref_id (int): Reference id.
             i (int): Index of the record.
             record (Dict[str, Any]): Reference record.
@@ -208,11 +210,11 @@ class sonarUtils:
         )
 
     @staticmethod
-    def _add_source(dbm: sonarDBManager, mol_id: int, source: Dict[str, Any]) -> int:
+    def _add_source(dbm: sonarDbManager, mol_id: int, source: Dict[str, Any]) -> int:
         """Handles source and inserts it into the database.
 
         Args:
-            dbm (sonarDBManager): Database manager instance.
+            dbm (sonarDbManager): Database manager instance.
             mol_id (int): Molecule id.
             source (Dict[str, Any]): Source data.
 
@@ -242,7 +244,7 @@ class sonarUtils:
 
     @staticmethod
     def _add_genes(
-        dbm: sonarDBManager,
+        dbm: sonarDbManager,
         mol_id: int,
         genes: List[Dict[str, Any]],
         source_id: int,
@@ -250,7 +252,7 @@ class sonarUtils:
         """Handles genes and inserts them into the database.
 
         Args:
-            dbm (sonarDBManager): Database manager instance.
+            dbm (sonarDbManager): Database manager instance.
             mol_id (int): Molecule id.
             genes (List[Dict[str, Any]]): List of genes.
             source_id (int): Source id.
@@ -290,7 +292,7 @@ class sonarUtils:
 
     @staticmethod
     def _add_cds(
-        dbm: sonarDBManager,
+        dbm: sonarDbManager,
         mol_id: int,
         gene_ids: Dict[str, int],
         cds: List[Dict[str, Any]],
@@ -299,7 +301,7 @@ class sonarUtils:
         """Handles coding sequences (CDS) and inserts them into the database.
 
         Args:
-            dbm (sonarDBManager): Database manager instance.
+            dbm (sonarDbManager): Database manager instance.
             mol_id (int): Molecule id.
             gene_ids (Dict[str, int]): Dictionary of gene ids.
             cds (List[Dict[str, Any]]): List of coding sequences.
@@ -804,7 +806,7 @@ class sonarUtils:
             progress: If True, displays a progress bar.
             debug: If True, runs the function in debug mode.
         """
-        with sonarDBManager(db, readonly=False, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=False, debug=debug) as dbm:
             for sample_name in tqdm(
                 properties,
                 desc="Import data...",
@@ -832,6 +834,7 @@ class sonarUtils:
         format: str = "csv",
         debug: bool = False,
         showNX: bool = False,
+        ignore_terminal_gaps: bool = True,
         frameshifts_only: bool = False,
     ):
         """
@@ -848,26 +851,28 @@ class sonarUtils:
             format: Output format.
             debug: Flag indicating whether to run in debug mode.
             showNX: Flag indicating whether to show NX.
+            ignore_terminal_gaps: Flag indicating whether to terminal gaps.
             frameshifts_only: Flag indicating whether to only show frameshifts.
 
         Returns:
             None.
         """
-        with sonarDBManager(db, debug=debug) as dbm:
-            if format == "vcf" and not reference:
+        with sonarDbManager(db, debug=debug) as dbm:
+            if format == "vcf" and not reference:  # do we need this?
                 reference = dbm.get_default_reference_accession()
-            cursor = dbm.match(
-                *profiles,
+            rows = dbm.match(
+                profiles=profiles,
                 samples=samples,
-                properties=properties,
                 reference_accession=reference,
+                properties=properties,
                 format=format,
-                output_column=output_column,
-                showNX=showNX,
+                output_columns=output_column,
+                filter_n=showNX,
+                filter_x=showNX,
                 frameshifts_only=frameshifts_only,
-                ignoreTerminalGaps=True,
+                ignore_terminal_gaps=ignore_terminal_gaps,
             )
-            sonarUtils._export_query_results(cursor, format, reference, outfile)
+            sonarUtils._export_query_results(rows, format, reference, outfile)
 
     @staticmethod
     def _export_query_results(
@@ -891,7 +896,7 @@ class sonarUtils:
                 cursor, outfile=outfile, na="*** no match ***", tsv=tsv
             )
         elif format == "count":
-            count = cursor.fetchone()["count"]
+            count = cursor
             if outfile:
                 with open(outfile, "w") as handle:
                     handle.write(str(count))
@@ -925,7 +930,7 @@ class sonarUtils:
             outfile: If provided, the result will be written to this file.
             debug: If True, print debug information.
         """
-        with sonarDBManager(db, readonly=True, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=True, debug=debug) as dbm:
             if not samples:
                 samples = [x for x in dbm.iter_sample_names()]
             if not samples:
@@ -998,7 +1003,7 @@ class sonarUtils:
             samples (list[str]): A list of samples to be deleted.
             debug (bool): If True, print debug information.
         """
-        with sonarDBManager(db, readonly=False, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=False, debug=debug) as dbm:
             before = dbm.count_samples()
             dbm.delete_samples(*samples)
             after = dbm.count_samples()
@@ -1016,7 +1021,7 @@ class sonarUtils:
             db (str): The database to show information for.
             debug (bool): If True, print debug information.
         """
-        with sonarDBManager(db, readonly=True, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=True, debug=debug) as dbm:
             print("covSonar Version:          ", sonarBasics.get_version())
             print("database path:             ", dbm.dbfile)
             print("database version:          ", dbm.get_db_version())
@@ -1037,7 +1042,7 @@ class sonarUtils:
             outfile: If provided, the query result will be written to this file.
             debug: If True, print debug information.
         """
-        with sonarDBManager(db, readonly=True, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=True, debug=debug) as dbm:
             result = dbm.direct_query(query)
             sonarUtils.export_csv(result, outfile)
 

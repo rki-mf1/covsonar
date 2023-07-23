@@ -4,7 +4,7 @@ import sqlite3
 
 from Bio.Seq import Seq
 import pytest
-from src.covsonar.dbm import sonarDBManager
+from src.covsonar.dbm import sonarDbManager
 
 
 def test_add_property_that_exists(init_writeable_dbm):
@@ -28,7 +28,6 @@ def test_add_property_that_exists(init_writeable_dbm):
         pytest_wrapped_e.value.code
         == "error: a property named NEWPROP already exists in the given database."
     )
-    # init_writeable_dbm.close()
 
 
 def test_translationtable(init_writeable_dbm):
@@ -40,11 +39,10 @@ def test_translationtable(init_writeable_dbm):
         except Exception:
             exp = ""
         assert aa == exp
-    # init_writeable_dbm.close()
 
 
 def test_add_reference(testdb):
-    with sonarDBManager(testdb, readonly=False) as dbm:
+    with sonarDbManager(testdb, readonly=False) as dbm:
         dbm.add_reference("REF2", "my new reference", "virus X", 1, 1)
         assert dbm.get_default_reference_accession() == "REF2"
         dbm.add_reference("REF3", "my new reference", "virus X", 1, 1)
@@ -54,7 +52,7 @@ def test_add_reference(testdb):
 
 
 def test_db_writeablity(testdb):
-    with sonarDBManager(testdb, readonly=True) as dbm:
+    with sonarDbManager(testdb, readonly=True) as dbm:
         with pytest.raises(SystemExit) as pytest_wrapped_e:
             dbm.add_property(
                 "YET_ANOTHER_PROP",
@@ -68,7 +66,7 @@ def test_db_writeablity(testdb):
             pytest_wrapped_e.value.code
             == "error: failed to insert data into sqlite table (attempt to write a readonly database)"
         )
-    with sonarDBManager(testdb, readonly=False) as dbm:
+    with sonarDbManager(testdb, readonly=False) as dbm:
         dbm.add_property(
             "YET_ANOTHER_PROP",
             "text",
@@ -91,7 +89,7 @@ def test_get_molecule_data(monkeypatch):
     """
     monkeypatch.chdir(Path(__file__).parent)
     db_path_orig = "data/test-with-seqs.db"
-    with sonarDBManager(db_path_orig, readonly=True) as dbm:
+    with sonarDbManager(db_path_orig, readonly=True) as dbm:
         # Get all field
         refmols = dbm.get_molecule_data()
         assert type(refmols) is dict
@@ -134,9 +132,7 @@ def test_get_element_id(init_readonly_dbm):
     """
     [!!!] currently we setup covSonar with SARS-CoV2 info. by default.
     """
-    element = init_readonly_dbm.get_element_ids(
-        reference_accession="MN908947.3", type=None
-    )
+    element = init_readonly_dbm.get_element_ids(reference_accession="MN908947.3")
     logging.info(element)
     assert 1 in element
 
@@ -185,27 +181,32 @@ def test_upgrade_db(tmpfile_name, monkeypatch, caplog):
 
     # create db
     sqlite3.connect(tmpfile_name)
-    with caplog.at_level(logging.ERROR):
-        sonarDBManager(tmpfile_name).upgrade_db(tmpfile_name)
-        assert "Sorry, we cannot find" in caplog.text
+    with pytest.raises((ValueError, RuntimeError)) as pytest_wrapped_e:
+        sonarDbManager(tmpfile_name).upgrade_db(tmpfile_name)
+    assert str(pytest_wrapped_e.value) == "Error: Upgrade was not completed."
 
 
 def test_query_profile(init_readonly_dbm):
     """unit test"""
     # snp
-    _sql_val = init_readonly_dbm.query_profile("A3451T")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("A3451T")
     logging.info(_sql_val)
+    logging.info(_sql_val[1])
     logging.info(type(_sql_val[1]))
-    assert all(i in _sql_val[1] for i in [3450, 3451, "A", "T"])
-    _sql_val = init_readonly_dbm.query_profile("S:N501Y")
-    assert all(i in _sql_val[1] for i in ["S", 500, 501, "N", "Y"])
+    assert all(i in _sql_val[1] for i in [1, 1, 3450, 3451, "A", "T"])
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:N501Y")
+    logging.info(_sql_val[1])
+    assert all(i in _sql_val[1] for i in [1, "cds", "S", 500, 501, "N", "Y"])
     # del
-    _sql_val = init_readonly_dbm.query_profile("ORF1ab:del:3001-3004")
-    assert all(i in _sql_val[1] for i in ["ORF1ab", 3000, 3004, " "])
-    _sql_val = init_readonly_dbm.query_profile("del:11288-11296")
-    assert all(i in _sql_val[1] for i in [11287, 11296, " "])
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("ORF1ab:del:3001-3004")
+    logging.info(_sql_val[1])
+    assert all(i in _sql_val[1] for i in [1, "cds", "ORF1ab", 3000, 3003, " "])
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("del:11288-11296")
+    logging.info(_sql_val[1])
+    assert all(i in _sql_val[1] for i in [11287, 11295, " "])
     # any AA
-    _sql_val = init_readonly_dbm.query_profile("S:K517X")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K517X")
+    logging.info(_sql_val[1])
     assert all(
         i in _sql_val[1]
         for i in [
@@ -233,7 +234,7 @@ def test_query_profile(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # any NT
-    _sql_val = init_readonly_dbm.query_profile("C417N")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("C417N")
     assert all(
         i in _sql_val[1]
         for i in [
@@ -255,17 +256,17 @@ def test_query_profile(init_readonly_dbm):
         ]
     )
     # exact AA
-    _sql_val = init_readonly_dbm.query_profile("S:K417x")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K417x")
     assert all(i in _sql_val[1] for i in ["S", 416, 417, "K", "X"])
     # excat NT
-    _sql_val = init_readonly_dbm.query_profile("T418n")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("T418n")
     assert all(i in _sql_val[1] for i in [418, "T", "N"])
 
 
 def test_query_profile_complexcase(init_readonly_dbm):
     """unit test"""
     # NT special case
-    _sql_val = init_readonly_dbm.query_profile("T418nN")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("T418nN")
     assert all(
         i in _sql_val[1]
         for i in [
@@ -290,13 +291,13 @@ def test_query_profile_complexcase(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # AA special case
-    _sql_val = init_readonly_dbm.query_profile("S:K418XX")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K418XX")
     assert all(
         i in _sql_val[1]
         for i in ["CC", "MZ", "ZQ", "EN", "NN", "EQ", "WΦ", "XW", "ζW", "πζ", "πY"]
     )
     # Combine AA and NT
-    _sql_val = init_readonly_dbm.query_profile("S:K418I", "T418A")
+    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K418I", "T418A")
     assert all(
         i in _sql_val[1] for i in ["S", 417, 418, "K", "I", 1, 1, 417, 418, "T", "A"]
     )
@@ -305,39 +306,38 @@ def test_query_profile_complexcase(init_readonly_dbm):
 def test_query_profile_failcase(init_readonly_dbm):
     """unit test"""
     # invalid deletion of NT
-    with pytest.raises(SystemExit) as e:
-        init_readonly_dbm.query_profile("del:-10000")
-    assert e.type == SystemExit
-    assert "Please check the query statement" in e.value.code
+    with pytest.raises(ValueError) as e:
+        init_readonly_dbm.build_genomic_profile_query("del:-10000")
+    assert e.type == ValueError
+    assert "Please check the query statement" in str(e.value.args[0])
 
     # invalid deletion of AA
-    with pytest.raises(SystemExit) as e:
-        init_readonly_dbm.query_profile("S:dl:501-1000")
-    assert e.type == SystemExit
-    assert "Please check the query statement" in e.value.code
-
+    with pytest.raises(ValueError) as e:
+        init_readonly_dbm.build_genomic_profile_query("S:dl:501-1000")
+    assert e.type == ValueError
+    assert "Please check the query statement" in str(e.value.args[0])
     # K500IX malform of AA
-    with pytest.raises(SystemExit) as e:
-        init_readonly_dbm.query_profile("K500IX")
-    assert e.type == SystemExit
-    assert "Please check the query statement" in e.value.code
+    with pytest.raises(ValueError) as e:
+        init_readonly_dbm.build_genomic_profile_query("K500IX")
+    assert e.type == ValueError
+    assert "Please check the query statement" in str(e.value.args[0])
 
     # A417xT' cannot combine AA and NT query, x is not in NT code
-    with pytest.raises(SystemExit) as e:
-        init_readonly_dbm.query_profile("A417xT")
-    assert e.type == SystemExit
-    assert "Please check the query statement" in e.value.code
+    with pytest.raises(ValueError) as e:
+        init_readonly_dbm.build_genomic_profile_query("A417xT")
+    assert e.type == ValueError
+    assert "Please check the query statement" in str(e.value.args[0])
 
     # K417X~', ~ is not in AA code
-    with pytest.raises(SystemExit) as e:
-        init_readonly_dbm.query_profile("K417X~")
-    assert e.type == SystemExit
-    assert "Please check the query statement" in e.value.code
+    with pytest.raises(ValueError) as e:
+        init_readonly_dbm.build_genomic_profile_query("K417X~")
+    assert e.type == ValueError
+    assert "Please check the query statement" in str(e.value.args[0])
 
 
 def test_setup_database(tmpfile_name):
     # _failcase
     with pytest.raises(SystemExit) as e:
-        sonarDBManager(dbfile=tmpfile_name + "APOLLO")
+        sonarDbManager(dbfile=tmpfile_name + "APOLLO")
     assert e.type == SystemExit
-    assert "database does not exists" in e.value.code
+    assert "database error" in e.value.code
