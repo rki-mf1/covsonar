@@ -963,18 +963,23 @@ class sonarUtils:
                         elem_id = vardata["element.id"]
                         mol_symbol = molecules[elem_id]["mol"]
 
-                        # formatting insertions
-                        if aligned and len(alt) > 1:
-                            alt = alt[0] + alt[1:].lower()
-
                         # inserting deletions
                         if alt in gap_alts:
                             for i in range(start, end):
                                 molecules[elem_id]["seq"][i] = gap
 
-                        # inserting indels
+                        # inserting snps and insertions
                         elif start >= 0:
-                            molecules[elem_id]["seq"][start] = alt
+                            if len(alt) > 1:
+                                if aligned:
+                                    alt = alt[1:].lower()
+                                else:
+                                    alt = alt[1:]
+                                molecules[elem_id]["seq"][start] += alt
+                            else:
+                                molecules[elem_id]["seq"][start] = (
+                                    alt + molecules[elem_id]["seq"][start][1:]
+                                )
                         else:
                             prefixes[elem_id] = alt
 
