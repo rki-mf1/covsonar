@@ -982,10 +982,15 @@ class sonarCache:
             if vardata["variant.alt"] in gaps:
                 for i in range(vardata["variant.start"], vardata["variant.end"]):
                     seq[i] = ""
-            # insert snps or insertions
+            # insert snp or insertion
             elif vardata["variant.start"] >= 0:
-                seq[vardata["variant.start"]] = vardata["variant.alt"]
-            # insert insertions before position 0
+                if len(vardata["variant.alt"]) == 1:
+                    seq[vardata["variant.start"]] = (
+                        vardata["variant.alt"] + seq[vardata["variant.start"]][1:]
+                    )
+                else:
+                    seq[vardata["variant.start"]] += vardata["variant.alt"][1:]
+            # insert prefix (extension before start)
             else:
                 prefix = vardata["variant.alt"]
         # assemble stored sequence
