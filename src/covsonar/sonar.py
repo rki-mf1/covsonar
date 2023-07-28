@@ -1056,6 +1056,8 @@ def handle_direct_query(args: argparse.Namespace, debug: bool):
         or (args.sql.startswith("'") and args.sql.endswith("'"))
     ):
         sql = args.sql[1:-1]
+    else:
+        sql = args.sql
     sonarUtils.direct_query(args.db, query=sql, outfile=args.out, debug=debug)
 
 
