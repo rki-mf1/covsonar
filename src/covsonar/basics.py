@@ -38,7 +38,7 @@ class sonarBasics:
     def set_logging_config() -> None:
         logging.basicConfig(
             format="%(asctime)s %(levelname)-4s: %(message)s",
-            level=logging.DEBUG,
+            level=logging.WARNING,
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         logging.getLogger("requests").setLevel(logging.WARNING)

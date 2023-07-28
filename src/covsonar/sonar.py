@@ -597,17 +597,17 @@ def create_subparser_update_pangolin(
     subparsers: argparse._SubParsersAction, *parent_parsers: argparse.ArgumentParser
 ) -> argparse.ArgumentParser:
     """
-    Creates an 'update-lineage-info' subparser with command-specific arguments and options for the command-line interface.
+    Creates an 'update-lineages' subparser with command-specific arguments and options for the command-line interface.
 
     Args:
-        subparsers (argparse._SubParsersAction): ArgumentParser object to attach the 'update-lineage-info' subparser to.
+        subparsers (argparse._SubParsersAction): ArgumentParser object to attach the 'update-lineages' subparser to.
         parent_parsers (argparse.ArgumentParser): ArgumentParser objects providing common arguments and options.
 
     Returns:
-        argparse.ArgumentParser: The created 'update-lineage-info' subparser.
+        argparse.ArgumentParser: The created 'update-lineages' subparser.
     """
     parser = subparsers.add_parser(
-        "update-lineage-info",
+        "update-lineages",
         help="download latest pangolin information",
         parents=parent_parsers,
     )
@@ -1091,7 +1091,7 @@ def execute_commands(args, debug):  # noqa: C901
         handle_delete(args, debug)
     elif args.command == "restore":
         handle_restore(args, debug)
-    elif args.command == "update-lineage-info":
+    elif args.command == "update-lineages":
         handle_update_pangolin(args, debug)
     elif args.command == "match":
         handle_match(args, debug)
