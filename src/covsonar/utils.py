@@ -1018,21 +1018,28 @@ class sonarUtils:
             logging.info(f"{after} samples remain in the database.")
 
     @staticmethod
-    def show_db_info(db: str, debug: bool = False) -> None:
+    def show_db_info(db: str, detailed: bool = False, debug: bool = False) -> None:
         """
         Show database information.
 
         Args:
             db (str): The database to show information for.
+            detaield (bool): If True, print numbers of stored mutations.
             debug (bool): If True, print debug information.
         """
         with sonarDbManager(db, readonly=True, debug=debug) as dbm:
-            print("covSonar Version:          ", sonarBasics.get_version())
-            print("database path:             ", dbm.dbfile)
-            print("database version:          ", dbm.get_db_version())
-            print("database size:             ", dbm.get_db_size())
-            print("unique samples:            ", dbm.count_samples())
-            print("unique sequences:          ", dbm.count_sequences())
+            print("covSonar Version:                ", sonarBasics.get_version())
+            print("database path:                   ", dbm.dbfile)
+            print("database version:                ", dbm.get_db_version())
+            print("database size:                   ", dbm.get_db_size())
+            print("unique samples:                  ", dbm.count_samples())
+            print("unique sequences:                ", dbm.count_sequences())
+            if detailed:
+                print("unique nucl-level mutations:      ", dbm.count_variants())
+                print(
+                    "unique prot-level mutations:      ",
+                    dbm.count_variants(protein_level=True),
+                )
 
     @staticmethod
     def direct_query(

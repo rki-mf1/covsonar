@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 import sqlite3
 
@@ -106,12 +105,10 @@ def test_get_molecule_data(monkeypatch):
 
 def test_get_annotation(init_readonly_dbm):
     anno = init_readonly_dbm.get_annotation(element_accession="ORF18")
-    logging.info(anno)
     assert len(anno) == 0
     # assert "ORF10" == anno[0]["element.accession"]
 
     anno = init_readonly_dbm.get_annotation(reference_accession="MN908947.3")
-    logging.info(anno)
     assert "MN908947.3" == anno[0]["reference.accession"]
 
 
@@ -124,7 +121,6 @@ def test_get_alignment_data(init_readonly_dbm):
     align = init_readonly_dbm.get_alignment_data(
         sample_name="", reference_accession=None
     )
-    logging.info(align)
     assert align == ""
 
 
@@ -133,7 +129,6 @@ def test_get_element_id(init_readonly_dbm):
     [!!!] currently we setup covSonar with SARS-CoV2 info. by default.
     """
     element = init_readonly_dbm.get_element_ids(reference_accession="MN908947.3")
-    logging.info(element)
     assert 1 in element
 
     # it must return empty list
@@ -148,12 +143,10 @@ def test_get_elements(init_readonly_dbm):
 
     element = init_readonly_dbm.get_elements("1", "gene")
     assert type(element) is list
-    logging.info(element)
     assert len(element) == 10
 
     element = init_readonly_dbm.get_elements("1")
     assert type(element) is list
-    logging.info(element)
     assert len(element) in (21, 22)
 
     # it must return empty list
@@ -189,24 +182,17 @@ def test_upgrade_db(tmpfile_name, monkeypatch, caplog):
 def test_query_profile(init_readonly_dbm):
     """unit test"""
     # snp
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("A3451T")
-    logging.info(_sql_val)
-    logging.info(_sql_val[1])
-    logging.info(type(_sql_val[1]))
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("A3451T")
     assert all(i in _sql_val[1] for i in [1, 1, 3450, 3451, "A", "T"])
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:N501Y")
-    logging.info(_sql_val[1])
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:N501Y")
     assert all(i in _sql_val[1] for i in [1, "cds", "S", 500, 501, "N", "Y"])
     # del
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("ORF1ab:del:3001-3004")
-    logging.info(_sql_val[1])
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("ORF1ab:del:3001-3004")
     assert all(i in _sql_val[1] for i in [1, "cds", "ORF1ab", 3000, 3003, " "])
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("del:11288-11296")
-    logging.info(_sql_val[1])
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("del:11288-11296")
     assert all(i in _sql_val[1] for i in [11287, 11295, " "])
     # any AA
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K517X")
-    logging.info(_sql_val[1])
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K517X")
     assert all(
         i in _sql_val[1]
         for i in [
@@ -234,7 +220,7 @@ def test_query_profile(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # any NT
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("C417N")
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("C417N")
     assert all(
         i in _sql_val[1]
         for i in [
@@ -256,17 +242,17 @@ def test_query_profile(init_readonly_dbm):
         ]
     )
     # exact AA
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K417x")
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K417x")
     assert all(i in _sql_val[1] for i in ["S", 416, 417, "K", "X"])
     # excat NT
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("T418n")
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("T418n")
     assert all(i in _sql_val[1] for i in [418, "T", "N"])
 
 
 def test_query_profile_complexcase(init_readonly_dbm):
     """unit test"""
     # NT special case
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("T418nN")
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("T418nN")
     assert all(
         i in _sql_val[1]
         for i in [
@@ -291,13 +277,13 @@ def test_query_profile_complexcase(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # AA special case
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K418XX")
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K418XX")
     assert all(
         i in _sql_val[1]
         for i in ["CC", "MZ", "ZQ", "EN", "NN", "EQ", "WΦ", "XW", "ζW", "πζ", "πY"]
     )
     # Combine AA and NT
-    _sql_val = init_readonly_dbm.build_genomic_profile_query("S:K418I", "T418A")
+    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K418I", "T418A")
     assert all(
         i in _sql_val[1] for i in ["S", 417, 418, "K", "I", 1, 1, 417, 418, "T", "A"]
     )
@@ -307,30 +293,30 @@ def test_query_profile_failcase(init_readonly_dbm):
     """unit test"""
     # invalid deletion of NT
     with pytest.raises(ValueError) as e:
-        init_readonly_dbm.build_genomic_profile_query("del:-10000")
+        init_readonly_dbm.create_genomic_profile_sql("del:-10000")
     assert e.type == ValueError
     assert "Please check the query statement" in str(e.value.args[0])
 
     # invalid deletion of AA
     with pytest.raises(ValueError) as e:
-        init_readonly_dbm.build_genomic_profile_query("S:dl:501-1000")
+        init_readonly_dbm.create_genomic_profile_sql("S:dl:501-1000")
     assert e.type == ValueError
     assert "Please check the query statement" in str(e.value.args[0])
     # K500IX malform of AA
     with pytest.raises(ValueError) as e:
-        init_readonly_dbm.build_genomic_profile_query("K500IX")
+        init_readonly_dbm.create_genomic_profile_sql("K500IX")
     assert e.type == ValueError
     assert "Please check the query statement" in str(e.value.args[0])
 
     # A417xT' cannot combine AA and NT query, x is not in NT code
     with pytest.raises(ValueError) as e:
-        init_readonly_dbm.build_genomic_profile_query("A417xT")
+        init_readonly_dbm.create_genomic_profile_sql("A417xT")
     assert e.type == ValueError
     assert "Please check the query statement" in str(e.value.args[0])
 
     # K417X~', ~ is not in AA code
     with pytest.raises(ValueError) as e:
-        init_readonly_dbm.build_genomic_profile_query("K417X~")
+        init_readonly_dbm.create_genomic_profile_sql("K417X~")
     assert e.type == ValueError
     assert "Please check the query statement" in str(e.value.args[0])
 

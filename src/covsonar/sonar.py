@@ -545,6 +545,11 @@ def create_subparser_info(
         help="show detailed information on a given database",
         parents=parent_parsers,
     )
+    parser.add_argument(
+        "--detailed",
+        help="show numbers of stored mutations (dependent on database size this might take a while to process)",
+        action="store_true",
+    )
     return subparsers, parser
 
 
@@ -763,7 +768,7 @@ def handle_list_prop(args: argparse.Namespace, debug: bool):
             rows.append([])
             rows[-1].append(prop)
             rows[-1].append("--" + prop)
-            rows[-1].append(db_manager.properties[prop]["target"])
+            rows[-1].append("sample")
             rows[-1].append(fill(db_manager.properties[prop]["description"], width=25))
             rows[-1].append(dt)
             rows[-1].append(db_manager.properties[prop]["querytype"])
@@ -926,13 +931,11 @@ def handle_update_pangolin(args: argparse.Namespace, debug: bool):
     Raises:
         FileNotFoundError: If any required files are not found.
     """
-    logging.info("Starting to update parent-child relationship...")
     with sonarLinmgr() as lineage_manager:
         lineage_data = lineage_manager.update_lineage_data()
 
     with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
         db_manager.add_update_lineage(lineage_data)
-        logging.info("Update has been completed successfully")
 
 
 def handle_info(args: argparse.Namespace, debug: bool):
@@ -949,7 +952,7 @@ def handle_info(args: argparse.Namespace, debug: bool):
     Raises:
         FileNotFoundError: If the database file is not found.
     """
-    sonarUtils.show_db_info(args.db)
+    sonarUtils.show_db_info(args.db, args.detailed)
 
 
 def handle_match(args: argparse.Namespace, debug: bool):

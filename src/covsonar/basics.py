@@ -41,6 +41,7 @@ class sonarBasics:
             level=logging.DEBUG,
             datefmt="%Y-%m-%d %H:%M:%S",
         )
+        logging.getLogger("requests").setLevel(logging.WARNING)
 
     # FILE HANDLING
     @staticmethod

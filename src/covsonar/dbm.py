@@ -1,4 +1,4 @@
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from datetime import datetime
 import itertools
 import logging
@@ -1623,6 +1623,24 @@ class sonarDbManager:
 
         return self.cursor.execute(sql, vals).fetchone()["count"]
 
+    def count_variants(self, protein_level: bool = False) -> int:
+        """
+        Count the number of nucleotide-level mutations stored in the database.
+
+        Args:
+            protein_level (bool): If true, coutn protein-level mutations intead of nucleotide level mutations.
+
+        Returns:
+            int: The total number of nucleotide-level mutations.
+        """
+        element_type = "source" if not protein_level else "cds"
+        sql = f"""
+                SELECT COUNT(DISTINCT "element.id" || '_' || "variant.start" || '_' || "variant.end") AS count
+                    FROM variantView
+                WHERE "element.type" = '{element_type}';
+            """
+        return self.cursor.execute(sql).fetchone()["count"]
+
     # CONDITIONING SAMPLE PROPERTIES
     @staticmethod
     def flatten_vals(lst):
@@ -2220,11 +2238,11 @@ class sonarDbManager:
 
     # MATCHING QUERIES
 
-    def build_sample_property_query(
+    def build_sample_property_sql(
         self, name: str, *vals: Union[str, Tuple[str, str]]
     ) -> Tuple[str, List[Union[str, Tuple[str, str]]]]:
         """
-        Query sample properties based on property name and values.
+        Create sql and corresponding list of values to query sample properties based on property name and values.
 
         Args:
             name (str): The property name to query.
@@ -2272,11 +2290,11 @@ class sonarDbManager:
         sql = sql_template + " AND ".join(conditions)
         return (sql, values)
 
-    def build_genomic_profile_query(
+    def create_genomic_profile_sql(
         self, *variants: str
     ) -> Tuple[List[Dict[str, Union[str, int]]], List[Dict[str, Union[str, int]]]]:
         """
-        Query the SQLite database to find matching genomic profiles.
+        Create sql and corresponding list of values to query matching genomic profiles based on given mutations.
 
         Args:
             variants (str): one or more variant notation(s) to be matched.
@@ -2341,11 +2359,11 @@ class sonarDbManager:
 
         return sql, intersect_vals + except_vals
 
-    def assemble_sample_property_queries(
+    def combine_sample_property_queries(
         self, properties: Optional[Dict[str, List[str]]] = None
     ) -> Tuple[str, List[str]]:
         """
-        Assemble SQL queries for metadata-based filtering based on properties.
+        Combine mutliple SQL queries for metadata-based filtering based on properties.
 
         Args:
             properties: A dictionary mapping property names to a list of their values.
@@ -2360,7 +2378,7 @@ class sonarDbManager:
             for pname, vals in properties.items():
                 if vals is None:
                     continue
-                s, v = self.build_sample_property_query(pname, *vals)
+                s, v = self.build_sample_property_sql(pname, *vals)
                 property_sqls.append(s)
                 property_vals.extend(v)
 
@@ -2373,9 +2391,9 @@ class sonarDbManager:
 
         return "", []
 
-    def assemble_profile_queries(self, profiles: List[Tuple]) -> Tuple[str, List[str]]:
+    def combine_profile_queries(self, profiles: List[Tuple]) -> Tuple[str, List[str]]:
         """
-        Assemble SQL queries for genomic profile-based filtering.
+        Combine mutliple SQL queries for genomic profile-based filtering.
 
         Args:
             profiles: A list of tuples each representing a profile.
@@ -2385,7 +2403,7 @@ class sonarDbManager:
             element is a list of values associated with the queries.
         """
         profile_queries_and_values = [
-            self.build_genomic_profile_query(*profile) for profile in profiles
+            self.create_genomic_profile_sql(*profile) for profile in profiles
         ]
 
         if profile_queries_and_values:
@@ -2402,34 +2420,39 @@ class sonarDbManager:
 
         return "", []
 
-    def assemble_sample_id_queries(
+    def create_sample_selection_sql(
         self,
         samples: Optional[List[str]] = None,
         properties: Optional[Dict[str, List[str]]] = None,
         profiles: Optional[Dict[str, List[str]]] = None,
+        frameshifts_only: bool = None,
     ) -> Tuple[str, List[str]]:
         """
-        Assemble SQL queries for sample IDs based on the given samples, properties, and profiles.
+        Create a SQL query and corrspond value list to rertieve sample IDs based on the given sample names, properties, and genomic profiles.
 
         Args:
             samples (Optional[List[str]]): A list of samples to consider for query creation. Default is None.
             properties (Optional[Dict[str, List[str]]]): A dictionary of properties for query creation. Default is None.
             profiles (Optional[Dict[str, List[str]]]): A dictionary of profiles for query creation. Default is None.
+            frameshifts_only (bool): If true, consider samples with frameshift mutations only.
 
         Returns:
             Tuple[str, List[str]]: A SQL query to retrieve matching sample IDs and a list of property and profile values.
         """
         property_sqls, property_vals = (
-            self.assemble_sample_property_queries(properties)
-            if properties
-            else ("", [])
+            self.combine_sample_property_queries(properties) if properties else ("", [])
         )
 
         profile_sqls, profile_vals = (
-            self.assemble_profile_queries(profiles) if profiles else ("", [])
+            self.combine_profile_queries(profiles) if profiles else ("", [])
         )
 
         sqls = [property_sqls] if property_sqls else []
+
+        if frameshifts_only:
+            sqls.append(
+                'SELECT "sample.id" AS id FROM variantView WHERE "variant.frameshift" = 1'
+            )
 
         if profile_sqls:
             sqls.append(
@@ -2446,17 +2469,17 @@ class sonarDbManager:
 
         return sql, list(property_vals) + list(profile_vals) + list(samples)
 
-    def build_genomic_element_conditions(
+    def create_genomic_element_conditions(
         self, reference_accession: str
     ) -> Tuple[str, str]:
         """
-        Determine the genomic element conditions for the SQL query.
+        Generate the genomic element conditions for the SQL query.
 
         Args:
             reference_accession (str): The reference accession to create genomic element conditions.
 
         Returns:
-            Tuple[str, str]: A tuple containing the genomic element condition and the molecule symbol condition.
+            Tuple[str, str]: A tuple containing the genomic element condition and the molecule prefix.
         """
         element_ids = self.get_element_ids(reference_accession, "source")
         if len(element_ids) == 1:
@@ -2469,7 +2492,7 @@ class sonarDbManager:
 
         return genome_element_condition, molecule_prefix
 
-    def build_cds_element_condition(self, reference_accession: str) -> str:
+    def create_cds_element_condition(self, reference_accession: str) -> str:
         """
         Generate SQL condition based on CDS element IDs associated with the given reference accession.
 
@@ -2489,18 +2512,13 @@ class sonarDbManager:
             else f'"element.id" IN ({", ".join(cds_element_ids)})'
         )
 
-    def fetch_sample_property_data(self, *sample_ids: str) -> List[Dict[str, Any]]:
+    def create_sample_property_output_sql(self) -> str:
         """
-        Fetch the property data for the given sample IDs.
-
-        Args:
-            sample_ids (str): Variable-length argument list of selected sample IDs as strings.
+        Create sql to fetch all sample properties for final output.
 
         Returns:
-            List[Dict[str, Any]]: List of dictionaries, each representing a row in the fetched data.
+            Str: The sql.
 
-        The method executes a SQL query that fetches properties associated with a set of samples.
-        It leverages JOIN operations in SQL to fetch associated data from `sample` and `sample2property` tables.
         """
 
         # Assemble the base SQL select statement.
@@ -2510,21 +2528,19 @@ class sonarDbManager:
                 f"MAX(CASE WHEN s2p.property_id = {prop_info['id']} THEN s2p.value_{prop_info['datatype']} ELSE NULL END) AS '{prop_name}'"
             )
         sql = ", ".join(sql)
-        sql += f"""FROM
+        sql += """FROM
                     sample s
                 LEFT JOIN
                     sample2property s2p
                 ON
                     s.id = s2p.sample_id
                 WHERE
-                    s.id IN ({', '.join(["?"]*len(sample_ids))})
+                    s.id IN (SELECT id FROM sample_filter)
                 GROUP BY
                     s.name"""
+        return sql
 
-        # Execute the SQL statement and fetch all rows in the result.
-        return self.cursor.execute(sql, sample_ids).fetchall()
-
-    def build_special_variant_filter_condition(
+    def create_special_variant_filter_conditions(
         self, filter_n: bool, filter_x: bool, ignore_terminal_gaps: bool
     ) -> Tuple[str, str, str]:
         """
@@ -2546,50 +2562,43 @@ class sonarDbManager:
 
         return filter_n_sql, filter_x_sql, filter_terminal_gaps_sql
 
-    def fetch_profile_data(
+    def create_profile_output_sql(
         self,
         reference_accession: str,
-        *sample_ids: str,
         filter_n: bool,
         filter_x: bool,
         ignore_terminal_gaps: bool,
-    ) -> Any:
+    ) -> str:
         """
-        Fetch profile data.
+        Create sql to fetch genomic profiles for final output.
 
         Args:
             reference_accession (str): Reference accession to construct the conditions for the SQL query.
-            sample_ids (str): Variable length argument list of selected sample IDs.
             filter_n (bool): Flag indicating whether to include 'N' in the profiles.
             filter_x (bool): Flag indicating whether to include 'X' in the profiles.
             ignore_terminal_gaps (bool): Flag indicating whether to ignore terminal gaps in the profiles.
 
         Returns:
-            Any: The result of SQL query execution.
-
-        This function constructs an SQL query that fetches profiles and frameshifts associated with samples.
-        The query includes multiple nested subqueries and uses SQL's LEFT JOIN and GROUP BY clauses
-        to collect the associated profile data for each sample.
+            str: The sql.
         """
 
         # Prepare the list of sample IDs for inclusion in the SQL query
         # Using the "?" placeholder for each sample ID to prevent SQL injection
-        sample_id_wildcards = ", ".join(["?"] * len(sample_ids))
 
         # Prepare the special filter conditions based on the input flags
         (
             filter_n_sql,
             filter_x_sql,
             filter_terminal_gaps_sql,
-        ) = self.build_special_variant_filter_condition(
+        ) = self.create_special_variant_filter_conditions(
             filter_n, filter_x, ignore_terminal_gaps
         )
 
         # Construct the conditions based on the reference accession
-        genome_condition, molecule_prefix = self.build_genomic_element_conditions(
+        genome_condition, molecule_prefix = self.create_genomic_element_conditions(
             reference_accession
         )
-        cds_condition = self.build_cds_element_condition(reference_accession)
+        cds_condition = self.create_cds_element_condition(reference_accession)
 
         # Assemble the SQL query
         sql = f"""
@@ -2611,7 +2620,7 @@ class sonarDbManager:
                         CASE WHEN vv1."variant.frameshift" = 1 THEN vv1."variant.label" ELSE '' END AS frameshift_allele
                     FROM
                         variantView vv1
-                        WHERE vv1."sample.id" IN  ({sample_id_wildcards})
+                        WHERE vv1."sample.id" IN (SELECT id FROM sample_filter)
                         AND {genome_condition}{filter_n_sql}{filter_terminal_gaps_sql}
                     ORDER BY vv1."element.id", vv1."variant.start"
                 ) vv1
@@ -2624,64 +2633,17 @@ class sonarDbManager:
                     SELECT vv2."sample.id",
                         {molecule_prefix}vv2."element.symbol" || ":" || vv2."variant.label" AS sorted_aa_variants
                     FROM variantView vv2
-                    WHERE vv2."sample.id" IN ({sample_id_wildcards})
+                    WHERE vv2."sample.id" IN (SELECT id FROM sample_filter)
                     AND {cds_condition}{filter_x_sql}
                     ORDER BY vv2."element.id", vv2."variant.start"
                 ) vv2
                 GROUP BY vv2."sample.id"
             ) aa_profiles ON s.id = aa_profiles."sample.id"
-            WHERE s.id IN  ({sample_id_wildcards})
+            WHERE s.id IN (SELECT id FROM sample_filter)
             """
 
         # Execute the SQL query and return the result
-        return self.cursor.execute(sql, sample_ids * 3).fetchall()
-
-    def combine_query_results(
-        self,
-        properties_rows: List[Dict[str, Any]],
-        profiles_rows: Dict[str, Any],
-        frameshifts_only: bool,
-    ) -> List[Dict[str, Any]]:
-        """
-        Combine query results to the final results set.
-
-        Args:
-            properties_rows (List[Dict[str, Any]]): A list of dictionaries, each containing a row of properties data.
-            profile_info_rows (Dict[str, Any]): A dictionary containing profile information for each sample.
-            frameshifts_only (bool): Flag indicating whether to only include rows with frameshifts.
-
-        Returns:
-            List[Dict[str, Any]]: A list of dictionaries, each representing a row in the combined data.
-
-        This function combines properties and profile information into a single data structure.
-        Rows without any frameshifts can optionally be excluded.
-        """
-
-        # Sort the properties_rows list in-place, based on the "sample.name" key
-        properties_rows.sort(key=lambda row: row["sample.name"])
-
-        # Combine rows
-        result_dict = OrderedDict()
-
-        for row in properties_rows:
-            result_dict[row["sample.name"]] = row
-            result_dict[row["sample.name"]]["NUC_PROFILE"] = None
-            result_dict[row["sample.name"]]["AA_PROFILE"] = None
-            result_dict[row["sample.name"]]["FRAMESHIFTS"] = None
-
-        for row in profiles_rows:
-            if row["sample.name"] in result_dict:
-                result_dict[row["sample.name"]].update(row)
-            else:
-                sys.exit(
-                    f"error: property data for {row['sample.name']} cannot be retrieved from database"
-                )
-
-        # Exclude samples without genomic frameshifts when frameshift-only is activated
-        if frameshifts_only:
-            return [x for x in result_dict.values() if x["FRAMESHIFTS"]]
-        else:
-            return list(result_dict.values())
+        return sql
 
     def handle_csv_tsv_format(
         self,
@@ -2691,7 +2653,6 @@ class sonarDbManager:
         filter_n: bool,
         filter_x: bool,
         ignore_terminal_gaps: bool,
-        frameshifts_only: bool,
         output_columns: Optional[List[str]] = None,
     ) -> List[Dict[str, str]]:
         """
@@ -2704,47 +2665,40 @@ class sonarDbManager:
             filter_n (bool): Flag for handling 'N' variants.
             filter_x (bool): Flag for handling 'X' variants.
             ignore_terminal_gaps (bool): Flag for handling terminal gap variants.
-            frameshifts_only (bool): Flag indicating if only frameshifts should be considered.
             output_columns (Optional[List[str]]): List of output columns to include in the results.
                                                 If not provided or empty, all columns are included.
 
         Returns:
             List[Dict[str, str]]: List of dictionaries where each dictionary represents a row in the resulting csv/tsv file.
         """
+        # set output columns
+        if not output_columns:
+            cols = "*"
+        else:
+            cols = ", ".join(output_columns)
+
         # Execute the sample selection query and get sample IDs
-        sample_ids_result = self.cursor.execute(
-            sample_selection_query, sample_selection_values
-        ).fetchall()
-
-        # Return an empty list if no samples are selected
-        if not sample_ids_result:
-            return []
-
-        sample_ids = [row["id"] for row in sample_ids_result]
-
-        # Fetch rows containing sample properties and genomic profile information
-        sample_property_rows = self.fetch_sample_property_data(*sample_ids)
-        profile_rows = self.fetch_profile_data(
+        property_sql = self.create_sample_property_output_sql()
+        profile_sql = self.create_profile_output_sql(
             reference_accession,
-            *sample_ids,
             filter_n=filter_n,
             filter_x=filter_x,
             ignore_terminal_gaps=ignore_terminal_gaps,
         )
 
-        # Combine the results from the properties and profile information queries
-        combined_rows = self.combine_query_results(
-            sample_property_rows, profile_rows, frameshifts_only
-        )
+        sql = f"""
+            WITH sample_filter AS ({sample_selection_query})
 
-        # Filter the output columns if they are specified
-        if output_columns:
-            combined_rows = [
-                {key: value for key, value in row.items() if key in output_columns}
-                for row in combined_rows
-            ]
-
-        return combined_rows
+            SELECT {cols}
+            FROM (
+                {property_sql}
+            ) AS A
+            JOIN (
+                {profile_sql}
+            ) AS B
+            ON A."sample.name" = B."sample.name";
+            """
+        return self.cursor.execute(sql, sample_selection_values).fetchall()
 
     def handle_count_format(
         self, sample_selection_sql: str, sample_selection_values: List[str]
@@ -2791,10 +2745,12 @@ class sonarDbManager:
             filter_n_sql,
             _,
             filter_terminal_gaps_sql,
-        ) = self.build_special_variant_filter_condition(
+        ) = self.create_special_variant_filter_conditions(
             filter_n, False, ignore_terminal_gaps
         )
-        genome_condition, _ = self.build_genomic_element_conditions(reference_accession)
+        genome_condition, _ = self.create_genomic_element_conditions(
+            reference_accession
+        )
 
         sql = f"""
             SELECT
@@ -2850,7 +2806,9 @@ class sonarDbManager:
         (
             sample_selection_query,
             sample_selection_values,
-        ) = self.assemble_sample_id_queries(samples, properties, profiles)
+        ) = self.create_sample_selection_sql(
+            samples, properties, profiles, frameshifts_only
+        )
 
         if format == "csv" or format == "tsv":
             return self.handle_csv_tsv_format(
@@ -2860,7 +2818,6 @@ class sonarDbManager:
                 filter_n,
                 filter_x,
                 ignore_terminal_gaps,
-                frameshifts_only,
                 output_columns,
             )
         elif format == "count":
