@@ -1103,13 +1103,16 @@ def execute_commands(args, debug):  # noqa: C901
         handle_direct_query(args, debug)
 
 
-def main(args):
+def main():
     """
     The main function that handles the execution of different commands.
 
     Args:
         args (argparse.Namespace): Namespace containing parsed command-line arguments.
     """
+    # process arguments
+    args = parse_args(sys.argv[1:])
+    
     # Check database
     if hasattr(args, "db") and args.db:
         if (
@@ -1134,5 +1137,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args(sys.argv[1:])
-    main(args)
+    main()
