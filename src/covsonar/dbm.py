@@ -396,17 +396,32 @@ class sonarDbManager:
         return self.cursor.execute("pragma user_version").fetchone()["user_version"]
 
     @staticmethod
-    def optimize(dbfile: str) -> None:
+    def optimize(dbfile: str, tmpdir: Optional[str] = None) -> None:
         """
         Optimize the SQLite database file for better performance.
 
         Args
             dbfile (str): SQLite database file path.
+            tmpdir (str): directory to use as temp directory, optional.
         """
+        # perform cleaning
+        print("cleaning")
+        with sonarDbManager(dbfile, readonly=False) as dbm:
+          dbm.clean()        
+        
+        # set tmp dir to folder where the database is stored
+        if tmpdir:
+          os.environ['TMPDIR'] = tmpdir        
+        
+        temp_dir = os.environ.get('TMPDIR')
+        print(f"Temporary directory used by SQLite: {temp_dir}")        
+        
+        # perform vacuum
         with sqlite3.connect(dbfile) as con:
             con.executescript("PRAGMA analysis_limit=400;")
             con.executescript("PRAGMA optimize;")
             con.executescript("VACUUM;")
+            con.commit()
 
     def clean(self) -> None:
         """
@@ -470,7 +485,7 @@ class sonarDbManager:
         """
         Convert cursor rows into dictionary format.
 
-        Args
+        Args:
             cursor (sqlite3.Cursor): SQLite cursor object.
             row (Tuple): A row of data from the SQLite cursor.
 

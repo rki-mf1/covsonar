@@ -569,6 +569,11 @@ def create_subparser_optimize(
     parser = subparsers.add_parser(
         "optimize", help="optimize database", parents=parent_parsers
     )
+    parser.add_argument(
+        "--tempdir",
+        help="custom temporrary direcxtory (default: None)",
+        type=str, default=None,
+    )   
     return subparsers, parser
 
 
@@ -1031,9 +1036,9 @@ def handle_optimize(args: argparse.Namespace, debug: bool):
 
     Raises:
         FileNotFoundError: If the database file is not found.
-    """
+    """     
     with sonarDbManager(args.db, debug=debug) as db_manager:
-        db_manager.optimize(args.db)
+        db_manager.optimize(args.db, tmpdir=args.tempdir)
 
 
 def handle_direct_query(args: argparse.Namespace, debug: bool):
