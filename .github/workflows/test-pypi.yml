@@ -22,8 +22,8 @@ jobs:
         activate-environment: covsonar
         channels: conda-forge,bioconda,defaults
         channel-priority: true
-    - run: pip install nox==2022.1.7
-    - run: pip install poetry==1.1.13
+    - run: pip install nox==2022.11.21
+    - run: pip install poetry==1.3.2
     - run: nox
     - run: version=$(poetry version --short) && poetry version $version.dev.$(date +%s)
     - run: poetry build
