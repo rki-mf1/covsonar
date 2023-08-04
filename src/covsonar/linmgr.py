@@ -164,7 +164,6 @@ class sonarLinmgr:
             alias_lineage_char = aliasor.uncompress(_id)
             sub_lineage_list = []
             row_dict = {}
-            # print(_id, '=',alias_lineage_char)
 
             for name_ in uncompressed_lineages:  # fetch all lineage again
                 root = ""

@@ -1,7 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
 import itertools
-import logging
 import os
 import pkgutil
 import re
@@ -15,8 +14,14 @@ from Bio.SeqFeature import CompoundLocation, FeatureLocation
 import pandas as pd
 import sqlparse
 
+from covsonar.logging import LoggingConfigurator
 
+
+# Constants
 SUPPORTED_DB_VERSION = 4  # supprted sonar database scheme version
+
+# Initialize logger
+LOGGER = LoggingConfigurator.get_logger()
 
 
 class sonarDbManager:
@@ -124,7 +129,8 @@ class sonarDbManager:
         """
         # check dbfile
         if not os.path.isfile(dbfile):
-            sys.exit(f"database error: database ({dbfile}) does not exist.")
+            LOGGER.error("The database does not exist.")
+            sys.exit(1)
 
         # public attributes
         self.dbfile = os.path.abspath(dbfile)
@@ -161,7 +167,7 @@ class sonarDbManager:
         """
         if [exc_type, exc_value, exc_traceback].count(None) != 3:
             if self.__mode == "rwc":
-                logging.info("rollback database")
+                LOGGER.info("rollback database")
                 self.rollback()
         elif self.__mode == "rwc":
             self.commit()
@@ -304,7 +310,7 @@ class sonarDbManager:
             # Get SQL schema from .sqlite file in the package's data directory.
             sql_schema = pkgutil.get_data(__name__, "data/db.sqlite").decode()
         except FileNotFoundError as e:
-            logging.error(f"No .sqlite file found in data directory: {str(e)}")
+            LOGGER.error(f"No .sqlite file found in data directory: {str(e)}")
             raise e
 
         # Get URI for SQLite database.
@@ -314,10 +320,10 @@ class sonarDbManager:
         try:
             with sqlite3.connect(f"{uri}?mode=rwc", uri=True) as con:
                 if debug:
-                    con.set_trace_callback(logging.debug)
+                    con.set_trace_callback(LOGGER.debug)
                 con.executescript(sql_schema)
         except sqlite3.Error as e:
-            logging.error(f"Error setting up SQLite database: {str(e)}")
+            LOGGER.error(f"Error setting up SQLite database: {str(e)}")
             raise e
 
     @staticmethod
@@ -352,7 +358,7 @@ class sonarDbManager:
             uri=True,
         )
         if self.debug:
-            con.set_trace_callback(logging.debug)
+            con.set_trace_callback(LOGGER.debug)
         con.row_factory = self.dict_factory
         return con
 
@@ -405,18 +411,16 @@ class sonarDbManager:
             tmpdir (str): directory to use as temp directory, optional.
         """
         # perform cleaning
-        print("cleaning")
+        LOGGER.info("cleaning ...")
         with sonarDbManager(dbfile, readonly=False) as dbm:
-          dbm.clean()        
-        
+            dbm.clean()
+
         # set tmp dir to folder where the database is stored
         if tmpdir:
-          os.environ['TMPDIR'] = tmpdir        
-        
-        temp_dir = os.environ.get('TMPDIR')
-        print(f"Temporary directory used by SQLite: {temp_dir}")        
-        
+            os.environ["TMPDIR"] = tmpdir
+
         # perform vacuum
+        LOGGER.info("optimizing ...")
         with sqlite3.connect(dbfile) as con:
             con.executescript("PRAGMA analysis_limit=400;")
             con.executescript("PRAGMA optimize;")
@@ -527,13 +531,14 @@ class sonarDbManager:
         """
         current_version = self.get_db_version()
         if not current_version == SUPPORTED_DB_VERSION:
-            sys.exit(
-                "compatibility error: the given database is not compatible with this version of sonar (database version: "
+            LOGGER.error(
+                "The given database is not compatible with this version of sonar (database version: "
                 + str(current_version)
                 + "; supported database version: "
                 + str(SUPPORTED_DB_VERSION)
                 + ")"
             )
+            sys.exit(1)
 
     @staticmethod
     def upgrade_db(dbfile: str) -> None:
@@ -555,11 +560,11 @@ class sonarDbManager:
                 cur = con.cursor()
                 current_version = cur.execute("pragma user_version").fetchone()[0]
 
-            logging.info(
+            LOGGER.info(
                 f"Current version: {current_version}, Upgrade to: {SUPPORTED_DB_VERSION}"
             )
             uri = "file:" + urlquote(dbfile)
-            logging.info(f"Perform the Upgrade: {uri}")
+            LOGGER.info(f"Perform the Upgrade: {uri}")
 
             while current_version < SUPPORTED_DB_VERSION:
                 next_version = current_version + 1
@@ -586,13 +591,13 @@ class sonarDbManager:
             con.executescript("ROLLBACK")
             raise er
         except ValueError as er:
-            logging.error(er)
+            LOGGER.error(er)
             raise er
         finally:
-            logging.info(f"Database now version: {current_version}")
+            LOGGER.info(f"Database now version: {current_version}")
 
             if current_version == SUPPORTED_DB_VERSION:
-                logging.info("Success: Database upgrade was successfully completed.")
+                LOGGER.info("Success: Database upgrade was successfully completed.")
             else:
                 raise RuntimeError("Error: Upgrade was not completed.")
 
@@ -610,7 +615,8 @@ class sonarDbManager:
         """
         # remove quotes around the query if present
         if not sonarDbManager.is_select_query(sql):
-            sys.exit("error: only SELECT statements are allowed as direct query.")
+            LOGGER.error("Only SELECT statements are allowed as direct query.")
+            sys.exit(1)
         return self.cursor.execute(sql).fetchall()
 
     # IMPORT NON-SAMPLE DATA
@@ -666,17 +672,22 @@ class sonarDbManager:
         """
         name = name.upper()
         if name in self.__illegal_properties:
-            sys.exit(f"error: '{name}' is reserved and cannot be used as property name")
+            LOGGER.error(
+                f"Name '{name}' is reserved and cannot be used as property name"
+            )
+            sys.exit(1)
 
         if check_name and not re.match("^[A-Z][A-Z0-9_]+$", name):
-            sys.exit(
-                "error: invalid property name (property names have to start with an letter and can contain only letters, numbers and underscores)"
+            LOGGER.error(
+                "Invalid property name (property names have to start with an letter and can contain only letters, numbers and underscores)"
             )
+            sys.exit(1)
 
         if name in self.properties:
-            sys.exit(
-                f"error: a property named {name} already exists in the given database."
+            LOGGER.error(
+                f"A property named '{name}' already exists in the given database."
             )
+            sys.exit(1)
 
         try:
             sql = "INSERT INTO property (name, datatype, querytype, description, target, standard) VALUES(?, ?, ?, ?, ?, ?);"
@@ -691,7 +702,8 @@ class sonarDbManager:
                 vals = [pid, standard]
                 self.cursor.execute(sql, vals)
         except sqlite3.Error as error:
-            sys.exit(f"error: failed to insert data into sqlite table ({str(error)})")
+            LOGGER.error(f"Failed to insert data into sqlite table ({str(error)}).")
+            sys.exit(1)
         return pid
 
     def add_translation_table(self, translation_table: int) -> None:
@@ -766,7 +778,7 @@ class sonarDbManager:
         Args:
             lineage_df (pd.DataFrame): DataFrame with columns 'lineage' and 'sublineage'.
         """
-        logging.info(f"Prepare: {len(lineage_df)}")
+        LOGGER.info(f"Prepare: {len(lineage_df)}")
         sql = "INSERT OR REPLACE INTO lineages (lineage, sublineage) VALUES (?, ?);"
         data = list(zip(lineage_df["lineage"], lineage_df["sublineage"]))
         self.cursor.executemany(sql, data)
@@ -1760,7 +1772,8 @@ class sonarDbManager:
             if ":" not in val:
                 match = pattern_single.match(val)
                 if not match:
-                    sys.exit(f"{error_msg}{val})")
+                    LOGGER.error(f"{error_msg}{val})")
+                    sys.exit(1)
                 operator = sonarDbManager.get_operator(match.group(2), match.group(1))
                 num = int(match.group(3))
 
@@ -1770,7 +1783,8 @@ class sonarDbManager:
             else:
                 match = pattern_range.match(val)
                 if not match:
-                    sys.exit(f"{error_msg}{val})")
+                    LOGGER.error(f"{error_msg}{val})")
+                    sys.exit(1)
                 operator = sonarDbManager.get_operator(
                     sonarDbManager.OPERATORS["standard"]["BETWEEN"], match.group(1)
                 )
@@ -1780,7 +1794,8 @@ class sonarDbManager:
 
                 # Plausibility check
                 if num1 >= num2:
-                    sys.exit("input error: invalid range (" + match.group(0) + ").")
+                    LOGGER.error(f"Invalid range ({match.group(0)}).")
+                    sys.exit(1)
 
                 data[operator] += [num1, num2]
 
@@ -1825,9 +1840,10 @@ class sonarDbManager:
                 # Processing single value
                 match = single_value_pattern.match(val)
                 if not match:
-                    raise ValueError(
-                        f"Query error: Decimal value or range expected for field {field} (got: {val})"
+                    LOGGER.error(
+                        f"Decimal value or range expected for field {field} (got: {val})"
                     )
+                    sys.exit(1)
 
                 operator = sonarDbManager.get_operator(match.group(2), match.group(1))
                 decinum = float(match.group(3))
@@ -1837,9 +1853,10 @@ class sonarDbManager:
                 # Processing range
                 match = range_value_pattern.match(val)
                 if not match:
-                    raise ValueError(
-                        f"Query error: Decimal value or range expected for field {field} (got: {val})"
+                    LOGGER.error(
+                        f"Decimal value or range expected for field {field} (got: {val})"
                     )
+                    sys.exit(1)
 
                 operator = sonarDbManager.get_operator(
                     sonarDbManager.OPERATORS["standard"]["BETWEEN"], match.group(1)
@@ -1849,7 +1866,8 @@ class sonarDbManager:
 
                 # Plausibility check
                 if decinum1 >= decinum2:
-                    sys.exit("input error: invalid range (" + match.group(0) + ").")
+                    LOGGER.error(f"Invalid range ({match.group(0)}).")
+                    sys.exit(1)
 
                 data[operator] += [decinum1, decinum2]
 
@@ -1895,14 +1913,16 @@ class sonarDbManager:
             if ":" not in val:
                 match = pattern_single.match(val)
                 if not match:
-                    sys.exit(f"{error_msg}{val})")
+                    LOGGER.error(f"{error_msg}{val})")
+                    sys.exit(1)
                 operator = sonarDbManager.get_operator(match.group(2), match.group(1))
                 data[operator].append(match.group(3))
             # processing value range
             else:
                 match = pattern_range.match(val)
                 if not match:
-                    sys.exit(f"{error_msg}{val})")
+                    LOGGER.error(f"{error_msg}{val})")
+                    sys.exit(1)
                 operator = sonarDbManager.get_operator(
                     sonarDbManager.OPERATORS["standard"]["BETWEEN"], match.group(1)
                 )
@@ -1912,7 +1932,8 @@ class sonarDbManager:
 
                 # Plausibility check
                 if date1 >= date2:
-                    sys.exit("input error: invalid range (" + match.group(0) + ").")
+                    LOGGER.error("Invalid range (" + match.group(0) + ").")
+                    sys.exit(1)
 
                 data[operator] += [match.group(2), match.group(3)]
 
@@ -2007,7 +2028,8 @@ class sonarDbManager:
             try:
                 _ = int(val)
             except ValueError:
-                sys.exit("input error: invalid range (" + orig_val + ").")
+                LOGGER.error(f"Invalid range ({orig_val}).")
+                sys.exit(1)
 
             # Get the operator for LIKE queries
             operator = self.get_operator("LIKE", negate)
@@ -2216,9 +2238,8 @@ class sonarDbManager:
                 )
                 values.extend(resolved_alt)
             except KeyError:
-                raise ValueError(
-                    f"'{alt}' is not a valid input. Please check the query statement,(IUPAC AA/NT codes, NT format(e.g. A3451T), AA format(e.g. S:N501Y))"
-                )
+                LOGGER.error(f"The alternate allele notation '{alt}' is invalid.")
+                sys.exit(1)
 
         return conditions, values
 
@@ -2288,7 +2309,8 @@ class sonarDbManager:
 
         query_function = query_functions.get(query_type)
         if query_function is None:
-            sys.exit(f"error: unknown query type '{query_type}' for property '{name}'.")
+            LOGGER.error(f"Unknown query type '{query_type}' for property '{name}'.")
+            sys.exit(1)
 
         condition, vals = query_function(targetfield, *vals)
         conditions.append(condition)
@@ -2298,9 +2320,8 @@ class sonarDbManager:
         target = self.properties[name]["target"]
         sql_template = sqls.get(target)
         if sql_template is None:
-            sys.exit(
-                f"database error: unknown target ({target}) stored for property {name}."
-            )
+            LOGGER.error(f"Unknown target ({target}) stored for property {name}.")
+            sys.exit(1)
 
         sql = sql_template + " AND ".join(conditions)
         return (sql, values)
@@ -2351,10 +2372,8 @@ class sonarDbManager:
                     processing_func = processing_funcs[var_type]
                     break
             if not match:
-                logging.error(f"'{var}' is not a valid variant definition.")
-                raise ValueError(
-                    "Please check the query statement,(IUPAC AA/NT codes, NT format(e.g. A3451T), AA format(e.g. S:N501Y))"
-                )
+                LOGGER.error(f"'{var}' is not a valid variant notation.")
+                sys.exit(1)
 
             # process variant conditions and values
             conditions, values = processing_func(match)
@@ -2848,4 +2867,5 @@ class sonarDbManager:
                 ignore_terminal_gaps,
             )
         else:
-            sys.exit("error: '" + format + "' is not a valid output format")
+            LOGGER.error(f"'{format}' is not a valid output format.")
+            sys.exit(1)

@@ -6,7 +6,6 @@
 from contextlib import contextmanager
 import gzip
 from hashlib import sha256
-import logging
 import lzma
 import os
 import sys
@@ -32,16 +31,6 @@ class sonarBasics:
         Retrieves the version of the covSonar package.
         """
         return __version__
-
-    # LOGGING
-    @staticmethod
-    def set_logging_config() -> None:
-        logging.basicConfig(
-            format="%(asctime)s %(levelname)-4s: %(message)s",
-            level=logging.WARNING,
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        logging.getLogger("requests").setLevel(logging.INFO)
 
     # FILE HANDLING
     @staticmethod

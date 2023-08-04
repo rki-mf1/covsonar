@@ -4,6 +4,7 @@ import tempfile
 import pytest
 from src.covsonar.utils import sonarUtils
 from src.covsonar.dbm import sonarDbManager
+from covsonar.logging import LoggingConfigurator
 
 
 # PYTEST FIXTURES
@@ -77,3 +78,8 @@ def init_writeable_dbm(testdb):
     """Fixture to set up a wirte-able dbm object"""
     with sonarDbManager(testdb, readonly=False) as dbm:
         yield dbm
+
+
+@pytest.fixture(scope='function')
+def logger():
+    return LoggingConfigurator.get_logger()

@@ -5,7 +5,6 @@
 # DEPENDENCIES
 import collections
 import csv
-import logging
 import os
 import sys
 from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Union
@@ -20,9 +19,11 @@ from covsonar.align import sonarAligner
 from covsonar.basics import sonarBasics
 from covsonar.cache import sonarCache
 from covsonar.dbm import sonarDbManager
+from covsonar.logging import LoggingConfigurator
 
-# Logging
-sonarBasics.set_logging_config()
+
+# Initialize logger
+LOGGER = LoggingConfigurator.get_logger()
 
 
 # CLASS
@@ -58,9 +59,11 @@ class sonarUtils:
         """
         #  checking files
         if os.path.isfile(fname):
-            sys.exit(f"setup error: {fname} does already exist.")
+            LOGGER.error(f"{fname} does already exist.")
+            sys.exit(1)
         if reference_gb and not os.path.isfile(reference_gb):
-            sys.exit(f"setup error: The given genbank file {fname} does not exist.")
+            LOGGER.error(f"The given genbank file {fname} does not exist.")
+            sys.exit(1)
 
         # creating database
         try:
@@ -80,14 +83,14 @@ class sonarUtils:
                 sonarUtils._add_reference(dbm, records)
 
             if not quiet:
-                logging.info("Success: Database was successfully installed")
+                LOGGER.info("Success: Database was successfully installed")
 
         # raising exceptions
         except Exception as e:
-            logging.exception(e)
-            logging.warning("Clean up %s", fname)
+            LOGGER.exception("An exception occurred while creating the database: %s", e)
+            LOGGER.warning("Cleaning up %s", fname)
             os.remove(fname)
-            logging.error("failed to create database")
+            LOGGER.error("Failed to create database due to the above exception")
 
     @staticmethod
     def connect_to_db(
@@ -236,9 +239,10 @@ class sonarUtils:
         )
 
         if source["sequence"] != dbm.get_sequence(source_id):
-            sys.exit(
-                f"genbank error: could not recover sequence of '{source['accession']}' (source)."
+            LOGGER.error(
+                f"Could not recover sequence of '{source['accession']}' (source) form Genbank file."
             )
+            sys.exit(1)
 
         return source_id
 
@@ -263,9 +267,10 @@ class sonarUtils:
         gene_ids = {}
         for elem in genes:
             if elem["accession"] in gene_ids:
-                sys.exit(
-                    f"genbank error: mutliple entries for '{elem['accession']}' (gene)."
+                LOGGER.error(
+                    f"Mutliple entries for '{elem['accession']}' (gene) in Genbank file."
                 )
+                sys.exit(1)
             gene_ids[elem["accession"]] = dbm.insert_element(
                 mol_id,
                 "gene",
@@ -284,9 +289,10 @@ class sonarUtils:
             if elem["sequence"] != dbm.extract_sequence(
                 gene_ids[elem["accession"]], molecule_id=mol_id
             ):
-                sys.exit(
-                    f"genbank error: could not recover sequence of '{elem['accession']}' (gene)"
+                LOGGER.error(
+                    f"Could not recover sequence of '{elem['accession']}' (gene) from Genbank file"
                 )
+                sys.exit(1)
 
         return gene_ids
 
@@ -326,9 +332,10 @@ class sonarUtils:
             if elem["sequence"] != dbm.extract_sequence(
                 cds_id, translation_table=transl_table, molecule_id=mol_id
             ):
-                sys.exit(
-                    f"genbank error: could not recover sequence of '{elem['accession']}' (cds)"
+                LOGGER.error(
+                    f"Could not recover sequence of '{elem['accession']}' (cds) from Genbank file"
                 )
+                sys.exit(1)
 
     # GENBANK PARSING
     @staticmethod
@@ -570,10 +577,11 @@ class sonarUtils:
 
         # checks
         if not sonarBasics._files_exist(*fasta, *tsv_files, *csv_files):
-            sys.exit("import error: at least one provided file does not exist.")
+            LOGGER.error("At least one provided file does not exist.")
+            sys.exit(1)
         if not sonarUtils._is_import_required(fasta, tsv_files, csv_files, update):
-            logging.info("Nothing to import.")
-            exit(0)
+            LOGGER.info("Nothing to import.")
+            sys.exit(0)
 
         # property handling
         prop_names = sonarUtils._get_prop_names(db, prop_links, autolink, debug)
@@ -596,7 +604,7 @@ class sonarUtils:
     def _log_import_mode(update: bool, quiet: bool):
         """Log the current import mode."""
         if not quiet:
-            logging.info(
+            LOGGER.info(
                 "import mode: updating existing samples"
                 if update
                 else "import mode: skipping existing samples"
@@ -652,7 +660,7 @@ class sonarUtils:
         file_tuples = [(x, ",") for x in csv_files] + [(x, "\t") for x in tsv_files]
         for fname, delim in file_tuples:
             if not quiet:
-                print("linking data from", fname)
+                LOGGER.info("linking data from" + fname + "...")
             col_names = sonarUtils._get_csv_colnames(fname, delim)
             col_to_prop_links = sonarUtils._link_columns_to_props(
                 col_names, prop_names, quiet
@@ -680,20 +688,20 @@ class sonarUtils:
 
         for link in prop_links:
             if link.count("=") != 1:
-                sys.exit(
-                    "input error: "
-                    + link
-                    + " is not a valid column-to-property assignment."
+                LOGGER.error(
+                    "'" + link + "' is not a valid column-to-property assignment."
                 )
+                sys.exit(1)
             prop, col = link.split("=")
             if prop == "SAMPLE":
                 prop = "sample"
             if prop not in db_properties:
-                sys.exit(
-                    "input error: sample property "
+                LOGGER.error(
+                    "Sample property '"
                     + prop
-                    + " is unknown to the selected database. Use list-props to see all valid properties."
+                    + "' is unknown to the selected database. Use list-props to see all valid properties."
                 )
+                sys.exit(1)
             propnames[prop] = col
         return propnames
 
@@ -720,17 +728,20 @@ class sonarUtils:
             if c == 1:
                 links[prop] = prop_name
             elif c > 1:
-                sys.exit("error: " + prop_name + " is not a unique column.")
+                LOGGER.error(f"'{prop_name}' is not a unique column.")
+                sys.exit(1)
         if "sample" not in links:
-            sys.exit("input error: missing 'sample' column assignment.")
+            LOGGER.error("Missing 'sample' column assignment.")
+            sys.exit(1)
         elif len(links) == 1:
-            sys.exit("input error: the file does not provide any informative column.")
+            LOGGER.error("The file does not provide any informative column.")
+            sys.exit(1)
         if not quiet:
             for prop in props:
                 if prop in links:
-                    print("  " + prop + " <- " + links[prop])
+                    LOGGER.info("  " + prop + " <- " + links[prop])
                 else:
-                    print("  " + prop + " missing")
+                    LOGGER.info("  " + prop + " missing")
         return links
 
     @staticmethod
@@ -907,7 +918,8 @@ class sonarUtils:
                 cursor, reference=reference, outfile=outfile, na="*** no match ***"
             )
         else:
-            sys.exit(f"error: '{format}' is not a valid output format")
+            LOGGER.error(f"'{format}' is not a valid output format")
+            sys.exit(1)
 
     # RESTORE SEQUENCES
     @staticmethod
@@ -934,7 +946,7 @@ class sonarUtils:
             if not samples:
                 samples = [x for x in dbm.iter_sample_names()]
             if not samples:
-                print("No samples stored in the given database.")
+                LOGGER.info("No samples stored in the given database.")
                 sys.exit(0)
 
             gap = "-" if aligned else ""
@@ -1014,8 +1026,8 @@ class sonarUtils:
             after = dbm.count_samples()
 
             deleted = before - after
-            logging.info(f"{deleted} of {len(samples)} samples found and deleted.")
-            logging.info(f"{after} samples remain in the database.")
+            LOGGER.info(f"{deleted} of {len(samples)} samples found and deleted.")
+            LOGGER.info(f"{after} samples remain in the database.")
 
     @staticmethod
     def show_db_info(db: str, detailed: bool = False, debug: bool = False) -> None:

@@ -3,7 +3,6 @@
 # author: Stephan Fuchs (Robert Koch Institute, MF1, fuchss@rki.de)
 
 import argparse
-import logging
 import os
 import sys
 from textwrap import fill
@@ -15,11 +14,15 @@ from covsonar.basics import sonarBasics
 from covsonar.cache import sonarCache  # noqa: F401
 from covsonar.dbm import sonarDbManager
 from covsonar.linmgr import sonarLinmgr
+from covsonar.logging import LoggingConfigurator
 from covsonar.utils import sonarUtils
 
 
 # Constants
 VERSION = sonarBasics.get_version()
+
+# Initialize logger
+LOGGER = LoggingConfigurator.get_logger()
 
 
 class args_namespace:
@@ -94,6 +97,8 @@ def parse_args(args=None):
     user_namespace = args_namespace()
     known_args, _ = parser.parse_known_args(args=args, namespace=user_namespace)
     if is_match_selected(known_args):
+        logger_configurator = LoggingConfigurator()
+        logger_configurator.set_debug_mode(known_args.debug)
         with sonarDbManager(
             known_args.db, readonly=True, debug=known_args.debug
         ) as db_manager:
@@ -572,8 +577,9 @@ def create_subparser_optimize(
     parser.add_argument(
         "--tempdir",
         help="custom temporrary direcxtory (default: None)",
-        type=str, default=None,
-    )   
+        type=str,
+        default=None,
+    )
     return subparsers, parser
 
 
@@ -704,14 +710,14 @@ def handle_db_upgrade(args: argparse.Namespace, debug: bool):
         args (argparse.Namespace): Parsed command line arguments.
         debug_mode (bool): Flag to enable or disable debug mode.
     """
-    print("WARNING: Backup your database before upgrading")
+    LOGGER.warning("Backup your database before upgrading")
     decision = ""
     while decision not in ("YES", "no"):
         decision = input("Do you really want to perform this action? [YES/no]: ")
     if decision == "YES":
         sonarDbManager.upgrade_db(args.db)
     else:
-        logging.info("No operation is performed")
+        LOGGER.info("No operation is performed")
 
 
 def handle_import(args: argparse.Namespace, debug: bool):
@@ -752,34 +758,35 @@ def handle_list_prop(args: argparse.Namespace, debug: bool):
     with sonarDbManager(args.db, debug=debug) as db_manager:
         if not db_manager.properties:
             print("*** no properties ***")
-            sys.exit(0)
+        else:
+            cols = [
+                "name",
+                "argument",
+                "subject",
+                "description",
+                "data type",
+                "query type",
+                "standard value",
+            ]
+            rows = []
+            for prop in sorted(db_manager.properties.keys()):
+                dt = (
+                    db_manager.properties[prop]["datatype"]
+                    if db_manager.properties[prop]["datatype"] != "float"
+                    else "decimal number"
+                )
+                rows.append([])
+                rows[-1].append(prop)
+                rows[-1].append("--" + prop)
+                rows[-1].append("sample")
+                rows[-1].append(
+                    fill(db_manager.properties[prop]["description"], width=25)
+                )
+                rows[-1].append(dt)
+                rows[-1].append(db_manager.properties[prop]["querytype"])
+                rows[-1].append(db_manager.properties[prop]["standard"])
 
-        cols = [
-            "name",
-            "argument",
-            "subject",
-            "description",
-            "data type",
-            "query type",
-            "standard value",
-        ]
-        rows = []
-        for prop in sorted(db_manager.properties.keys()):
-            dt = (
-                db_manager.properties[prop]["datatype"]
-                if db_manager.properties[prop]["datatype"] != "float"
-                else "decimal number"
-            )
-            rows.append([])
-            rows[-1].append(prop)
-            rows[-1].append("--" + prop)
-            rows[-1].append("sample")
-            rows[-1].append(fill(db_manager.properties[prop]["description"], width=25))
-            rows[-1].append(dt)
-            rows[-1].append(db_manager.properties[prop]["querytype"])
-            rows[-1].append(db_manager.properties[prop]["standard"])
-
-        print(tabulate(rows, headers=cols, tablefmt="fancy_grid"))
+            print(tabulate(rows, headers=cols, tablefmt="fancy_grid"))
 
 
 def handle_add_prop(args: argparse.Namespace, debug: bool):
@@ -813,7 +820,7 @@ def handle_add_prop(args: argparse.Namespace, debug: bool):
             args.subject,
             args.default,
         )
-    logging.info("Inserted successfully: %s", args.name)
+    LOGGER.info("Inserted successfully: %s", args.name)
 
 
 def handle_delete_prop(args: argparse.Namespace, debug: bool):
@@ -834,7 +841,8 @@ def handle_delete_prop(args: argparse.Namespace, debug: bool):
     """
     with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
         if args.name not in db_manager.properties:
-            sys.exit("Input error: Unknown property.")
+            LOGGER.error("Unknown property.")
+            sys.exit(1)
 
         non_default_values_count = db_manager.count_property(
             args.name, ignore_standard=True
@@ -843,7 +851,7 @@ def handle_delete_prop(args: argparse.Namespace, debug: bool):
         if args.force:
             decision = "YES"
         else:
-            logging.warning(
+            LOGGER.warning(
                 f"There are {non_default_values_count} samples with non-default values for this property."
             )
             decision = ""
@@ -854,9 +862,9 @@ def handle_delete_prop(args: argparse.Namespace, debug: bool):
 
         if decision.lower() == "YES":
             db_manager.delete_property(args.name)
-            logging.info("Property deleted.")
+            LOGGER.info("Property deleted.")
         else:
-            logging.info("Property not deleted.")
+            LOGGER.info("Property not deleted.")
 
 
 def handle_delete(args: argparse.Namespace, debug: bool):
@@ -884,7 +892,7 @@ def handle_delete(args: argparse.Namespace, debug: bool):
             for line in handle:
                 samples.add(line.strip())
     if len(samples) == 0:
-        logging.info("Nothing to delete.")
+        LOGGER.info("Nothing to delete.")
     else:
         sonarUtils.delete_sample(args.db, samples, debug=debug)
 
@@ -990,10 +998,11 @@ def handle_match(args: argparse.Namespace, debug: bool):
                 # sample.name is fixed for output
                 args.out_cols = args.out_cols + ["sample.name"]
             else:
-                sys.exit(
-                    "Input error: Unknown output column(s) selected. Please select from: "
+                LOGGER.error(
+                    "Unknown output column(s) selected. Please select from: "
                     + ", ".join(db_manager.properties)
                 )
+                sys.exit(1)
 
     # Sample name handling
     samples = set(args.sample)
@@ -1036,7 +1045,7 @@ def handle_optimize(args: argparse.Namespace, debug: bool):
 
     Raises:
         FileNotFoundError: If the database file is not found.
-    """     
+    """
     with sonarDbManager(args.db, debug=debug) as db_manager:
         db_manager.optimize(args.db, tmpdir=args.tempdir)
 
@@ -1108,16 +1117,30 @@ def execute_commands(args, debug):  # noqa: C901
         handle_direct_query(args, debug)
 
 
-def main():
+def main(args: Optional[argparse.Namespace] = None) -> int:
     """
     The main function that handles the execution of different commands.
 
     Args:
-        args (argparse.Namespace): Namespace containing parsed command-line arguments.
+        args (Optional[argparse.Namespace]): Namespace containing parsed command-line arguments.
+            If None, the function will parse the arguments itself.
+
+    Returns:
+        int: Returns 0 if finished successfully.
     """
     # process arguments
-    args = parse_args(sys.argv[1:])
-    
+    if not args:
+        args = parse_args(sys.argv[1:])
+
+    # Set debugging mode
+    if hasattr(args, "debug") and args.debug:
+        debug = True
+    else:
+        debug = False
+
+    logger_configurator = LoggingConfigurator()
+    logger_configurator.set_debug_mode(debug)
+
     # Check database
     if hasattr(args, "db") and args.db:
         if (
@@ -1125,14 +1148,8 @@ def main():
             and args.db is not None
             and not os.path.isfile(args.db)
         ):
-            print(args.command)
-            sys.exit("Error: The database does not exist.")
-
-    # Set debugging mode
-    if hasattr(args, "debug") and args.debug:
-        debug = True
-    else:
-        debug = False
+            LOGGER.error("The database does not exists")
+            sys.exit(1)
 
     # other commands
     execute_commands(args, debug)

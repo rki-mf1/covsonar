@@ -76,7 +76,7 @@ def test_valid_beginning(tmp_path, monkeypatch):
     run_cli(f"add-prop --db {db_path} --name LINEAGE --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name AGE --dtype float --descr for_testing")
 
-    run_cli(f"update-lineage-info --db {db_path}")
+    run_cli(f"update-lineages --db {db_path}")
 
 
 def test_import_update_delete_restore(tmp_path, monkeypatch):

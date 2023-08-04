@@ -8,13 +8,11 @@ import hashlib
 from itertools import zip_longest
 import os
 import pickle
-import pprint
 import re
 import shutil
 import sys
 from tempfile import mkdtemp
 from tempfile import TemporaryDirectory
-import traceback
 from typing import Any, DefaultDict, Dict, Iterator, List, Optional, Tuple, Union
 
 import pandas as pd
@@ -23,8 +21,11 @@ from tqdm import tqdm
 from covsonar.align import sonarAligner
 from covsonar.basics import sonarBasics
 from covsonar.dbm import sonarDbManager
+from covsonar.logging import LoggingConfigurator
 
-pp = pprint.PrettyPrinter(indent=4)
+
+# Initialize logger
+LOGGER = LoggingConfigurator.get_logger()
 
 
 class sonarCache:
@@ -397,7 +398,10 @@ class sonarCache:
         """
         fname = self.get_seq_fname(seqhash)
         if os.path.isfile(fname) and self.file_collision(fname, sequence):
-            sys.exit("seqhash collision: sequences differ for seqhash " + seqhash + ".")
+            LOGGER.critical(
+                "Seqhash collision: sequences differ for seqhash " + seqhash + "."
+            )
+            sys.exit(1)
 
         os.makedirs(os.path.dirname(fname), exist_ok=True)
         with open(fname, "w") as handle:
@@ -555,13 +559,13 @@ class sonarCache:
         sample_id = header.replace("\t", " ").replace("|", " ").split(" ")[0]
         refmol = self.get_refmol(header)
         if not refmol:
-            sys.exit(
-                "input error: "
-                + sample_id
+            LOGGER.error(
+                sample_id
                 + " refers to an unknown reference molecule ("
                 + self._molregex.search(header)
                 + ")."
             )
+            sys.exit(1)
         seq = sonarBasics.harmonize_seq(seq)
         seqhash = sonarBasics.hash_seq(seq)
         refmolid = self.refmols[refmol]["molecule.id"]
@@ -791,22 +795,6 @@ class sonarCache:
                     del data["sequence"]
                     self.cache_sample(**data)
 
-    def log(self, msg: str, die: bool = False, errtype: str = "error") -> None:
-        """
-        Write the log message to the appropriate destination.
-
-        Args:
-            msg (str): The log message to be written.
-            die (bool): Optional. If True, the program will exit after writing the log message. Default is False.
-            errtype (str): Optional. The error type associated with the log message. Only used when die=True. Default is "error".
-        """
-        if self.logfile:
-            self.logfile.write(msg)
-        elif not die:
-            sys.stderr.write(msg)
-        else:
-            sys.exit(errtype + ": " + msg)
-
     def write_checkref_log(
         self, data: Dict[str, Any], refseq_id: Optional[int] = None
     ) -> None:
@@ -822,20 +810,19 @@ class sonarCache:
         """
         if not refseq_id:
             if not self.ignore_errors:
-                self.log(
-                    "fasta header refers to an unknown reference ("
+                LOGGER.error(
+                    "Fasta header refers to an unknown reference ('"
                     + data["header"]
-                    + ")",
-                    True,
-                    "input error",
+                    + "').",
                 )
+                sys.exit(1)
             else:
-                self.log(
-                    "skipping "
+                LOGGER.warning(
+                    "Skipping '"
                     + data["name"]
-                    + " referring to an unknown reference ("
+                    + "' referring to an unknown reference ('"
                     + data["header"]
-                    + ")"
+                    + "')."
                 )
 
     def add_data_files(
@@ -937,12 +924,13 @@ class sonarCache:
                         self.paranoid_test(refseqs, sample_data, dbm)
 
                 except Exception as e:
-                    print("\n------- Fatal Error ---------")
-                    print("\nDebugging Information")
-                    print(e)
-                    traceback.print_exc()
-                    pp.pprint(sample_data)
-                    sys.exit("unknown import error")
+                    LOGGER.exception(
+                        "Unknown import error occurred. Debugging Information: %s", e
+                    )
+                    LOGGER.critical(
+                        "Exiting the program due to an unrecoverable import error."
+                    )
+                    sys.exit(1)
 
     def paranoid_test(
         self, refseqs: Dict[str, str], sample_data: Dict[str, Any], dbm: sonarDbManager
@@ -956,7 +944,7 @@ class sonarCache:
             dbm (sonarDbManager): The sonarDbManager session to use.
 
         Raises:
-            ValueError: If the original sequence of a sample cannot be restored from the stored genomic profile.
+            SystemExit: If the original sequence of a sample cannot be restored from the stored genomic profile.
 
         Returns:
             True
@@ -1021,13 +1009,15 @@ class sonarCache:
                     + qry
                     + "\n"
                 )
-            raise ValueError(
-                "import error: original sequence of sample "
+            LOGGER.critical(
+                "Original sequence of sample "
                 + sample_data["name"]
                 + " cannot be restored from stored genomic profile for sample (see paranoid.alignment.fna):"
                 + " "
                 + cigar
             )
+            LOGGER.error("Paranoid test failed.")
+            sys.exit(1)
         return True
 
 

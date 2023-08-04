@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 import sqlite3
 
@@ -6,8 +7,10 @@ import pytest
 from src.covsonar.dbm import sonarDbManager
 
 
-def test_add_property_that_exists(init_writeable_dbm):
-    with pytest.raises(SystemExit) as pytest_wrapped_e:
+def test_add_property_that_exists(init_writeable_dbm, logger, caplog):
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         init_writeable_dbm.add_property(
             "newprop",
             datatype="string",
@@ -22,11 +25,12 @@ def test_add_property_that_exists(init_writeable_dbm):
             description="new prop",
             subject="sample",
         )
-    assert pytest_wrapped_e.type == SystemExit
-    assert (
-        pytest_wrapped_e.value.code
-        == "error: a property named NEWPROP already exists in the given database."
-    )
+        assert (
+            "A property named 'NEWPROP' already exists in the given database.."
+            == caplog.records[-1].message
+        )
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
 
 
 def test_translationtable(init_writeable_dbm):
@@ -50,21 +54,29 @@ def test_add_reference(testdb):
         assert dbm.get_default_reference_accession() == "REF3"
 
 
-def test_db_writeablity(testdb):
-    with sonarDbManager(testdb, readonly=True) as dbm:
-        with pytest.raises(SystemExit) as pytest_wrapped_e:
-            dbm.add_property(
-                "YET_ANOTHER_PROP",
-                "text",
-                "text",
-                "my new prop stores text information",
-                "sample",
-            )
-        assert pytest_wrapped_e.type == SystemExit
-        assert (
-            pytest_wrapped_e.value.code
-            == "error: failed to insert data into sqlite table (attempt to write a readonly database)"
+def test_db_writeablity(testdb, logger, caplog):
+    with sonarDbManager(testdb, readonly=True) as dbm, caplog.at_level(
+        logging.ERROR, logger=logger.name
+    ), pytest.raises(SystemExit) as pytest_wrapped_e:
+        dbm.add_property(
+            "YET_ANOTHER_PROP",
+            "text",
+            "text",
+            "my new prop stores text information",
+            "sample",
         )
+        assert (
+            "Failed to insert data into sqlite table (attempt to write a readonly database)."
+            == caplog.records[-1].message
+        )
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+    assert pytest_wrapped_e.type == SystemExit
+    assert (
+        caplog.records[-1].message
+        == "Failed to insert data into sqlite table (attempt to write a readonly database)."
+    )
+
     with sonarDbManager(testdb, readonly=False) as dbm:
         dbm.add_property(
             "YET_ANOTHER_PROP",
@@ -289,41 +301,72 @@ def test_query_profile_complexcase(init_readonly_dbm):
     )
 
 
-def test_query_profile_failcase(init_readonly_dbm):
+def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     """unit test"""
     # invalid deletion of NT
-    with pytest.raises(ValueError) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         init_readonly_dbm.create_genomic_profile_sql("del:-10000")
-    assert e.type == ValueError
-    assert "Please check the query statement" in str(e.value.args[0])
+        assert (
+            "The alternate allele notation 'del:-10000' is invalid."
+            == caplog.records[-1].message
+        )
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1
 
     # invalid deletion of AA
-    with pytest.raises(ValueError) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         init_readonly_dbm.create_genomic_profile_sql("S:dl:501-1000")
-    assert e.type == ValueError
-    assert "Please check the query statement" in str(e.value.args[0])
+        assert "Please check the query statement." == caplog.records[-1].message
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1
+
     # K500IX malform of AA
-    with pytest.raises(ValueError) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         init_readonly_dbm.create_genomic_profile_sql("K500IX")
-    assert e.type == ValueError
-    assert "Please check the query statement" in str(e.value.args[0])
+        assert (
+            "The alternate allele notation 'IX' is invalid."
+            == caplog.records[-1].message
+        )
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1
 
     # A417xT' cannot combine AA and NT query, x is not in NT code
-    with pytest.raises(ValueError) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         init_readonly_dbm.create_genomic_profile_sql("A417xT")
-    assert e.type == ValueError
-    assert "Please check the query statement" in str(e.value.args[0])
+        assert (
+            "The alternate allele notation 'xT' is invalid."
+            == caplog.records[-1].message
+        )
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1
 
     # K417X~', ~ is not in AA code
-    with pytest.raises(ValueError) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         init_readonly_dbm.create_genomic_profile_sql("K417X~")
-    assert e.type == ValueError
-    assert "Please check the query statement" in str(e.value.args[0])
+        assert (
+            "The alternate allele notation 'X~' is invalid."
+            == caplog.records[-1].message
+        )
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1
 
 
-def test_setup_database(tmpfile_name):
+def test_setup_database(tmpfile_name, logger, caplog):
     # _failcase
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarDbManager(dbfile=tmpfile_name + "APOLLO")
-    assert e.type == SystemExit
-    assert "database error" in e.value.code
+        assert "Please check the query statement." == caplog.records[-1].message
+    assert pytest_wrapped_e.type == SystemExit
+    assert pytest_wrapped_e.value.code == 1

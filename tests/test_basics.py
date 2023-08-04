@@ -1,3 +1,4 @@
+import logging
 import lzma
 from pathlib import Path
 import re
@@ -7,16 +8,22 @@ from src.covsonar.basics import sonarBasics
 from src.covsonar.utils import sonarUtils
 
 
-def test_setup_and_file_exists(tmpfile_name):
+def test_setup_and_file_exists(logger, caplog, tmpfile_name):
     fname = tmpfile_name
     open(fname, "w").close()
-    with pytest.raises(SystemExit) as pytest_wrapped_e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils.setup_db(fname)
-    assert pytest_wrapped_e.type == SystemExit
-    assert (
-        re.match(r"^setup error: .* does already exist.$", pytest_wrapped_e.value.code)
-        is not None
-    )
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+        assert (
+            re.match(
+                r".* does already exist.$",
+                sonarBasics.get_last_log_entry(caplog),
+            )
+            is not None
+        )
 
 
 def test_autocreate_with_givenRef(tmpfile_name, monkeypatch):
@@ -37,24 +44,30 @@ def test_basicObject():
     assert isinstance(obj, sonarUtils) is True
 
 
-def test_match(testdb):
+def test_match(caplog, testdb, logger):
     # "Wrong outputformat."
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().match(
             testdb,
             format="HDFS",
             debug="False",
         )
-    assert e.type == SystemExit
-    assert "is not a valid output format" in e.value.code
+        assert "'HDFS' is not a valid output format." == caplog.records[-1].message
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
 
 
-def test_import_data(testdb, monkeypatch):
+def test_import_data(testdb, monkeypatch, logger, caplog):
     """ """
     monkeypatch.chdir(Path(__file__).parent)
     tsv = "data/meta.tsv"
     fasta = "data/test.fasta"
-    with pytest.raises(SystemExit) as e:
+    # "Nothing to import."
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().import_data(
             testdb,
             fasta=[],
@@ -68,12 +81,13 @@ def test_import_data(testdb, monkeypatch):
             debug=True,
             quiet=True,
         )
-    # "Nothing to import."
-    assert e.type == SystemExit
-    assert e.value.code == 0
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 0
 
     # " not a valid property assignment."
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().import_data(
             testdb,
             fasta=[fasta],
@@ -85,14 +99,17 @@ def test_import_data(testdb, monkeypatch):
             debug=True,
             quiet=True,
         )
-    assert e.type == SystemExit
-    assert (
-        e.value.code
-        == "input error: STUDY is not a valid column-to-property assignment."
-    )
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+        assert (
+            "'STUDY' is not a valid column-to-property assignment."
+            == caplog.records[-1].message
+        )
 
     # unknown column to the selected DB
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().import_data(
             testdb,
             fasta=[fasta],
@@ -104,11 +121,17 @@ def test_import_data(testdb, monkeypatch):
             debug=True,
             quiet=True,
         )
-    assert e.type == SystemExit
-    assert "is unknown to the selected database" in e.value.code
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+        assert (
+            "Sample property 'STUDY' is unknown to the selected database. Use list-props to see all valid properties"
+            == caplog.records[-1].message
+        )
 
     # sample column has to be assigned.
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().import_data(
             testdb,
             fasta=[],
@@ -121,11 +144,14 @@ def test_import_data(testdb, monkeypatch):
             debug=True,
             quiet=True,
         )
-    assert e.type == SystemExit
-    assert "input error: missing 'sample' column assignment." in e.value.code
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+        assert "Missing 'sample' column assignment." == caplog.records[-1].message
 
     # tsv does not provide any informative column
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().import_data(
             testdb,
             fasta=[],
@@ -133,14 +159,18 @@ def test_import_data(testdb, monkeypatch):
             prop_links=["sample=IMS_ID"],
             autolink=False,
         )
-    assert e.type == SystemExit
-    assert (
-        "input error: the file does not provide any informative column." == e.value.code
-    )
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+        assert (
+            "The file does not provide any informative column."
+            == caplog.records[-1].message
+        )
 
     # is not an unique column
     bad_tsv = "data/meta.bad.tsv"
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().import_data(
             testdb,
             fasta=[],
@@ -148,11 +178,14 @@ def test_import_data(testdb, monkeypatch):
             prop_links=["sample=IMS_ID", "SEQ_TYPE=SEQ_TYPE"],
             autolink=False,
         )
-    assert e.type == SystemExit
-    assert "error: SEQ_TYPE is not a unique column." == e.value.code
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+        assert "'SEQ_TYPE' is not a unique column." == caplog.records[-1].message
 
     # in 'tsv file does not contain required sample column.'
-    with pytest.raises(SystemExit) as e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarUtils().import_data(
             testdb,
             fasta=[],
@@ -160,8 +193,10 @@ def test_import_data(testdb, monkeypatch):
             prop_links=["sample=INVISIBLE_COl"],
             autolink=True,
         )
-    assert e.type == SystemExit
-    assert "input error: missing 'sample' column assignment." == e.value.code
+
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+        assert "Missing 'sample' column assignment." == caplog.records[-1].message
 
 
 def test_open_file(tmpfile_name):

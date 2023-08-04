@@ -16,20 +16,32 @@ def test_get_refseq_id_failcase(tmpfile_name, testdb):
     assert result is None
 
 
-def test_write_checkref_log(testdb, tmpfile_name, tmp_path, capsys):
-    # tmpfile_name = "./tesst.txt"
+def test_write_checkref_log(testdb, tmpfile_name, tmp_path, logger, caplog):
     data = {"header": "HEader", "name": "NAme"}
+
     # ignore_errors
     with sonarCache(db=testdb, ignore_errors=True, outdir=tmp_path) as sc:
-        sc.write_checkref_log(data=data, refseq_id=None)
-        captured = capsys.readouterr()
-    assert captured.err == "skipping NAme referring to an unknown reference (HEader)"
+        with caplog.at_level(logging.WARNING, logger=logger.name):
+            sc.write_checkref_log(data=data, refseq_id=None)
+            assert (
+                "Skipping 'NAme' referring to an unknown reference ('HEader')."
+                == caplog.records[-1].message
+            )
 
     # not ignore_errors
     with sonarCache(
         db=testdb, ignore_errors=False, logfile=tmpfile_name, outdir=tmp_path
     ) as sc:
-        sc.write_checkref_log(data=data, refseq_id=None)
+        with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+            SystemExit
+        ) as pytest_wrapped_e:
+            sc.write_checkref_log(data=data, refseq_id=None)
+            assert (
+                "ERROR: Fasta header refers to an unknown reference ('HEader')."
+                == caplog.records[-1].message
+            )
+            assert pytest_wrapped_e.type == SystemExit
+            assert pytest_wrapped_e.value.code == 1
 
 
 def test_get_refhash_failcase(tmpfile_name, tmp_path, testdb):
@@ -110,7 +122,7 @@ def test_add_data_files(monkeypatch):
     assert set(data2_truth.items()).issubset(set(return_data.items()))
 
 
-def test_paranoid_test(monkeypatch, testdb):
+def test_paranoid_test(monkeypatch, testdb, logger, caplog):
     """
     # passed case needed
     with open("data/cache-test/ref-seq-passed") as f:
@@ -133,25 +145,31 @@ def test_paranoid_test(monkeypatch, testdb):
         data = f.read()
     sample_data = eval(data)
 
-    with pytest.raises(ValueError) as pytest_wrapped_e:
-        with sonarDbManager(testdb) as dbm:
-            sonarCache(db=testdb).paranoid_test(
-                refseqs=refseqs, sample_data=sample_data, dbm=dbm
-            )
-    assert pytest_wrapped_e.type == ValueError
-    assert "cannot be restored" in str(pytest_wrapped_e.value)
+    with sonarDbManager(testdb) as dbm, caplog.at_level(
+        logging.ERROR, logger=logger.name
+    ), pytest.raises(SystemExit) as pytest_wrapped_e:
+        sonarCache(db=testdb).paranoid_test(
+            refseqs=refseqs, sample_data=sample_data, dbm=dbm
+        )
+        assert "ERROR: Paranoid test failed." == caplog.records[-1].message
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
+
     os.remove("paranoid.alignment.fna")
 
 
-def test_cache_sequence(testdb, monkeypatch):
+def test_cache_sequence(testdb, monkeypatch, logger, caplog):
     # fail case
     monkeypatch.chdir(Path(__file__).parent)
 
     seqhash = "84nCd4KD+0OVpmoZCSDTnc/mn08"
     sequence = "test"
-    with pytest.raises(SystemExit) as pytest_wrapped_e:
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonarCache(db=testdb, outdir="data/cache-test").cache_sequence(
             seqhash, sequence
         )
-    assert pytest_wrapped_e.type == SystemExit
-    assert "sequences differ for seqhash" in pytest_wrapped_e.value.code
+        assert "ERROR: Sequences differ for seqhash" == caplog.records[-1].message
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1

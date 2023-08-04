@@ -117,7 +117,18 @@ def test_upgrade_db(tmp_path, monkeypatch, caplog):
     with pytest.raises(SystemExit) as pytest_wrapped_e:
         sonar.main(parsed_args)
     assert pytest_wrapped_e.type == SystemExit
-    assert "compatibility error:" in pytest_wrapped_e.value.code
+    with caplog.at_level(logging.INFO, logger="covsonar"):
+        print("TRACE CAPLOG")
+        print(caplog.text)
+        for name, logger in logging.Logger.manager.loggerDict.items():
+            print("----------------------")
+            print("LOGGER", name)
+            print(caplog.text)
+            print("----------------------")
+        assert (
+            "The given database is not compatible with this version of sonar "
+            in caplog.text
+        )
 
     # perform upgrade
     parsed_args_upgrade = sonar.parse_args(

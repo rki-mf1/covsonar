@@ -11,6 +11,11 @@ from typing import Dict, Generator, List, Optional, Pattern, Tuple
 import pandas as pd
 import parasail
 
+from covsonar.logging import LoggingConfigurator
+
+# Initialize logger
+LOGGER = LoggingConfigurator.get_logger()
+
 
 class sonarAligner(object):
     """
@@ -137,11 +142,10 @@ class sonarAligner(object):
                     ref_pos += 1
                     ref_end += 1
             elif direction is not None:
-                sys.exit(
-                    "error: '"
-                    + str(direction)
-                    + "' is an unknown indel alignment mode."
+                LOGGER.error(
+                    "'" + str(direction) + "' is an unknown indel alignment mode."
                 )
+                sys.exit(1)
 
             return ref_pos, ref_end, ref_base
 
@@ -238,9 +242,8 @@ class sonarAligner(object):
             if operation in operations:
                 operations[operation](length)
             else:
-                sys.exit(
-                    "cigar error: unknown operator " + operation + "in cigar string"
-                )
+                LOGGER.critical("Unknown operator '" + operation + "' in cigar string")
+                sys.exit(1)
 
         if cigar.endswith("D"):
             v = list(variants[-1])
