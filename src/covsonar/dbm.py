@@ -18,7 +18,7 @@ from covsonar.logging import LoggingConfigurator
 
 
 # Constants
-SUPPORTED_DB_VERSION = 4  # supprted sonar database scheme version
+SUPPORTED_DB_VERSION = 5  # supprted sonar database scheme version
 
 # Initialize logger
 LOGGER = LoggingConfigurator.get_logger()
