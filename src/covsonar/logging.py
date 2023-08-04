@@ -1,7 +1,8 @@
 import configparser
 import logging
 import sys
-from typing import Dict, Optional
+from typing import Dict
+from typing import Optional
 
 
 class LoggingConfigurator:

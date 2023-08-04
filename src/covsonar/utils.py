@@ -7,10 +7,19 @@ import collections
 import csv
 import os
 import sys
-from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Union
+from typing import Any
+from typing import Dict
+from typing import Generator
+from typing import Iterator
+from typing import List
+from typing import Optional
+from typing import Set
+from typing import Union
 
 from Bio import SeqIO
-from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+from Bio.SeqFeature import CompoundLocation
+from Bio.SeqFeature import FeatureLocation
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from mpire import WorkerPool
 from tqdm import tqdm

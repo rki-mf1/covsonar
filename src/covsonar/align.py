@@ -6,7 +6,12 @@ import os
 import pickle
 import re
 import sys
-from typing import Dict, Generator, List, Optional, Pattern, Tuple
+from typing import Dict
+from typing import Generator
+from typing import List
+from typing import Optional
+from typing import Pattern
+from typing import Tuple
 
 import pandas as pd
 import parasail

@@ -6,11 +6,19 @@ import pkgutil
 import re
 import sqlite3
 import sys
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any
+from typing import Dict
+from typing import Iterator
+from typing import List
+from typing import Optional
+from typing import Set
+from typing import Tuple
+from typing import Union
 from urllib.parse import quote as urlquote
 
 from Bio.Seq import Seq
-from Bio.SeqFeature import CompoundLocation, FeatureLocation
+from Bio.SeqFeature import CompoundLocation
+from Bio.SeqFeature import FeatureLocation
 import pandas as pd
 import sqlparse
 
