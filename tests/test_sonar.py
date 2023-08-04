@@ -99,7 +99,7 @@ def test_delete_nothing(tmp_path, monkeypatch, caplog):
         assert "Nothing to delete." in caplog.text
 
 
-def test_upgrade_db(tmp_path, monkeypatch, caplog):
+def test_upgrade_db(tmp_path, monkeypatch, logger, caplog):
     monkeypatch.chdir(Path(__file__).parent)
     db_path_orig = Path("data/test.old.db")
     db_path = os.path.join(tmp_path, "test.old.db")
@@ -114,17 +114,12 @@ def test_upgrade_db(tmp_path, monkeypatch, caplog):
             db_path,
         ]
     )
-    with pytest.raises(SystemExit) as pytest_wrapped_e:
+    with caplog.at_level(logging.INFO, logger="covsonar"), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         sonar.main(parsed_args)
-    assert pytest_wrapped_e.type == SystemExit
-    with caplog.at_level(logging.INFO, logger="covsonar"):
-        print("TRACE CAPLOG")
-        print(caplog.text)
-        for name, logger in logging.Logger.manager.loggerDict.items():
-            print("----------------------")
-            print("LOGGER", name)
-            print(caplog.text)
-            print("----------------------")
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
         assert (
             "The given database is not compatible with this version of sonar "
             in caplog.text
@@ -139,13 +134,13 @@ def test_upgrade_db(tmp_path, monkeypatch, caplog):
         ]
     )
     monkeypatch.setattr("builtins.input", lambda _: "YES")
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
+        SystemExit
+    ) as pytest_wrapped_e:
         assert sonar.main(parsed_args_upgrade) == 0
-        assert "Success: Database upgrade was successfully completed" in caplog.text
-
-    # no fail case is detected
-
-    assert sonar.main(parsed_args) == 0
-
-
-# to do next perform upgrade but not success
+        assert (
+            "Sorry, but automated migration does not support databases of version 3."
+            == caplog.records[-1].message
+        )
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1

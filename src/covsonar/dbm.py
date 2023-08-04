@@ -549,11 +549,17 @@ class sonarDbManager:
             ValueError: If the required migration script file is not found.
             RuntimeError: If the database version does not match the supported version after upgrade.
         """
-        try:
-            with sqlite3.connect(dbfile) as con:
-                cur = con.cursor()
-                current_version = cur.execute("pragma user_version").fetchone()[0]
+        with sqlite3.connect(dbfile) as con:
+            cur = con.cursor()
+            current_version = cur.execute("pragma user_version").fetchone()[0]
 
+        if current_version < 5:
+            LOGGER.error(
+                f"Sorry, but automated migration does not support databases of version {current_version}."
+            )
+            sys.exit(1)
+
+        try:
             LOGGER.info(
                 f"Current version: {current_version}, Upgrade to: {SUPPORTED_DB_VERSION}"
             )

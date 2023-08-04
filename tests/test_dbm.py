@@ -180,15 +180,22 @@ def test_iter_dna_variants(init_readonly_dbm):
     assert len(x) in {10, 11}  # check why it is varying
 
 
-def test_upgrade_db(tmpfile_name, monkeypatch, caplog):
+def test_upgrade_db(tmpfile_name, monkeypatch, logger, caplog):
     """ """
     monkeypatch.chdir(Path(__file__).parent)
 
     # create db
     sqlite3.connect(tmpfile_name)
-    with pytest.raises((ValueError, RuntimeError)) as pytest_wrapped_e:
+    with pytest.raises(SystemExit) as pytest_wrapped_e, caplog.at_level(
+        logging.ERROR, logger=logger.name
+    ):
         sonarDbManager(tmpfile_name).upgrade_db(tmpfile_name)
-    assert str(pytest_wrapped_e.value) == "Error: Upgrade was not completed."
+        assert (
+            "Sorry, but automated migration does not support databases of version 0."
+            == caplog.records[-1].message
+        )
+        assert pytest_wrapped_e.type == SystemExit
+        assert pytest_wrapped_e.value.code == 1
 
 
 def test_query_profile(init_readonly_dbm):
