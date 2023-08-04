@@ -97,11 +97,8 @@ def parse_args(args=None):
     user_namespace = args_namespace()
     known_args, _ = parser.parse_known_args(args=args, namespace=user_namespace)
     if is_match_selected(known_args):
-        logger_configurator = LoggingConfigurator()
-        logger_configurator.set_debug_mode(known_args.debug)
-        with sonarDbManager(
-            known_args.db, readonly=True, debug=known_args.debug
-        ) as db_manager:
+        LoggingConfigurator(debug=known_args.debug)
+        with sonarDbManager(known_args.db, readonly=True) as db_manager:
             for property in db_manager.properties.values():
                 subparser_match.add_argument(
                     "--" + property["name"], type=str, nargs="+"
@@ -686,29 +683,27 @@ def check_file(fname, exit_on_fail=True):
     return True
 
 
-def handle_setup(args: argparse.Namespace, debug: bool):
+def handle_setup(args: argparse.Namespace):
     """
     Handle database setup.
 
     Args:
         args (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
         FileNotFoundError: If the specified GenBank file is not found.
     """
     if args.gbk:
         check_file(args.gbk)
-    sonarUtils.setup_db(args.db, args.default_props, reference_gb=args.gbk, debug=debug)
+    sonarUtils.setup_db(args.db, args.default_props, reference_gb=args.gbk)
 
 
-def handle_db_upgrade(args: argparse.Namespace, debug: bool):
+def handle_db_upgrade(args: argparse.Namespace):
     """
     Handle database upgrade, prompting the user to confirm the action.
 
     Args:
         args (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
     """
     LOGGER.warning("Backup your database before upgrading")
     decision = ""
@@ -720,13 +715,12 @@ def handle_db_upgrade(args: argparse.Namespace, debug: bool):
         LOGGER.info("No operation is performed")
 
 
-def handle_import(args: argparse.Namespace, debug: bool):
+def handle_import(args: argparse.Namespace):
     """
     Handle data import.
 
     Args:
         args (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
     """
     sonarUtils.import_data(
         db=args.db,
@@ -739,11 +733,10 @@ def handle_import(args: argparse.Namespace, debug: bool):
         progress=not args.no_progress,
         update=not args.no_update,
         threads=args.threads,
-        debug=debug,
     )
 
 
-def handle_list_prop(args: argparse.Namespace, debug: bool):
+def handle_list_prop(args: argparse.Namespace):
     """
     Handle listing properties from the database.
     This function retrieves all properties stored in the database, sorts them by
@@ -753,9 +746,8 @@ def handle_list_prop(args: argparse.Namespace, debug: bool):
 
     Args:
         args (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
     """
-    with sonarDbManager(args.db, debug=debug) as db_manager:
+    with sonarDbManager(args.db) as db_manager:
         if not db_manager.properties:
             print("*** no properties ***")
         else:
@@ -789,15 +781,14 @@ def handle_list_prop(args: argparse.Namespace, debug: bool):
             print(tabulate(rows, headers=cols, tablefmt="fancy_grid"))
 
 
-def handle_add_prop(args: argparse.Namespace, debug: bool):
+def handle_add_prop(args: argparse.Namespace):
     """
     Handle adding a new property to the database.
 
     Args:
         args (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
     """
-    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False) as db_manager:
         if args.qtype is None:
             if args.dtype == "integer":
                 args.qtype = "numeric"
@@ -823,7 +814,7 @@ def handle_add_prop(args: argparse.Namespace, debug: bool):
     LOGGER.info("Inserted successfully: %s", args.name)
 
 
-def handle_delete_prop(args: argparse.Namespace, debug: bool):
+def handle_delete_prop(args: argparse.Namespace):
     """
     Handle deleting an existing property from the database.
 
@@ -834,12 +825,11 @@ def handle_delete_prop(args: argparse.Namespace, debug: bool):
     Args:
     args (argparse.Namespace): Parsed command line arguments containing the
     property name to be deleted and the 'force' flag.
-    debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
     SystemExit: If the specified property name is not found in the database.
     """
-    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False) as db_manager:
         if args.name not in db_manager.properties:
             LOGGER.error("Unknown property.")
             sys.exit(1)
@@ -867,7 +857,7 @@ def handle_delete_prop(args: argparse.Namespace, debug: bool):
             LOGGER.info("Property not deleted.")
 
 
-def handle_delete(args: argparse.Namespace, debug: bool):
+def handle_delete(args: argparse.Namespace):
     """
     Handle deleting a sample from the database.
 
@@ -879,7 +869,6 @@ def handle_delete(args: argparse.Namespace, debug: bool):
     Args:
         args (argparse.Namespace): Parsed command line arguments containing the
                                         sample names to be deleted and the 'force' flag.
-        debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
         FileNotFoundError: If the specified sample file is not found.
@@ -894,10 +883,10 @@ def handle_delete(args: argparse.Namespace, debug: bool):
     if len(samples) == 0:
         LOGGER.info("Nothing to delete.")
     else:
-        sonarUtils.delete_sample(args.db, samples, debug=debug)
+        sonarUtils.delete_sample(args.db, samples)
 
 
-def handle_restore(args: argparse.Namespace, debug: bool):
+def handle_restore(args: argparse.Namespace):
     """
     Handle restoring genome sequences from the database.
 
@@ -910,8 +899,6 @@ def handle_restore(args: argparse.Namespace, debug: bool):
         args (argparse.Namespace): Parsed command line arguments containing the
                                         sample names to be restored and optional flags
                                         such as 'aligned' and 'out'.
-        debug_mode (bool): Flag to enable or disable debug mode.
-
     Raises:
         FileNotFoundError: If the specified sample file is not found.
     """
@@ -926,11 +913,10 @@ def handle_restore(args: argparse.Namespace, debug: bool):
         samples,
         aligned=args.aligned,
         outfile=args.out,
-        debug=debug,
     )
 
 
-def handle_update_pangolin(args: argparse.Namespace, debug: bool):
+def handle_update_pangolin(args: argparse.Namespace):
     """
     Handle update pangolin information.
 
@@ -939,7 +925,6 @@ def handle_update_pangolin(args: argparse.Namespace, debug: bool):
 
     Args:
         args (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
         FileNotFoundError: If any required files are not found.
@@ -947,11 +932,11 @@ def handle_update_pangolin(args: argparse.Namespace, debug: bool):
     with sonarLinmgr() as lineage_manager:
         lineage_data = lineage_manager.update_lineage_data()
 
-    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False) as db_manager:
         db_manager.add_update_lineage(lineage_data)
 
 
-def handle_info(args: argparse.Namespace, debug: bool):
+def handle_info(args: argparse.Namespace):
     """
     Handle displaying database information.
 
@@ -960,7 +945,6 @@ def handle_info(args: argparse.Namespace, debug: bool):
 
     Args:
         args (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
         FileNotFoundError: If the database file is not found.
@@ -968,7 +952,7 @@ def handle_info(args: argparse.Namespace, debug: bool):
     sonarUtils.show_db_info(args.db, args.detailed)
 
 
-def handle_match(args: argparse.Namespace, debug: bool):
+def handle_match(args: argparse.Namespace):
     """
     Handle profile and property matching.
 
@@ -980,14 +964,13 @@ def handle_match(args: argparse.Namespace, debug: bool):
         args (argparse.Namespace): Parsed command line arguments containing the
                                         profile, sample names, output format, and other
                                         optional flags.
-        debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
         FileNotFoundError: If any required files are not found.
         SystemExit: If any unknown output columns are selected.
     """
     properties = {}
-    with sonarDbManager(args.db, readonly=False, debug=debug) as db_manager:
+    with sonarDbManager(args.db, readonly=False) as db_manager:
         for property_name in db_manager.properties:
             if hasattr(args, property_name):
                 properties[property_name] = getattr(args, property_name)
@@ -1025,14 +1008,13 @@ def handle_match(args: argparse.Namespace, debug: bool):
         properties=properties,
         outfile=args.out,
         output_column=args.out_cols,
-        debug=debug,
         format=output_format,
         showNX=args.showNX,
         frameshifts_only=args.frameshifts_only,
     )
 
 
-def handle_optimize(args: argparse.Namespace, debug: bool):
+def handle_optimize(args: argparse.Namespace):
     """
     Handle database optimization.
 
@@ -1041,16 +1023,15 @@ def handle_optimize(args: argparse.Namespace, debug: bool):
 
     Args:
         arguments (argparse.Namespace): Parsed command line arguments.
-        debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
         FileNotFoundError: If the database file is not found.
     """
-    with sonarDbManager(args.db, debug=debug) as db_manager:
+    with sonarDbManager(args.db) as db_manager:
         db_manager.optimize(args.db, tmpdir=args.tempdir)
 
 
-def handle_direct_query(args: argparse.Namespace, debug: bool):
+def handle_direct_query(args: argparse.Namespace):
     """
     Handle read-only SQLite queries.
 
@@ -1060,7 +1041,6 @@ def handle_direct_query(args: argparse.Namespace, debug: bool):
     Args:
         arguments (argparse.Namespace): Parsed command line arguments containing
                                         the SQL query and optional output file.
-        debug_mode (bool): Flag to enable or disable debug mode.
 
     Raises:
         FileNotFoundError: If the database file is not found.
@@ -1072,10 +1052,10 @@ def handle_direct_query(args: argparse.Namespace, debug: bool):
         sql = args.sql[1:-1]
     else:
         sql = args.sql
-    sonarUtils.direct_query(args.db, query=sql, outfile=args.out, debug=debug)
+    sonarUtils.direct_query(args.db, query=sql, outfile=args.out)
 
 
-def execute_commands(args, debug):  # noqa: C901
+def execute_commands(args):  # noqa: C901
     """
     Execute the appropriate function based on the provided command.
     This function determines which command was provided as an argument and
@@ -1086,35 +1066,35 @@ def execute_commands(args, debug):  # noqa: C901
         args (argparse.Namespace): Parsed command line arguments.
     """
     if args.command == "setup":
-        handle_setup(args, debug)
+        handle_setup(args)
     elif args.command == "db-upgrade":
-        handle_db_upgrade(args, debug)
+        handle_db_upgrade(args)
     else:
         with sonarDbManager(args.db, readonly=True) as db_manager:
             db_manager.check_db_compatibility()
 
     if args.command == "import":
-        handle_import(args, debug)
+        handle_import(args)
     elif args.command == "list-prop":
-        handle_list_prop(args, debug)
+        handle_list_prop(args)
     elif args.command == "add-prop":
-        handle_add_prop(args, debug)
+        handle_add_prop(args)
     elif args.command == "delete-prop":
-        handle_delete_prop(args, debug)
+        handle_delete_prop(args)
     elif args.command == "delete":
-        handle_delete(args, debug)
+        handle_delete(args)
     elif args.command == "restore":
-        handle_restore(args, debug)
+        handle_restore(args)
     elif args.command == "update-lineages":
-        handle_update_pangolin(args, debug)
+        handle_update_pangolin(args)
     elif args.command == "match":
-        handle_match(args, debug)
+        handle_match(args)
     elif args.command == "info":
-        handle_info(args, debug)
+        handle_info(args)
     elif args.command == "optimize":
-        handle_optimize(args, debug)
+        handle_optimize(args)
     if args.command == "direct-query":
-        handle_direct_query(args, debug)
+        handle_direct_query(args)
 
 
 def main(args: Optional[argparse.Namespace] = None) -> int:
@@ -1138,8 +1118,7 @@ def main(args: Optional[argparse.Namespace] = None) -> int:
     else:
         debug = False
 
-    logger_configurator = LoggingConfigurator()
-    logger_configurator.set_debug_mode(debug)
+    LoggingConfigurator(debug=debug)
 
     # Check database
     if hasattr(args, "db") and args.db:
@@ -1152,7 +1131,7 @@ def main(args: Optional[argparse.Namespace] = None) -> int:
             sys.exit(1)
 
     # other commands
-    execute_commands(args, debug)
+    execute_commands(args)
 
     # Finished successfully
     return 0

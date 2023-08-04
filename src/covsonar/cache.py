@@ -40,7 +40,6 @@ class sonarCache:
         allow_updates: bool = True,
         ignore_errors: bool = False,
         temp: bool = False,
-        debug: bool = False,
         disable_progress: bool = False,
     ):
         """
@@ -54,21 +53,19 @@ class sonarCache:
             allow_updates (bool): Whether to allow updates or not.
             ignore_errors (bool): Whether to skip import errors and keep on going.
             temp (bool): Whether to set cache dir temporary or not.
-            debug (bool): Whether to enable debug mode or not.
             disable_progress (bool): Whether to disable progress display or not.
         """
 
         # arg-derived information
         self.db = db
         self.allow_updates = allow_updates
-        self.debug = debug
         self.refacc = refacc
         self.temp = temp
         self.ignore_errors = ignore_errors
         self.disable_progress = disable_progress
 
         # database-derived information
-        with sonarDbManager(self.db, debug=self.debug) as dbm:
+        with sonarDbManager(self.db) as dbm:
             self.refmols = dbm.get_molecule_data(
                 '"molecule.accession"',
                 '"molecule.id"',
@@ -661,7 +658,7 @@ class sonarCache:
         """
         cds = {}
         prev_elem = None
-        with sonarDbManager(self.db, debug=self.debug) as dbm:
+        with sonarDbManager(self.db) as dbm:
             for row in dbm.get_annotation(
                 reference_accession=refmol_acc,
                 molecule_accession=refmol_acc,
@@ -763,7 +760,7 @@ class sonarCache:
         default_properties = {
             x: self.properties[x]["standard"] for x in self.properties
         }
-        with sonarDbManager(self.db, debug=self.debug, readonly=False) as dbm:
+        with sonarDbManager(self.db, readonly=False) as dbm:
             for fname in fnames:
                 for data in self.iter_fasta(fname):
                     # check sample
@@ -879,7 +876,7 @@ class sonarCache:
             ValueError: If the original sequence of a sample cannot be restored from the stored genomic profile.
         """
         refseqs = {}
-        with sonarDbManager(self.db, readonly=False, debug=self.debug) as dbm:
+        with sonarDbManager(self.db, readonly=False) as dbm:
             for sample_data in tqdm(
                 self.iter_samples(),
                 total=len(self._samplefiles),

@@ -41,7 +41,6 @@ class sonarUtils:
         fname: str,
         default_props: bool = False,
         reference_gb: Optional[str] = None,
-        debug: bool = False,
         quiet: bool = False,
     ) -> None:
         """
@@ -51,7 +50,6 @@ class sonarUtils:
             fname (str): File name for the database.
             defaut_props (bool, optional): Flag to create pre-defined properties.
             reference_gb (str, optional): Reference GenBank file.
-            debug (bool, optional): Debug flag.
             quiet (bool, optional): Flag to suppress logging info.
 
         Raises:
@@ -67,8 +65,8 @@ class sonarUtils:
 
         # creating database
         try:
-            sonarDbManager.setup(fname, debug=debug)
-            with sonarUtils.connect_to_db(fname, readonly=False, debug=debug) as dbm:
+            sonarDbManager.setup(fname)
+            with sonarUtils.connect_to_db(fname, readonly=False) as dbm:
                 # adding build-in props
                 sonarUtils._create_reserved_properties(dbm)
 
@@ -93,21 +91,18 @@ class sonarUtils:
             LOGGER.error("Failed to create database due to the above exception")
 
     @staticmethod
-    def connect_to_db(
-        db: str, readonly: bool = True, debug: bool = False
-    ) -> sonarDbManager:
+    def connect_to_db(db: str, readonly: bool = True) -> sonarDbManager:
         """
         Connect to database.
 
         Args:
             db (str): The database to connect to.
             readonly (bool, optional): Open the database in readonly mode. Defaults to True.
-            debug (bool, optional): Enable debug mode. Defaults to False.
 
         Returns:
             sonarDbManager: Database manager instance.
         """
-        return sonarDbManager(db, readonly=readonly, debug=debug)
+        return sonarDbManager(db, readonly=readonly)
 
     @staticmethod
     def _create_reserved_properties(dbm: sonarDbManager) -> None:
@@ -554,7 +549,6 @@ class sonarUtils:
         progress: bool = False,
         update: bool = True,
         threads: int = 1,
-        debug: bool = False,
         quiet: bool = False,
     ) -> None:
         """Import data from various sources into the database.
@@ -570,7 +564,6 @@ class sonarUtils:
             progress: Whether to show a progress bar during import.
             update: Whether to update existing records.
             threads: The number of threads to use for import.
-            debug: Whether to show debug messages.
             quiet: Whether to suppress logging.
         """
         sonarUtils._log_import_mode(update, quiet)
@@ -584,13 +577,13 @@ class sonarUtils:
             sys.exit(0)
 
         # property handling
-        prop_names = sonarUtils._get_prop_names(db, prop_links, autolink, debug)
+        prop_names = sonarUtils._get_prop_names(db, prop_links, autolink)
 
         # extract properties form csv/tsv files
         properties = sonarUtils._extract_props(csv_files, tsv_files, prop_names, quiet)
 
         # setup cache
-        cache = sonarUtils._setup_cache(db, cachedir, update, debug, progress)
+        cache = sonarUtils._setup_cache(db, cachedir, update, progress)
 
         # importing sequences
         if fasta:
@@ -598,7 +591,7 @@ class sonarUtils:
 
         # importing properties
         if csv_files or tsv_files:
-            sonarUtils._import_properties(properties, db, progress, debug)
+            sonarUtils._import_properties(properties, db, progress)
 
     @staticmethod
     def _log_import_mode(update: bool, quiet: bool):
@@ -636,9 +629,9 @@ class sonarUtils:
             return file.readline().strip().split(delim)
 
     @staticmethod
-    def _get_properties_from_db(db: str, debug: bool) -> Set[str]:
+    def _get_properties_from_db(db: str) -> Set[str]:
         """Get the properties stored in the database."""
-        with sonarUtils.connect_to_db(db, debug=debug) as dbm:
+        with sonarUtils.connect_to_db(db) as dbm:
             db_properties = set(dbm.properties.keys())
         db_properties.add("sample")
         return db_properties
@@ -680,10 +673,9 @@ class sonarUtils:
         db: str,
         prop_links: List[str],
         autolink: bool,
-        debug: bool,
     ) -> Dict[str, str]:
         """get property names based on user input."""
-        db_properties = sonarUtils._get_properties_from_db(db, debug=debug)
+        db_properties = sonarUtils._get_properties_from_db(db)
         propnames = {x: x for x in db_properties} if autolink else {}
 
         for link in prop_links:
@@ -788,7 +780,6 @@ class sonarUtils:
         db: str,
         cachedir: Optional[str] = None,
         update: bool = True,
-        debug: bool = False,
         progress: bool = False,
     ) -> sonarCache:
         """Set up a cache for sequence data."""
@@ -799,13 +790,12 @@ class sonarUtils:
             logfile="import.log",
             allow_updates=update,
             temp=not cachedir,
-            debug=debug,
             disable_progress=not progress,
         )
 
     @staticmethod
     def _import_properties(
-        properties: Dict[str, Dict[str, str]], db: str, progress: bool, debug: bool
+        properties: Dict[str, Dict[str, str]], db: str, progress: bool
     ):
         """
         Imports properties to the database.
@@ -815,9 +805,8 @@ class sonarUtils:
                         the value is another dictionary of properties for that sample.
             db: The database where the properties will be imported.
             progress: If True, displays a progress bar.
-            debug: If True, runs the function in debug mode.
         """
-        with sonarDbManager(db, readonly=False, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=False) as dbm:
             for sample_name in tqdm(
                 properties,
                 desc="Import data...",
@@ -843,7 +832,6 @@ class sonarUtils:
         outfile: Optional[str] = None,
         output_column: List[str] = [],
         format: str = "csv",
-        debug: bool = False,
         showNX: bool = False,
         ignore_terminal_gaps: bool = True,
         frameshifts_only: bool = False,
@@ -860,7 +848,6 @@ class sonarUtils:
             outfile: Output file path.
             output_column: List of output columns.
             format: Output format.
-            debug: Flag indicating whether to run in debug mode.
             showNX: Flag indicating whether to show NX.
             ignore_terminal_gaps: Flag indicating whether to terminal gaps.
             frameshifts_only: Flag indicating whether to only show frameshifts.
@@ -868,7 +855,7 @@ class sonarUtils:
         Returns:
             None.
         """
-        with sonarDbManager(db, debug=debug) as dbm:
+        with sonarDbManager(db) as dbm:
             if format == "vcf" and not reference:  # do we need this?
                 reference = dbm.get_default_reference_accession()
             rows = dbm.match(
@@ -929,7 +916,6 @@ class sonarUtils:
         reference_accession: Optional[str] = None,
         aligned: bool = False,
         outfile: Optional[str] = None,
-        debug: bool = False,
     ) -> None:
         """
         Restores the given samples from the database.
@@ -940,9 +926,8 @@ class sonarUtils:
             reference_accession: Reference accession if any.
             aligned: Whether the samples are aligned or not.
             outfile: If provided, the result will be written to this file.
-            debug: If True, print debug information.
         """
-        with sonarDbManager(db, readonly=True, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=True) as dbm:
             if not samples:
                 samples = [x for x in dbm.iter_sample_names()]
             if not samples:
@@ -1011,16 +996,15 @@ class sonarUtils:
 
     # OTHER DB OPERATIONS
     @staticmethod
-    def delete_sample(db: str, samples: List[str], debug: bool) -> None:
+    def delete_sample(db: str, samples: List[str]) -> None:
         """
         Delete samples from the database.
 
         Args:
             db (str): The database to delete samples from.
             samples (list[str]): A list of samples to be deleted.
-            debug (bool): If True, print debug information.
         """
-        with sonarDbManager(db, readonly=False, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=False) as dbm:
             before = dbm.count_samples()
             dbm.delete_samples(*samples)
             after = dbm.count_samples()
@@ -1030,16 +1014,15 @@ class sonarUtils:
             LOGGER.info(f"{after} samples remain in the database.")
 
     @staticmethod
-    def show_db_info(db: str, detailed: bool = False, debug: bool = False) -> None:
+    def show_db_info(db: str, detailed: bool = False) -> None:
         """
         Show database information.
 
         Args:
             db (str): The database to show information for.
             detaield (bool): If True, print numbers of stored mutations.
-            debug (bool): If True, print debug information.
         """
-        with sonarDbManager(db, readonly=True, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=True) as dbm:
             print("covSonar Version:                ", sonarBasics.get_version())
             print("database path:                   ", dbm.dbfile)
             print("database version:                ", dbm.get_db_version())
@@ -1054,9 +1037,7 @@ class sonarUtils:
                 )
 
     @staticmethod
-    def direct_query(
-        db: str, query: str, outfile: Optional[str] = None, debug: bool = False
-    ) -> None:
+    def direct_query(db: str, query: str, outfile: Optional[str] = None) -> None:
         """
         Directly query the database.
 
@@ -1064,9 +1045,8 @@ class sonarUtils:
             db: The database to query.
             query: The query to execute.
             outfile: If provided, the query result will be written to this file.
-            debug: If True, print debug information.
         """
-        with sonarDbManager(db, readonly=True, debug=debug) as dbm:
+        with sonarDbManager(db, readonly=True) as dbm:
             result = dbm.direct_query(query)
             sonarUtils.export_csv(result, outfile)
 

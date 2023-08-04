@@ -52,7 +52,6 @@ def test_match(caplog, testdb, logger):
         sonarUtils().match(
             testdb,
             format="HDFS",
-            debug="False",
         )
         assert "'HDFS' is not a valid output format." == caplog.records[-1].message
         assert pytest_wrapped_e.type == SystemExit
@@ -78,7 +77,6 @@ def test_import_data(testdb, monkeypatch, logger, caplog):
             progress=True,
             update=True,
             threads=1,
-            debug=True,
             quiet=True,
         )
         assert pytest_wrapped_e.type == SystemExit
@@ -96,7 +94,6 @@ def test_import_data(testdb, monkeypatch, logger, caplog):
             autolink=False,
             progress=True,
             update=True,
-            debug=True,
             quiet=True,
         )
         assert pytest_wrapped_e.type == SystemExit
@@ -118,7 +115,6 @@ def test_import_data(testdb, monkeypatch, logger, caplog):
             autolink=False,
             progress=True,
             update=True,
-            debug=True,
             quiet=True,
         )
         assert pytest_wrapped_e.type == SystemExit
@@ -141,7 +137,6 @@ def test_import_data(testdb, monkeypatch, logger, caplog):
             autolink=False,
             progress=True,
             update=True,
-            debug=True,
             quiet=True,
         )
         assert pytest_wrapped_e.type == SystemExit

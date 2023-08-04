@@ -32,7 +32,6 @@ class sonarDbManager:
         dbfile (str): SQLite database file path.
         conn (sqlite3.Connection): SQLite database connection object.
         cursor (sqlite3.Cursor): SQLite database cursor for executing SQL queries.
-        debug (bool): Debug mode status.
     """
 
     # CONSTANTS
@@ -118,13 +117,12 @@ class sonarDbManager:
         },
     }
 
-    def __init__(self, dbfile: str, debug: bool = False, readonly: bool = True) -> None:
+    def __init__(self, dbfile: str, readonly: bool = True) -> None:
         """
         Initialize the DBOperations class.
 
         Args:
             dbfile (str): The path of the SQLite database file.
-            debug (bool): If true, debug mode activated, else deactivated.
             readonly: If true, database connection is read-only.
         """
         # check dbfile
@@ -136,7 +134,6 @@ class sonarDbManager:
         self.dbfile = os.path.abspath(dbfile)
         self.con = None
         self.cursor = None
-        self.debug = debug
 
         # private attributes
         self.__timeout = -1
@@ -286,13 +283,12 @@ class sonarDbManager:
     # BASIC OPERATIONS
 
     @staticmethod
-    def setup(filename: str, debug: bool = False) -> None:
+    def setup(filename: str) -> None:
         """
         Set up the sonar database.
 
         Args:
             filename (str): Path to the SQLite database file.
-            debug (bool, optional): If True, debug logging is enabled. Defaults to False.
 
         Returns:
             None
@@ -319,8 +315,7 @@ class sonarDbManager:
         # Connect to the SQLite database and set up the schema.
         try:
             with sqlite3.connect(f"{uri}?mode=rwc", uri=True) as con:
-                if debug:
-                    con.set_trace_callback(LOGGER.debug)
+                con.set_trace_callback(LOGGER.debug)
                 con.executescript(sql_schema)
         except sqlite3.Error as e:
             LOGGER.error(f"Error setting up SQLite database: {str(e)}")
@@ -357,8 +352,7 @@ class sonarDbManager:
             isolation_level=None,
             uri=True,
         )
-        if self.debug:
-            con.set_trace_callback(LOGGER.debug)
+        con.set_trace_callback(LOGGER.debug)
         con.row_factory = self.dict_factory
         return con
 

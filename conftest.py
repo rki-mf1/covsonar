@@ -60,7 +60,6 @@ def testdb(setup_db):
         autolink=True,
         progress=False,
         update=True,
-        debug=False,
         quiet=True,
     )
     return db
@@ -80,6 +79,6 @@ def init_writeable_dbm(testdb):
         yield dbm
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def logger():
     return LoggingConfigurator.get_logger()
