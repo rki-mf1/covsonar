@@ -284,8 +284,11 @@ class sonarDbManager:
             dict: A dictionary where the keys are lineage and the values are sublineage.
         """
         if not self.__lineage_sublineage_dict:
-            df = pd.read_sql("SELECT * FROM lineages", self.con)
-            self.__lineage_sublineage_dict = dict(zip(df.lineage, df.sublineage))
+            sql = "SELECT lineage, sublineage FROM lineages"
+            rows = self.cursor.execute(sql).fetchall()
+            self.__lineage_sublineage_dict = (
+                {} if not rows else {row["lineage"]: row["sublineage"] for row in rows}
+            )
         return self.__lineage_sublineage_dict
 
     # BASIC OPERATIONS
