@@ -201,17 +201,17 @@ def test_upgrade_db(tmpfile_name, monkeypatch, logger, caplog):
 def test_query_profile(init_readonly_dbm):
     """unit test"""
     # snp
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("A3451T")
+    _sql_val = init_readonly_dbm.create_profile_sql(["A3451T"])
     assert all(i in _sql_val[1] for i in [1, 1, 3450, 3451, "A", "T"])
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:N501Y")
+    _sql_val = init_readonly_dbm.create_profile_sql(["S:N501Y"])
     assert all(i in _sql_val[1] for i in [1, "cds", "S", 500, 501, "N", "Y"])
     # del
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("ORF1ab:del:3001-3004")
+    _sql_val = init_readonly_dbm.create_profile_sql(["ORF1ab:del:3001-3004"])
     assert all(i in _sql_val[1] for i in [1, "cds", "ORF1ab", 3000, 3003, " "])
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("del:11288-11296")
+    _sql_val = init_readonly_dbm.create_profile_sql(["del:11288-11296"])
     assert all(i in _sql_val[1] for i in [11287, 11295, " "])
     # any AA
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K517X")
+    _sql_val = init_readonly_dbm.create_profile_sql(["S:K517X"])
     assert all(
         i in _sql_val[1]
         for i in [
@@ -239,7 +239,7 @@ def test_query_profile(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # any NT
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("C417N")
+    _sql_val = init_readonly_dbm.create_profile_sql(["C417N"])
     assert all(
         i in _sql_val[1]
         for i in [
@@ -261,17 +261,17 @@ def test_query_profile(init_readonly_dbm):
         ]
     )
     # exact AA
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K417x")
+    _sql_val = init_readonly_dbm.create_profile_sql(["S:K417x"])
     assert all(i in _sql_val[1] for i in ["S", 416, 417, "K", "X"])
     # excat NT
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("T418n")
+    _sql_val = init_readonly_dbm.create_profile_sql(["T418n"])
     assert all(i in _sql_val[1] for i in [418, "T", "N"])
 
 
 def test_query_profile_complexcase(init_readonly_dbm):
     """unit test"""
     # NT special case
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("T418nN")
+    _sql_val = init_readonly_dbm.create_profile_sql(["T418nN"])
     assert all(
         i in _sql_val[1]
         for i in [
@@ -296,13 +296,13 @@ def test_query_profile_complexcase(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # AA special case
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K418XX")
+    _sql_val = init_readonly_dbm.create_profile_sql(["S:K418XX"])
     assert all(
         i in _sql_val[1]
         for i in ["CC", "MZ", "ZQ", "EN", "NN", "EQ", "WΦ", "XW", "ζW", "πζ", "πY"]
     )
     # Combine AA and NT
-    _sql_val = init_readonly_dbm.create_genomic_profile_sql("S:K418I", "T418A")
+    _sql_val = init_readonly_dbm.create_profile_sql(["S:K418I", "T418A"])
     assert all(
         i in _sql_val[1] for i in ["S", 417, 418, "K", "I", 1, 1, 417, 418, "T", "A"]
     )
@@ -314,7 +314,7 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_genomic_profile_sql("del:-10000")
+        init_readonly_dbm.create_profile_sql(["del:-10000"])
         assert (
             "The alternate allele notation 'del:-10000' is invalid."
             == caplog.records[-1].message
@@ -326,7 +326,7 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_genomic_profile_sql("S:dl:501-1000")
+        init_readonly_dbm.create_profile_sql(["S:dl:501-1000"])
         assert "Please check the query statement." == caplog.records[-1].message
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
@@ -335,7 +335,7 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_genomic_profile_sql("K500IX")
+        init_readonly_dbm.create_profile_sql(["K500IX"])
         assert (
             "The alternate allele notation 'IX' is invalid."
             == caplog.records[-1].message
@@ -347,7 +347,7 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_genomic_profile_sql("A417xT")
+        init_readonly_dbm.create_profile_sql(["A417xT"])
         assert (
             "The alternate allele notation 'xT' is invalid."
             == caplog.records[-1].message
@@ -359,7 +359,7 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_genomic_profile_sql("K417X~")
+        init_readonly_dbm.create_profile_sql(["K417X~"])
         assert (
             "The alternate allele notation 'X~' is invalid."
             == caplog.records[-1].message

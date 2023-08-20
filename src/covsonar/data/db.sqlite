@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS alignment (
 	FOREIGN KEY(seqhash) REFERENCES sequence(seqhash) ON DELETE CASCADE,
 	FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE
 );
-CREATE INDEX idx_alignment ON alignment(element_id, seqhash);
+CREATE INDEX IF NOT EXISTS idx_alignment_elemid ON alignment(element_id);
 CREATE INDEX IF NOT EXISTS idx_alignment_seqhash ON alignment (seqhash);
 
 CREATE TABLE IF NOT EXISTS alignment2variant (
@@ -356,6 +356,51 @@ LEFT JOIN variant2property ON variant2property.variant_id = variant.id
 LEFT JOIN element ON variant.element_id = element.id
 LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
+
+
+CREATE VIEW IF NOT EXISTS variantView2
+AS
+SELECT
+  sample.id as "sample.id",
+  sample.name as "sample.name",
+  sample.seqhash as "sample.seqhash",
+  reference.id as "reference.id",
+  reference.accession as "reference.accession",
+  reference.standard as "reference.standard",
+  molecule.id as "molecule.id",
+  molecule.accession as "molecule.accession",
+  molecule.symbol as "molecule.symbol",
+  molecule.standard as "molecule.standard",
+  element.id as "element.id",
+  element.accession as "element.accession",
+  element.symbol as "element.symbol",
+  element.standard as "element.standard",
+  element.type as "element.type",
+  variant.id as "variant.id",
+  variant.ref as "variant.ref",
+  variant.start as "variant.start",
+  variant.end as "variant.end",
+  variant.alt as "variant.alt",
+  variant.label as "variant.label",
+  variant.frameshift as "variant.frameshift",
+  variant.parent_id as "variant.parent_id",
+  variant2property.property_id as "property_id",
+  variant2property.value_integer as "value_integer",
+  variant2property.value_float as "value_float",
+  variant2property.value_text as "value_text",
+  variant2property.value_zip as "value_zip",
+  variant2property.value_varchar as "value_varchar",
+  variant2property.value_blob as "value_blob",
+  variant2property.value_date as "value_date"
+FROM
+  reference
+LEFT JOIN molecule ON molecule.reference_id = reference.id
+LEFT JOIN element ON element.molecule_id = molecule.id
+LEFT JOIN sequence ON sequence.seqhash = alignment.seqhash
+LEFT JOIN sample ON sample.seqhash = sequence.seqhash
+LEFT JOIN alignment ON alignment.element_id = element.id
+LEFT JOIN variant ON variant.element_id = element.id
+LEFT JOIN variant2property ON variant2property.variant_id = variant.id;
 
 --
 -- TRIGGER

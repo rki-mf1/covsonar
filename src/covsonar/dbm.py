@@ -452,6 +452,26 @@ class sonarDbManager:
             self.cursor.execute(query)
 
     @staticmethod
+    def format_sql(sql: str) -> str:
+        """
+        Formats the given SQL string.
+
+        Args:
+            sql (str): The raw SQL string.
+
+        Returns:
+            str: The formatted SQL string.
+
+        Example:
+            >>> sql = "SELECT * FROM table WHERE id=1"
+            >>> print(SomeClassName.format_sql(sql))
+            SELECT *
+            FROM table
+            WHERE id = 1
+        """
+        return sqlparse.format(sql, reindent=True, keyword_case="upper")
+
+    @staticmethod
     def is_select_query(query):
         """
         Check if the input query string consists of only SELECT statements.
@@ -1227,10 +1247,10 @@ class sonarDbManager:
             Dict[str, int]: Dictionary with molecule accessions as keys and their ids as values.
         """
         if reference_accession is not None:
-            condition = '"reference.accession" = ?'
+            condition = "reference.accession = ?"
             val = [reference_accession]
         else:
-            condition = '"reference.standard" = ?'
+            condition = "reference.standard = ?"
             val = [1]
 
         sql = (
@@ -1261,14 +1281,14 @@ class sonarDbManager:
         """
         if not fields:
             fields = "*"
-        elif '"molecule.accession"' not in fields:
-            fields = list(set(fields)) + ['"molecule.accession"']
+        elif "molecule.accession" not in fields:
+            fields = list(set(fields)) + ["molecule.accession"]
 
         if reference_accession:
-            condition = '"reference.accession" = ?'
+            condition = "reference.accession = ?"
             vals = [reference_accession]
         else:
-            condition = '"reference.standard" = ?'
+            condition = "reference.standard = ?"
             vals = [1]
 
         sql = (
@@ -1385,28 +1405,28 @@ class sonarDbManager:
 
         # Assemble conditions defining accessions or standard elements
         if reference_accession:
-            conditions.append('"reference.accession" = ?')
+            conditions.append("reference.accession = ?")
             values.append(reference_accession)
         else:
-            conditions.append('"reference.standard" = ?')
+            conditions.append("reference.standard = ?")
             values.append(1)
 
         if molecule_accession:
-            conditions.append('"molecule.accession" = ?')
+            conditions.append("molecule.accession = ?")
             values.append(molecule_accession)
         else:
-            conditions.append('"molecule.standard" = ?')
+            conditions.append("molecule.standard = ?")
             values.append(1)
 
         if element_accession:
-            conditions.append('"element.accession" = ?')
+            conditions.append("element.accession = ?")
             values.append(element_accession)
         elif not element_type:
-            conditions.append('"element.type" = ?')
+            conditions.append("element.type = ?")
             values.append("source")
 
         if element_type:
-            conditions.append('"element.type" = ?')
+            conditions.append("element.type = ?")
             values.append(element_type)
 
         # Construct SQL query to fetch the annotation
@@ -1677,16 +1697,6 @@ class sonarDbManager:
         return self.cursor.execute(sql).fetchone()["count"]
 
     # CONDITIONING SAMPLE PROPERTIES
-    @staticmethod
-    def flatten_vals(lst):
-        result = []
-        for item in lst:
-            if isinstance(item, (list, set)):
-                result.extend(item)
-            else:
-                result.append(item)
-        return result
-
     @staticmethod
     def get_operator(op: Optional[str] = None, inverse: bool = False) -> str:
         """Returns the appropriate operator for a given operation type and inversion flag.
@@ -2189,17 +2199,17 @@ class sonarDbManager:
 
         # Set molecule symbol or standard
         conditions.append(
-            '"molecule.symbol" = ?' if match.group(1) else '"molecule.standard" = ?'
+            "molecule.symbol = ?" if match.group(1) else "molecule.standard = ?"
         )
         values.append(match.group(1)[:-1] if match.group(1) else 1)
 
         # Set element type and symbol or standard
         if match.group(2):
-            conditions.extend(['"element.type" = ?', '"element.symbol" = ?'])
+            conditions.extend(["element.type = ?", "element.symbol = ?"])
             values.extend(["cds", match.group(2)[:-1]])
             iupac_code = self.IUPAC_CODES["aa"]
         else:
-            conditions.append('"element.standard" = ?')
+            conditions.append("element.standard = ?")
             values.append(1)
             iupac_code = self.IUPAC_CODES["nt"]
 
@@ -2221,15 +2231,13 @@ class sonarDbManager:
         conditions, values, iupac_code = self.build_generic_variant_condition(match)
 
         # process general variant information
-        conditions.extend(
-            ['"variant.start" = ?', '"variant.end" = ?', '"variant.ref" = ?']
-        )
+        conditions.extend(["variant.start = ?", "variant.end = ?", "variant.ref = ?"])
         values.extend([int(match.group(4)) - 1, int(match.group(4)), match.group(3)])
 
         # handling different forms of alternate allele
         alt = match.group(5)
         if alt.startswith("="):
-            conditions.append('"variant.alt" = ?')
+            conditions.append("variant.alt = ?")
             values.append(alt[1:])
         else:
             try:
@@ -2241,9 +2249,13 @@ class sonarDbManager:
                         for x in itertools.product(*[iupac_code[x] for x in alt])
                     ]
 
-                conditions.append(
-                    f'"variant.alt" IN ({", ".join("?" for _ in range(len(resolved_alt)))})'
-                )
+                if len(resolved_alt) == 1:
+                    conditions.append(f"variant.alt = ?")
+                else:
+                    conditions.append(
+                        f"variant.alt IN ({', '.join('?' for _ in range(len(resolved_alt)))})"
+                    )
+
                 values.extend(resolved_alt)
             except KeyError:
                 LOGGER.error(f"The alternate allele notation '{alt}' is invalid.")
@@ -2266,38 +2278,46 @@ class sonarDbManager:
 
         start, end = match.group(3), match.group(4)[1:]
 
-        # handling different forms of deletions
-        for pos, cond in ((start, '"variant.start"'), (end, '"variant.end"')):
-            if pos.startswith("="):
-                conditions.append(f"{cond} = ?")
-                values.append(int(pos[1:]) - 1)
-            else:
-                conditions.append(f"{cond} >= ?")
-                values.append(int(pos) - 1)
+        # set deletion start
+        if start.startswith("="):
+            conditions.append(f"variant.start = ?")
+            values.append(int(start[1:]) - 1)
+        else:
+            conditions.append(f"variant.start <= ?")
+            values.append(int(start) - 1)
 
-        conditions.append('"variant.alt" = ?')
-        values.append(" ")
+        # set deletion end
+        if end.startswith("="):
+            conditions.append(f"variant.end = ?")
+            end = int(end[1:])
+        else:
+            conditions.append(f"variant.end >= ?")
+        values.append(end)
 
         return conditions, values
 
     # MATCHING QUERIES
 
-    def build_sample_property_sql(
+    def build_sample_property_condition(
         self, name: str, *vals: Union[str, Tuple[str, str]]
-    ) -> Tuple[str, List[Union[str, Tuple[str, str]]]]:
+    ) -> Tuple[List[str], List[Union[str, int, float]]]:
         """
-        Create sql and corresponding list of values to query sample properties based on property name and values.
+        Creates SQL WHERE clause and corresponding list of values to define sample properties based on property name and values.
 
         Args:
             name (str): The property name to query.
             *vals (Union[str, Tuple[str, str]]): The values to apply the query.
 
         Returns:
-            Tuple[str, List[Union[str, Tuple[str, str]]]]: A tuple containing the SQL query string and a list of corresponding values.
+            Tuple[List[str], List[Union[str, int, float]]]: A tuple containing a list of conditional clauses and a list of corresponding values.
         """
-        conditions = ['"property_id" = ?']
+        if name not in self.properties:
+            LOGGER.error(f"Property '{name}' is unkown.")
+            sys.exit(1)
+
+        conditions = ["sample2property.property_id = ?"]
         values = [self.properties[name]["id"]]
-        targetfield = "value_" + self.properties[name]["datatype"]
+        data_field = "sample2property.value_" + self.properties[name]["datatype"]
         query_type = self.properties[name]["querytype"]
 
         # map between the query type and the corresponding method
@@ -2310,157 +2330,118 @@ class sonarDbManager:
             "pango": self.build_pango_condition,
         }
 
-        sqls = {
-            "sample": 'SELECT "sample_id" AS id FROM sample2property WHERE ',
-            "variant": 'SELECT "sample.id" AS id FROM variantView WHERE \n',
-        }
-
         query_function = query_functions.get(query_type)
         if query_function is None:
             LOGGER.error(f"Unknown query type '{query_type}' for property '{name}'.")
             sys.exit(1)
 
-        condition, vals = query_function(targetfield, *vals)
+        condition, vals = query_function(data_field, *vals)
         conditions.append(condition)
         values.extend(vals)
 
-        # Get the SQL template for the specified target
-        target = self.properties[name]["target"]
-        sql_template = sqls.get(target)
-        if sql_template is None:
-            LOGGER.error(f"Unknown target ({target}) stored for property {name}.")
-            sys.exit(1)
+        return conditions, values
 
-        sql = sql_template + " AND ".join(conditions)
-        return (sql, values)
-
-    def create_genomic_profile_sql(
-        self, *variants: str
-    ) -> Tuple[List[Dict[str, Union[str, int]]], List[Dict[str, Union[str, int]]]]:
+    def create_sample_property_case(
+        self,
+        properties: Optional[
+            Dict[str, Tuple[str, List[Union[str, int, float]]]]
+        ] = None,
+    ) -> Tuple[List[str], List[str], List[Union[str, int, float]]]:
         """
-        Create sql and corresponding list of values to query matching genomic profiles based on given mutations.
-
-        Args:
-            variants (str): one or more variant notation(s) to be matched.
-        Returns:
-            Tuple[List[Dict[str, Union[str, int]]], List[Dict[str, Union[str, int]]]]: Returns matching and non-matching profiles as two lists of dictionaries.
-        Raises:
-            SystemExit: dies when the variant type cannot be determined.
-        """
-        # base sql statement
-        base_sql = 'SELECT "sample.id" AS id FROM variantView WHERE '
-
-        # pre-compile regex
-        regexes = {
-            "snv": re.compile(r"^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Zxn]+)$"),
-            "del": re.compile(r"^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$"),
-        }
-
-        # mapping regex to corresponding processing function
-        processing_funcs = {
-            "snv": self.build_snp_and_insert_condition,
-            "del": self.build_deletion_condition,
-        }
-
-        # process variants
-        intersect_sqls = []
-        intersect_vals = []
-        except_sqls = []
-        except_vals = []
-
-        for var in variants:
-            negate = var.startswith("^")
-            if negate:
-                var = var[1:]
-
-            # identify variant type
-            match = None
-            for var_type, regex in regexes.items():
-                if match := regex.match(var):
-                    processing_func = processing_funcs[var_type]
-                    break
-            if not match:
-                LOGGER.error(f"'{var}' is not a valid variant notation.")
-                sys.exit(1)
-
-            # process variant conditions and values
-            conditions, values = processing_func(match)
-            sqls = except_sqls if negate else intersect_sqls
-            vals = except_vals if negate else intersect_vals
-            sqls.append(base_sql + " AND ".join(conditions))
-            vals.extend(values)
-
-        # assemble final sql
-        if not intersect_sqls:
-            intersect_sqls = [base_sql + "1"]
-
-        sql = " INTERSECT ".join(intersect_sqls)
-
-        if except_sqls:
-            sql += " EXCEPT " + " EXCEPT ".join(except_sqls)
-
-        return sql, intersect_vals + except_vals
-
-    def combine_sample_property_queries(
-        self, properties: Optional[Dict[str, List[str]]] = None
-    ) -> Tuple[str, List[str]]:
-        """
-        Combine mutliple SQL queries for metadata-based filtering based on properties.
+        Create SQL WHERE clause for sample metadata-based filtering.
 
         Args:
             properties: A dictionary mapping property names to a list of their values.
 
         Returns:
-            A tuple where the first element is the assembled SQL queries and the second
-            element is a list of values associated with the queries.
+            A tuple where:
+                - first element is a list of CASE statements,
+                - second element is a list of WHERE conditions,
+                - third element is a list of values associated with the queries.
         """
-        property_sqls = []
+        property_cases = []
+        property_conditions = []
         property_vals = []
-        if properties and not all(x is None for x in properties.values()):
-            for pname, vals in properties.items():
-                if vals is None:
-                    continue
-                s, v = self.build_sample_property_sql(pname, *vals)
-                property_sqls.append(s)
-                property_vals.extend(v)
 
-            if len(property_sqls) == 1:
-                final_property_sql = property_sqls[0]
-            else:
-                final_property_sql = " INTERSECT ".join(property_sqls)
+        if not properties:
+            return property_conditions, property_cases, property_vals
 
-            return final_property_sql, property_vals
+        pid = 0
+        for pname, vals in properties.items():
+            if not vals:
+                continue
+            pid += 1
+            case, val = self.build_sample_property_condition(pname.lstrip("."), *vals)
+            property_cases.append(
+                f"CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END AS property_{pid}"
+            )
+            property_conditions.append(f"property_{pid} = 1")
+            property_vals.extend(val)
 
-        return "", []
+        return property_cases, property_conditions, property_vals
 
-    def combine_profile_queries(self, profiles: List[Tuple]) -> Tuple[str, List[str]]:
+    def create_profile_cases(
+        self, *profiles: Tuple[str, ...]
+    ) -> Tuple[List[str], List[str], List[Union[str, int, float]]]:
         """
-        Combine mutliple SQL queries for genomic profile-based filtering.
+        Create SQL CASE and WHERE clauses for genomic profile-based filtering.
 
         Args:
-            profiles: A list of tuples each representing a profile.
+            profiles: A list of tuples, where each tuple contains variant notations representing a genomic profile.
 
         Returns:
-            A tuple where the first element is the assembled SQL queries and the second
-            element is a list of values associated with the queries.
+            A tuple where:
+                - first element is a list of CASE statements,
+                - second element is a list of WHERE conditions,
+                - third element is a list of values associated with the query.
         """
-        profile_queries_and_values = [
-            self.create_genomic_profile_sql(*profile) for profile in profiles
-        ]
+        regexes = {
+            "snv": re.compile(r"^(|[^:]+:)?([^:]+:)?([A-Z]+)([0-9]+)(=?[A-Zxn]+)$"),
+            "del": re.compile(r"^(|[^:]+:)?([^:]+:)?del:(=?[0-9]+)(|-=?[0-9]+)?$"),
+        }
 
-        if profile_queries_and_values:
-            profile_sqls, profile_vals = zip(*profile_queries_and_values)
+        processing_funcs = {
+            "snv": self.build_snp_and_insert_condition,
+            "del": self.build_deletion_condition,
+        }
 
-            if len(profile_sqls) == 1:
-                profile_sql = profile_sqls[0]
-            else:
-                profile_sql = " UNION ".join(
-                    ["SELECT * FROM (" + sql + ")" for sql in profile_sqls]
-                )
+        ids = {}
+        cases = []
+        wheres = []
+        vals = []
 
-            return profile_sql, sonarDbManager.flatten_vals(profile_vals)
+        for profile in profiles:
+            where_conditions = []
 
-        return "", []
+            for mutation in profile:
+                count = 1 if not mutation.startswith("^") else 0
+                mutation = mutation.lstrip("^")
+
+                # create case if novel mutation
+                if mutation not in ids:
+                    ids[mutation] = len(ids) + 1
+                    for mutation_type, regex in regexes.items():
+                        match = regex.match(mutation)
+                        if match:
+                            case, val = processing_funcs[mutation_type](match)
+                            cases.append(
+                                f"CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END AS mutation_{ids[mutation]}"
+                            )
+                            vals.extend(val)
+                            break
+                    if not match:
+                        raise ValueError(
+                            f"'{mutation}' is not a valid variant notation."
+                        )
+
+                where_conditions.append(f"mutation_{ids[mutation]} = {count}")
+
+                if len(where_conditions) == 1:
+                    wheres.extend(where_conditions)
+                elif len(where_conditions) > 1:
+                    wheres.append("(" + " AND ".join(where_conditions) + ")")
+
+        return cases, wheres, vals
 
     def create_sample_selection_sql(
         self,
@@ -2481,35 +2462,90 @@ class sonarDbManager:
         Returns:
             Tuple[str, List[str]]: A SQL query to retrieve matching sample IDs and a list of property and profile values.
         """
-        property_sqls, property_vals = (
-            self.combine_sample_property_queries(properties) if properties else ("", [])
-        )
 
-        profile_sqls, profile_vals = (
-            self.combine_profile_queries(profiles) if profiles else ("", [])
-        )
+        conditions = []
+        vals = []
 
-        sqls = [property_sqls] if property_sqls else []
-
+        # set framsehift-related table data
         if frameshifts_only:
-            sqls.append(
-                'SELECT "sample.id" AS id FROM variantView WHERE "variant.frameshift" = 1'
-            )
+            table = """(
+                        SELECT DISTINCT sample.id AS 'id', sample.seqhash AS seqhash
+                        FROM sample
+                        JOIN alignment ON sample.seqhash = alignment.seqhash
+                        JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
+                        JOIN variant ON alignment2variant.variant_id = variant.id
+                        WHERE variant.frameshift = 1
+                    )"""
+        else:
+            table = "sample"
 
-        if profile_sqls:
-            sqls.append(
-                f"SELECT * FROM ({profile_sqls})"
-                if " UNION " in profile_sqls
-                else profile_sqls
-            )
+        # add sample-related condition
+        if len(samples) == 1:
+            conditions.append(f"s.name = ?")
+            vals.extend(samples)
+        elif len(samples) > 1:
+            sample_wildcards = ", ".join(["?"] * len(samples))
+            conditions.append(f"s.name IN ({sample_wildcards})")
+            vals.extend(samples)
 
-        if samples:
-            samples_wildcards = ", ".join(["?"] * len(samples))
-            sqls.append(f"SELECT id FROM sample WHERE name IN ({samples_wildcards})")
+        # add properties- and profile-related conditions
+        cases = []
 
-        sql = "SELECT id FROM sample" if not sqls else " INTERSECT ".join(sqls)
+        property_cases, property_conditions, property_vals = (
+            self.create_sample_property_case(properties) if properties else ("", [])
+        )
 
-        return sql, list(property_vals) + list(profile_vals) + list(samples)
+        profile_cases, profile_conditions, profile_vals = (
+            self.create_profile_cases(*profiles) if profiles else ("", [])
+        )
+
+        sql = "SELECT sub.sample_id, sub.name, sub.seqhash FROM (SELECT s.id AS 'sample_id', s.name , s.seqhash"
+        joins = ""
+
+        # add joins and cases for sample propetries
+        if property_cases:
+            joins += """JOIN sample2property ON s.id = sample2property.sample_id\n
+                     """
+            cases.extend(property_cases)
+            conditions.extend(property_conditions)
+            vals.extend(property_vals)
+
+        # add joins and cases for genome profiles
+        if profile_cases:
+            joins += """JOIN alignment ON s.seqhash = alignment.seqhash
+                      JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
+                      JOIN variant ON alignment2variant.variant_id = variant.id
+                      JOIN element ON variant.element_id = element.id
+                      JOIN molecule ON element.molecule_id = molecule.id\n"""
+
+            cases.extend(profile_cases)
+            if len(profile_conditions) == 1:
+                conditions.extend(profile_conditions)
+            else:
+                conditions.append("(" + " OR ".join(profile_conditions) + ")")
+            vals.extend(profile_vals)
+
+        if cases:
+            sql += ", " + ", ".join(cases)
+            sql += f" FROM {table} s"
+            sql += " " + joins + " "
+
+        else:
+            sql += f" FROM {table} s"
+
+        if conditions:
+            conditions = " AND ".join(conditions)
+            sql += f" WHERE {conditions}"
+
+        sql += ") AS sub"
+
+        # sql += " GROUP BY sub.sample_id"
+
+        sql = self.format_sql(sql)
+
+        ## TO DO consider framshifts_only option
+
+        return sql, vals
 
     def create_genomic_element_conditions(
         self, reference_accession: str
@@ -2525,167 +2561,14 @@ class sonarDbManager:
         """
         element_ids = self.get_element_ids(reference_accession, "source")
         if len(element_ids) == 1:
-            genome_element_condition = f'"element.id" = {element_ids[0]}'
+            genome_element_condition = f"element.id = {element_ids[0]}"
             molecule_prefix = ""
         else:
             formatted_ids = ", ".join(map(str, element_ids))
-            genome_element_condition = f'"element.id" IN ({formatted_ids})'
-            molecule_prefix = ' "molecule.symbol" || "@" || '
+            genome_element_condition = f"element.id IN ({formatted_ids})"
+            molecule_prefix = ' molecule.symbol || "@" || '
 
         return genome_element_condition, molecule_prefix
-
-    def create_cds_element_condition(self, reference_accession: str) -> str:
-        """
-        Generate SQL condition based on CDS element IDs associated with the given reference accession.
-
-        Args:
-            reference_accession (str): The reference accession to generate the SQL condition for.
-
-        Returns:
-            str: SQL condition for matching CDS element IDs.
-        """
-        cds_element_ids = [
-            str(id) for id in self.get_element_ids(reference_accession, "cds")
-        ]
-
-        return (
-            f'"element.id" = {cds_element_ids[0]}'
-            if len(cds_element_ids) == 1
-            else f'"element.id" IN ({", ".join(cds_element_ids)})'
-        )
-
-    def create_sample_property_output_sql(self) -> str:
-        """
-        Create sql to fetch all sample properties for final output.
-
-        Returns:
-            Str: The sql.
-
-        """
-
-        # Assemble the base SQL select statement.
-        sql = ["SELECT name as 'sample.name'"]
-        for prop_name, prop_info in self.properties.items():
-            sql.append(
-                f"MAX(CASE WHEN s2p.property_id = {prop_info['id']} THEN s2p.value_{prop_info['datatype']} ELSE NULL END) AS '{prop_name}'"
-            )
-        sql = ", ".join(sql)
-        sql += """FROM
-                    sample s
-                LEFT JOIN
-                    sample2property s2p
-                ON
-                    s.id = s2p.sample_id
-                WHERE
-                    s.id IN (SELECT id FROM sample_filter)
-                GROUP BY
-                    s.name"""
-        return sql
-
-    def create_special_variant_filter_conditions(
-        self, filter_n: bool, filter_x: bool, ignore_terminal_gaps: bool
-    ) -> Tuple[str, str, str]:
-        """
-        Get filter conditions for SQL query.
-
-        Args:
-            filter_n (bool): If True, filter out 'N' variants.
-            filter_x (bool): If True, filter out 'X' variants.
-            ignore_terminal_gaps (bool): If True, filter out terminal gap variants.
-
-        Returns:
-            Tuple[str, str, str]: Filter conditions for 'N', 'X', and terminal gap variants.
-        """
-        filter_n_sql = "" if filter_n else ' AND "variant.alt" != "N" '
-        filter_x_sql = "" if filter_x else ' AND "variant.alt" != "X" '
-        filter_terminal_gaps_sql = (
-            ' AND "variant.alt" != "." ' if ignore_terminal_gaps else ""
-        )
-
-        return filter_n_sql, filter_x_sql, filter_terminal_gaps_sql
-
-    def create_profile_output_sql(
-        self,
-        reference_accession: str,
-        filter_n: bool,
-        filter_x: bool,
-        ignore_terminal_gaps: bool,
-    ) -> str:
-        """
-        Create sql to fetch genomic profiles for final output.
-
-        Args:
-            reference_accession (str): Reference accession to construct the conditions for the SQL query.
-            filter_n (bool): Flag indicating whether to include 'N' in the profiles.
-            filter_x (bool): Flag indicating whether to include 'X' in the profiles.
-            ignore_terminal_gaps (bool): Flag indicating whether to ignore terminal gaps in the profiles.
-
-        Returns:
-            str: The sql.
-        """
-
-        # Prepare the list of sample IDs for inclusion in the SQL query
-        # Using the "?" placeholder for each sample ID to prevent SQL injection
-
-        # Prepare the special filter conditions based on the input flags
-        (
-            filter_n_sql,
-            filter_x_sql,
-            filter_terminal_gaps_sql,
-        ) = self.create_special_variant_filter_conditions(
-            filter_n, filter_x, ignore_terminal_gaps
-        )
-
-        # Construct the conditions based on the reference accession
-        genome_condition, molecule_prefix = self.create_genomic_element_conditions(
-            reference_accession
-        )
-        cds_condition = self.create_cds_element_condition(reference_accession)
-
-        # Assemble the SQL query
-        sql = f"""
-            SELECT
-                s.name AS "sample.name",
-                COALESCE(nt_profiles.nt_profile, '') AS NUC_PROFILE,
-                COALESCE(aa_profiles.aa_profile, '') AS AA_PROFILE,
-                COALESCE(nt_profiles.frameshifts, '') AS FRAMESHIFTS
-            FROM
-                sample s
-            LEFT JOIN (
-                SELECT vv1."sample.id",
-                    GROUP_CONCAT(vv1.sorted_nt_variants) AS nt_profile,
-                    GROUP_CONCAT(CASE WHEN vv1.frameshift = 1 THEN vv1.frameshift_allele END) AS frameshifts
-                FROM (
-                    SELECT vv1."sample.id",
-                        {molecule_prefix}vv1."variant.label" AS sorted_nt_variants,
-                        vv1."variant.frameshift" AS frameshift,
-                        CASE WHEN vv1."variant.frameshift" = 1 THEN vv1."variant.label" ELSE '' END AS frameshift_allele
-                    FROM
-                        variantView vv1
-                        WHERE vv1."sample.id" IN (SELECT id FROM sample_filter)
-                        AND {genome_condition}{filter_n_sql}{filter_terminal_gaps_sql}
-                    ORDER BY vv1."element.id", vv1."variant.start"
-                ) vv1
-                GROUP BY vv1."sample.id"
-            ) nt_profiles ON s.id = nt_profiles."sample.id"
-            LEFT JOIN (
-                SELECT vv2."sample.id",
-                    GROUP_CONCAT(vv2.sorted_aa_variants) AS aa_profile
-                FROM (
-                    SELECT vv2."sample.id",
-                        {molecule_prefix}vv2."element.symbol" || ":" || vv2."variant.label" AS sorted_aa_variants
-                    FROM variantView vv2
-                    WHERE vv2."sample.id" IN (SELECT id FROM sample_filter)
-                    AND {cds_condition}{filter_x_sql}
-                    ORDER BY vv2."element.id", vv2."variant.start"
-                ) vv2
-                GROUP BY vv2."sample.id"
-            ) aa_profiles ON s.id = aa_profiles."sample.id"
-            WHERE s.id IN (SELECT id FROM sample_filter)
-            """
-
-        # Execute the SQL query and return the result
-        return sql
 
     def handle_csv_tsv_format(
         self,
@@ -2719,27 +2602,53 @@ class sonarDbManager:
         else:
             cols = ", ".join(output_columns)
 
-        # Execute the sample selection query and get sample IDs
-        property_sql = self.create_sample_property_output_sql()
-        profile_sql = self.create_profile_output_sql(
-            reference_accession,
-            filter_n=filter_n,
-            filter_x=filter_x,
-            ignore_terminal_gaps=ignore_terminal_gaps,
-        )
+        # process property ouptu
+        property_cols = []
+        property_joins = []
+        pid = 0
+        for prop_name, prop_data in self.properties.items():
+            pid += 1
+            prop_name = prop_name.lstrip(".")
+            property_cols.append(
+                f"sp{pid}.value_{prop_data['datatype']} AS {prop_name}"
+            )
+            property_joins.append(
+                f"LEFT JOIN sample2property sp{pid} ON fs.sample_id = sp{pid}.sample_id AND sp{pid}.property_id = {prop_data['id']}"
+            )
 
-        sql = f"""
-            WITH sample_filter AS ({sample_selection_query})
+        property_cols_str = "\n, ".join(property_cols)
+        property_joins_str = "\n".join(property_joins)
 
-            SELECT {cols}
-            FROM (
-                {property_sql}
-            ) AS A
-            JOIN (
-                {profile_sql}
-            ) AS B
-            ON A."sample.name" = B."sample.name";
-            """
+        # process mutation display filters
+        aa_filter = "AND v.alt != 'X'" if filter_x else ""
+        nuc_filter = []
+        if filter_n:
+            nuc_filter.append("v.alt != 'N'")
+        if ignore_terminal_gaps:
+            nuc_filter.append("v.alt != '.'")
+        nuc_filter = "AND " + " AND ".join(nuc_filter) if nuc_filter else ""
+
+        # assemble sql
+        sql = f"""SELECT 
+                    fs.sample_id AS 'sample.id',
+                    fs.name AS 'sample.name',
+                    fs.seqhash,
+                    {property_cols_str},
+                    GROUP_CONCAT(CASE WHEN v.element_id = 1 AND v.frameshift = 1 THEN v.label END, ' ') AS frameshifts,
+                    GROUP_CONCAT(CASE WHEN v.element_id = 1 {nuc_filter} THEN v.label END, ' ') AS genomic_profiles,
+                    GROUP_CONCAT(CASE WHEN v.element_id IN (12, 13, 14, 15, 16, 17, 18, 19, 20, 21) {aa_filter} THEN e.symbol || ':' || v.label END, ' ') AS proteomic_profiles
+                FROM (
+                    {sample_selection_query}
+                ) AS fs
+                {property_joins_str}
+                LEFT JOIN alignment a ON fs.seqhash = a.seqhash
+                LEFT JOIN alignment2variant a2v ON a.id = a2v.alignment_id
+                LEFT JOIN variant v ON a2v.variant_id = v.id
+                LEFT JOIN element e ON v.element_id = e.id
+                GROUP BY fs.sample_id 
+                """
+
+        sql = self.format_sql(sql)
         return self.cursor.execute(sql, sample_selection_values).fetchall()
 
     def handle_count_format(

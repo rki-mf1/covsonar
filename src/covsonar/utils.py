@@ -874,8 +874,8 @@ class sonarUtils:
                 properties=properties,
                 format=format,
                 output_columns=output_column,
-                filter_n=showNX,
-                filter_x=showNX,
+                filter_n=not showNX,
+                filter_x=not showNX,
                 frameshifts_only=frameshifts_only,
                 ignore_terminal_gaps=ignore_terminal_gaps,
             )
@@ -1077,6 +1077,7 @@ class sonarUtils:
         tsv: If True, the output is formatted as a TSV (Tab-Separated Values) file. Otherwise, it is formatted as a CSV (Comma-Separated Values) file.
         """
         # Convert list data to an iterator
+
         if isinstance(data, list):
             data_iter = iter(data)
         else:
