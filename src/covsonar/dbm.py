@@ -461,13 +461,6 @@ class sonarDbManager:
 
         Returns:
             str: The formatted SQL string.
-
-        Example:
-            >>> sql = "SELECT * FROM table WHERE id=1"
-            >>> print(SomeClassName.format_sql(sql))
-            SELECT *
-            FROM table
-            WHERE id = 1
         """
         return sqlparse.format(sql, reindent=True, keyword_case="upper")
 
@@ -831,6 +824,15 @@ class sonarDbManager:
             >>> dbm = getfixture('init_writeable_dbm')
             >>> dbm.insert_property(1, "LINEAGE", "BA.5")
         """
+        illegal = {
+            "GENOMIC_PROFILE",
+            "SAMPLE_NAME",
+            "PROTEOMIC_PROFILE",
+            "FRAMESHIFT_MUTATION",
+        }
+        if property_name in illegal:
+            LOGGER.error("This proprty name is reserved and cannot be used.")
+            sys.exit(1)
         sql = (
             "INSERT OR REPLACE INTO "
             + self.properties[property_name]["target"]
@@ -963,6 +965,14 @@ class sonarDbManager:
                 "UPDATE molecule SET standard = ? WHERE reference_id = ? AND standard = 1",
                 [0, reference_id],
             )
+        else:
+            result = self.cursor.execute(
+                'SELECT COUNT(*) AS count FROM referenceView WHERE "reference.id" = ? AND "molecule.standard" = 1',
+                [reference_id],
+            ).fetchone()
+            if result["count"] == 0:
+                standard = 1
+
         self.cursor.execute(
             "INSERT OR REPLACE INTO molecule (id, reference_id, type, accession, symbol, description, segment, length, standard) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);",
             [
@@ -1247,10 +1257,10 @@ class sonarDbManager:
             Dict[str, int]: Dictionary with molecule accessions as keys and their ids as values.
         """
         if reference_accession is not None:
-            condition = "reference.accession = ?"
+            condition = '"reference.accession" = ?'
             val = [reference_accession]
         else:
-            condition = "reference.standard = ?"
+            condition = '"reference.standard" = ?'
             val = [1]
 
         sql = (
@@ -1282,13 +1292,13 @@ class sonarDbManager:
         if not fields:
             fields = "*"
         elif "molecule.accession" not in fields:
-            fields = list(set(fields)) + ["molecule.accession"]
+            fields = list(set(fields)) + ['"molecule.accession"']
 
         if reference_accession:
-            condition = "reference.accession = ?"
+            condition = '"reference.accession" = ?'
             vals = [reference_accession]
         else:
-            condition = "reference.standard = ?"
+            condition = '"reference.standard" = ?'
             vals = [1]
 
         sql = (
@@ -1298,6 +1308,7 @@ class sonarDbManager:
             + condition
             + ";"
         )
+
         row = self.cursor.execute(sql, vals).fetchall()
         return {x["molecule.accession"]: x for x in row} if row else {}
 
@@ -1405,28 +1416,28 @@ class sonarDbManager:
 
         # Assemble conditions defining accessions or standard elements
         if reference_accession:
-            conditions.append("reference.accession = ?")
+            conditions.append('"reference.accession" = ?')
             values.append(reference_accession)
         else:
-            conditions.append("reference.standard = ?")
+            conditions.append('"reference.standard" = ?')
             values.append(1)
 
         if molecule_accession:
-            conditions.append("molecule.accession = ?")
+            conditions.append('"molecule.accession" = ?')
             values.append(molecule_accession)
         else:
-            conditions.append("molecule.standard = ?")
-            values.append(1)
+            conditions.append(
+                '("molecule.standard" IS NULL OR "molecule.standard" = 1)'
+            )
 
         if element_accession:
-            conditions.append("element.accession = ?")
+            conditions.append('"element.accession" = ?')
             values.append(element_accession)
         elif not element_type:
-            conditions.append("element.type = ?")
-            values.append("source")
+            conditions.append('("element.type" IS NULL OR "element.type" = \'source\')')
 
         if element_type:
-            conditions.append("element.type = ?")
+            conditions.append('"element.type" = ?')
             values.append(element_type)
 
         # Construct SQL query to fetch the annotation
@@ -2250,7 +2261,7 @@ class sonarDbManager:
                     ]
 
                 if len(resolved_alt) == 1:
-                    conditions.append(f"variant.alt = ?")
+                    conditions.append("variant.alt = ?")
                 else:
                     conditions.append(
                         f"variant.alt IN ({', '.join('?' for _ in range(len(resolved_alt)))})"
@@ -2258,7 +2269,7 @@ class sonarDbManager:
 
                 values.extend(resolved_alt)
             except KeyError:
-                LOGGER.error(f"The alternate allele notation '{alt}' is invalid.")
+                LOGGER.error(f"Invalid alternate allele notation '{alt}'.")
                 sys.exit(1)
 
         return conditions, values
@@ -2280,19 +2291,22 @@ class sonarDbManager:
 
         # set deletion start
         if start.startswith("="):
-            conditions.append(f"variant.start = ?")
+            conditions.append("variant.start = ?")
             values.append(int(start[1:]) - 1)
         else:
-            conditions.append(f"variant.start <= ?")
+            conditions.append("variant.start <= ?")
             values.append(int(start) - 1)
 
         # set deletion end
         if end.startswith("="):
-            conditions.append(f"variant.end = ?")
+            conditions.append("variant.end = ?")
             end = int(end[1:])
         else:
-            conditions.append(f"variant.end >= ?")
-        values.append(end)
+            conditions.append("variant.end >= ?")
+        values.append(int(end))
+
+        conditions.append("variant.alt = ?")
+        values.append(" ")
 
         return conditions, values
 
@@ -2430,9 +2444,8 @@ class sonarDbManager:
                             vals.extend(val)
                             break
                     if not match:
-                        raise ValueError(
-                            f"'{mutation}' is not a valid variant notation."
-                        )
+                        LOGGER.error(f"Invalid mutation notation '{mutation}'.")
+                        sys.exit(1)
 
                 where_conditions.append(f"mutation_{ids[mutation]} = {count}")
 
@@ -2469,7 +2482,7 @@ class sonarDbManager:
         # set framsehift-related table data
         if frameshifts_only:
             table = """(
-                        SELECT DISTINCT sample.id AS 'id', sample.seqhash AS seqhash
+                        SELECT DISTINCT sample.id AS id, sample.name AS name, sample.seqhash AS seqhash
                         FROM sample
                         JOIN alignment ON sample.seqhash = alignment.seqhash
                         JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
@@ -2481,7 +2494,7 @@ class sonarDbManager:
 
         # add sample-related condition
         if len(samples) == 1:
-            conditions.append(f"s.name = ?")
+            conditions.append("s.name = ?")
             vals.extend(samples)
         elif len(samples) > 1:
             sample_wildcards = ", ".join(["?"] * len(samples))
@@ -2492,11 +2505,11 @@ class sonarDbManager:
         cases = []
 
         property_cases, property_conditions, property_vals = (
-            self.create_sample_property_case(properties) if properties else ("", [])
+            self.create_sample_property_case(properties) if properties else ([], [], [])
         )
 
         profile_cases, profile_conditions, profile_vals = (
-            self.create_profile_cases(*profiles) if profiles else ("", [])
+            self.create_profile_cases(*profiles) if profiles else ([], [], [])
         )
 
         sql = "SELECT sub.sample_id, sub.name, sub.seqhash FROM (SELECT s.id AS 'sample_id', s.name , s.seqhash"
@@ -2543,32 +2556,60 @@ class sonarDbManager:
 
         sql = self.format_sql(sql)
 
-        ## TO DO consider framshifts_only option
-
         return sql, vals
 
     def create_genomic_element_conditions(
-        self, reference_accession: str
+        self,
+        reference_accession: str,
+        element_alias: Optional[str] = "element",
+        molecule_alias: Optional[str] = "molecule",
     ) -> Tuple[str, str]:
         """
         Generate the genomic element conditions for the SQL query.
 
         Args:
             reference_accession (str): The reference accession to create genomic element conditions.
+            element_alias: ALisas used for element table
+            molecule_alias: ALisas used for molecule table
 
         Returns:
             Tuple[str, str]: A tuple containing the genomic element condition and the molecule prefix.
         """
         element_ids = self.get_element_ids(reference_accession, "source")
         if len(element_ids) == 1:
-            genome_element_condition = f"element.id = {element_ids[0]}"
+            genome_element_condition = f"{element_alias}.id = {element_ids[0]}"
             molecule_prefix = ""
         else:
             formatted_ids = ", ".join(map(str, element_ids))
-            genome_element_condition = f"element.id IN ({formatted_ids})"
-            molecule_prefix = ' molecule.symbol || "@" || '
+            genome_element_condition = f"{element_alias}.id IN ({formatted_ids})"
+            molecule_prefix = f'{molecule_alias}.symbol || "@" || '
 
         return genome_element_condition, molecule_prefix
+
+    def create_special_variant_filter_conditions(
+        self, filter_n: bool, filter_x: bool, ignore_terminal_gaps: bool
+    ) -> Tuple[str, str]:
+        """
+        Create query conditions for special variants such as ambiguities and terminal gaps.
+
+        Args:
+            filter_n (bool): Flag for handling 'N' variants.
+            filter_x (bool): Flag for handling 'X' variants.
+            ignore_terminal_gaps (bool): Flag for handling terminal gap variants.
+
+        Returns:
+            Tuple[str, str]: A tuple containing the nucleotide filter and amino acid filter conditions.
+        """
+
+        # process mutation display filters
+        aa_filter = " AND alt != 'X'" if filter_x else ""
+        nuc_filter = []
+        if filter_n:
+            nuc_filter.append("alt != 'N'")
+        if ignore_terminal_gaps:
+            nuc_filter.append("alt != '.'")
+        nuc_filter = " AND " + " AND ".join(nuc_filter) if nuc_filter else ""
+        return nuc_filter, aa_filter
 
     def handle_csv_tsv_format(
         self,
@@ -2596,12 +2637,6 @@ class sonarDbManager:
         Returns:
             List[Dict[str, str]]: List of dictionaries where each dictionary represents a row in the resulting csv/tsv file.
         """
-        # set output columns
-        if not output_columns:
-            cols = "*"
-        else:
-            cols = ", ".join(output_columns)
-
         # process property ouptu
         property_cols = []
         property_joins = []
@@ -2615,40 +2650,69 @@ class sonarDbManager:
             property_joins.append(
                 f"LEFT JOIN sample2property sp{pid} ON fs.sample_id = sp{pid}.sample_id AND sp{pid}.property_id = {prop_data['id']}"
             )
-
         property_cols_str = "\n, ".join(property_cols)
         property_joins_str = "\n".join(property_joins)
 
         # process mutation display filters
-        aa_filter = "AND v.alt != 'X'" if filter_x else ""
-        nuc_filter = []
-        if filter_n:
-            nuc_filter.append("v.alt != 'N'")
-        if ignore_terminal_gaps:
-            nuc_filter.append("v.alt != '.'")
-        nuc_filter = "AND " + " AND ".join(nuc_filter) if nuc_filter else ""
+        nuc_filter, aa_filter = self.create_special_variant_filter_conditions(
+            filter_n, filter_x, ignore_terminal_gaps
+        )
+
+        # set genomic and cds elements to consider
+        genome_condition, molecule_prefix = self.create_genomic_element_conditions(
+            reference_accession, element_alias="e", molecule_alias="m"
+        )
+
+        genome_condition = genome_condition.replace("e.id", "element_id")
+
+        molecule_col = "m.symbol," if molecule_prefix else ""
+        molecule_join = (
+            "LEFT JOIN molecule m ON e.molecule_id = m.id" if molecule_prefix else ""
+        )
+        molecule_order = "m.symbol, " if molecule_prefix else ""
+
+        cds_ids = ", ".join(
+            [str(x) for x in self.get_element_ids(reference_accession, "cds")]
+        )
 
         # assemble sql
-        sql = f"""SELECT 
-                    fs.sample_id AS 'sample.id',
-                    fs.name AS 'sample.name',
-                    fs.seqhash,
-                    {property_cols_str},
-                    GROUP_CONCAT(CASE WHEN v.element_id = 1 AND v.frameshift = 1 THEN v.label END, ' ') AS frameshifts,
-                    GROUP_CONCAT(CASE WHEN v.element_id = 1 {nuc_filter} THEN v.label END, ' ') AS genomic_profiles,
-                    GROUP_CONCAT(CASE WHEN v.element_id IN (12, 13, 14, 15, 16, 17, 18, 19, 20, 21) {aa_filter} THEN e.symbol || ':' || v.label END, ' ') AS proteomic_profiles
-                FROM (
-                    {sample_selection_query}
-                ) AS fs
-                {property_joins_str}
-                LEFT JOIN alignment a ON fs.seqhash = a.seqhash
-                LEFT JOIN alignment2variant a2v ON a.id = a2v.alignment_id
-                LEFT JOIN variant v ON a2v.variant_id = v.id
-                LEFT JOIN element e ON v.element_id = e.id
-                GROUP BY fs.sample_id 
+        props_str = "rows." + ", rows.".join(sorted(self.properties.keys()))
+        sql = f"""SELECT
+                name AS SAMPLE_NAME,
+                {props_str},
+                GROUP_CONCAT(CASE WHEN {genome_condition}{nuc_filter} THEN label END, ' ' ) AS GENOMIC_PROFILE,
+                GROUP_CONCAT(CASE WHEN element_id IN ({cds_ids}){aa_filter} THEN {molecule_prefix}symbol || ':' || label END, ' ' ) AS PROTEOMIC_PROFILE,
+                GROUP_CONCAT(CASE WHEN {genome_condition} AND frameshift = 1 THEN label END, ' ' ) AS FRAMESHIFT_MUTATIONS
+                FROM
+                (
+                    SELECT
+                        fs.sample_id,
+                        fs.name,
+                        fs.seqhash,
+                        v.start,
+                        v.label,
+                        v.end,
+                        v.ref,
+                        v.alt,
+                        v.element_id,
+                        v.frameshift,
+                        e.symbol,
+                        {molecule_col}
+                        {property_cols_str}
+                    FROM (
+                        {sample_selection_query}
+                    ) AS fs
+                    {property_joins_str}
+                    LEFT JOIN alignment a ON fs.seqhash = a.seqhash
+                    LEFT JOIN alignment2variant a2v ON a.id = a2v.alignment_id
+                    LEFT JOIN variant v ON a2v.variant_id = v.id
+                    LEFT JOIN element e ON v.element_id = e.id
+                    {molecule_join}
+                    ORDER BY {molecule_order}e.symbol, v.start
+                ) as rows
+                GROUP BY SAMPLE_NAME
+                ORDER BY SAMPLE_NAME
                 """
-
-        sql = self.format_sql(sql)
         return self.cursor.execute(sql, sample_selection_values).fetchall()
 
     def handle_count_format(
@@ -2667,7 +2731,7 @@ class sonarDbManager:
         This function counts the number of distinct sample IDs in a selected sample set.
         It combines the sample selection SQL command with count operation and executes the resulting SQL command.
         """
-        sql = f"SELECT COUNT(DISTINCT id) AS count FROM ({sample_selection_sql})"
+        sql = f"SELECT COUNT(DISTINCT sample_id) AS count FROM ({sample_selection_sql})"
         result = self.cursor.execute(sql, sample_selection_values).fetchone()
 
         return result["count"] if result else 0
@@ -2692,30 +2756,51 @@ class sonarDbManager:
         Returns:
             List[Dict[str, str]]: List of dictionaries where each dictionary represents a row in the resulting VCF file.
         """
-        (
-            filter_n_sql,
-            _,
-            filter_terminal_gaps_sql,
-        ) = self.create_special_variant_filter_conditions(
+        genome_condition, _ = self.create_genomic_element_conditions(
+            reference_accession, element_alias="e", molecule_alias="m"
+        )
+        nuc_filter, _ = self.create_special_variant_filter_conditions(
             filter_n, False, ignore_terminal_gaps
         )
-        genome_condition, _ = self.create_genomic_element_conditions(
-            reference_accession
-        )
 
-        sql = f"""
-            SELECT
-                "element.id", "element.type", "molecule.accession",
-                "variant.start", "variant.ref", "variant.alt",
-                "variant.label", group_concat("sample.name") as samples
-            FROM
-                variantView
-            WHERE
-                "sample.id" IN ({sample_selection_sql}) AND {genome_condition}{filter_n_sql}{filter_terminal_gaps_sql}
-            GROUP BY
-                "molecule.accession", "variant.start", "variant.ref", "variant.alt"
-            ORDER BY
-                "molecule.accession", "variant.start"
+        sql = f"""SELECT
+                    rows.element_id AS "element.id",
+                    rows.type AS "element.type",
+                    rows.accession AS "molecule.accession",
+                    rows.start AS "variant.start",
+                    rows.end AS "variant.end",
+                    rows.ref AS "variant.ref",
+                    rows.alt AS "variant.alt",
+                    rows.label AS "variant.label",
+                    GROUP_CONCAT(rows.name) as samples
+                FROM
+                (
+                    SELECT
+                        fs.sample_id,
+                        fs.name,
+                        fs.seqhash,
+                        v.start,
+                        v.label,
+                        v.end,
+                        v.ref,
+                        v.alt,
+                        v.element_id,
+                        e.type,
+                        m.accession
+                    FROM (
+                        {sample_selection_sql}
+                    ) AS fs
+                    LEFT JOIN alignment a ON fs.seqhash = a.seqhash
+                    LEFT JOIN alignment2variant a2v ON a.id = a2v.alignment_id
+                    LEFT JOIN variant v ON a2v.variant_id = v.id
+                    LEFT JOIN element e ON v.element_id = e.id
+                    LEFT JOIN molecule m ON e.molecule_id = m.id
+                    WHERE {genome_condition}{nuc_filter}
+                ) as rows
+                GROUP BY
+                    "molecule.accession", "variant.start", "variant.ref", "variant.alt"
+                ORDER BY
+                    "molecule.accession", "variant.start"
         """
         return self.cursor.execute(sql, sample_selection_values)
 

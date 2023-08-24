@@ -118,8 +118,6 @@ def test_get_molecule_data(monkeypatch):
 def test_get_annotation(init_readonly_dbm):
     anno = init_readonly_dbm.get_annotation(element_accession="ORF18")
     assert len(anno) == 0
-    # assert "ORF10" == anno[0]["element.accession"]
-
     anno = init_readonly_dbm.get_annotation(reference_accession="MN908947.3")
     assert "MN908947.3" == anno[0]["reference.accession"]
 
@@ -201,19 +199,19 @@ def test_upgrade_db(tmpfile_name, monkeypatch, logger, caplog):
 def test_query_profile(init_readonly_dbm):
     """unit test"""
     # snp
-    _sql_val = init_readonly_dbm.create_profile_sql(["A3451T"])
-    assert all(i in _sql_val[1] for i in [1, 1, 3450, 3451, "A", "T"])
-    _sql_val = init_readonly_dbm.create_profile_sql(["S:N501Y"])
-    assert all(i in _sql_val[1] for i in [1, "cds", "S", 500, 501, "N", "Y"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["A3451T"])
+    assert all(i in _sql_val[2] for i in [1, 1, 3450, 3451, "A", "T"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["S:N501Y"])
+    assert all(i in _sql_val[2] for i in [1, "cds", "S", 500, 501, "N", "Y"])
     # del
-    _sql_val = init_readonly_dbm.create_profile_sql(["ORF1ab:del:3001-3004"])
-    assert all(i in _sql_val[1] for i in [1, "cds", "ORF1ab", 3000, 3003, " "])
-    _sql_val = init_readonly_dbm.create_profile_sql(["del:11288-11296"])
-    assert all(i in _sql_val[1] for i in [11287, 11295, " "])
+    _sql_val = init_readonly_dbm.create_profile_cases(["ORF1ab:del:3001-3004"])
+    assert all(i in _sql_val[2] for i in [1, "cds", "ORF1ab", 3000, 3004, " "])
+    _sql_val = init_readonly_dbm.create_profile_cases(["del:11288-11296"])
+    assert all(i in _sql_val[2] for i in [1, 1, 11287, 11296, " "])
     # any AA
-    _sql_val = init_readonly_dbm.create_profile_sql(["S:K517X"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["S:K517X"])
     assert all(
-        i in _sql_val[1]
+        i in _sql_val[2]
         for i in [
             "O",
             "K",
@@ -239,9 +237,9 @@ def test_query_profile(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # any NT
-    _sql_val = init_readonly_dbm.create_profile_sql(["C417N"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["C417N"])
     assert all(
-        i in _sql_val[1]
+        i in _sql_val[2]
         for i in [
             "Y",
             "H",
@@ -261,19 +259,19 @@ def test_query_profile(init_readonly_dbm):
         ]
     )
     # exact AA
-    _sql_val = init_readonly_dbm.create_profile_sql(["S:K417x"])
-    assert all(i in _sql_val[1] for i in ["S", 416, 417, "K", "X"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["S:K417x"])
+    assert all(i in _sql_val[2] for i in ["S", 416, 417, "K", "X"])
     # excat NT
-    _sql_val = init_readonly_dbm.create_profile_sql(["T418n"])
-    assert all(i in _sql_val[1] for i in [418, "T", "N"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["T418n"])
+    assert all(i in _sql_val[2] for i in [418, "T", "N"])
 
 
 def test_query_profile_complexcase(init_readonly_dbm):
     """unit test"""
     # NT special case
-    _sql_val = init_readonly_dbm.create_profile_sql(["T418nN"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["T418nN"])
     assert all(
-        i in _sql_val[1]
+        i in _sql_val[2]
         for i in [
             417,
             418,
@@ -296,15 +294,15 @@ def test_query_profile_complexcase(init_readonly_dbm):
         ]
     )  # we reduce some match characters
     # AA special case
-    _sql_val = init_readonly_dbm.create_profile_sql(["S:K418XX"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["S:K418XX"])
     assert all(
-        i in _sql_val[1]
+        i in _sql_val[2]
         for i in ["CC", "MZ", "ZQ", "EN", "NN", "EQ", "WΦ", "XW", "ζW", "πζ", "πY"]
     )
     # Combine AA and NT
-    _sql_val = init_readonly_dbm.create_profile_sql(["S:K418I", "T418A"])
+    _sql_val = init_readonly_dbm.create_profile_cases(["S:K418I", "T418A"])
     assert all(
-        i in _sql_val[1] for i in ["S", 417, 418, "K", "I", 1, 1, 417, 418, "T", "A"]
+        i in _sql_val[2] for i in ["S", 417, 418, "K", "I", 1, 1, 417, 418, "T", "A"]
     )
 
 
@@ -314,11 +312,8 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_profile_sql(["del:-10000"])
-        assert (
-            "The alternate allele notation 'del:-10000' is invalid."
-            == caplog.records[-1].message
-        )
+        init_readonly_dbm.create_profile_cases(["del:-10000"])
+        assert "Invalid mutation notation 'del:-10000'." == caplog.records[-1].message
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
 
@@ -326,7 +321,7 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_profile_sql(["S:dl:501-1000"])
+        init_readonly_dbm.create_profile_cases(["S:dl:501-1000"])
         assert "Please check the query statement." == caplog.records[-1].message
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
@@ -335,11 +330,8 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_profile_sql(["K500IX"])
-        assert (
-            "The alternate allele notation 'IX' is invalid."
-            == caplog.records[-1].message
-        )
+        init_readonly_dbm.create_profile_cases(["K500IX"])
+        assert "Invalid allele notation 'IX'." == caplog.records[-1].message
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
 
@@ -347,11 +339,8 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_profile_sql(["A417xT"])
-        assert (
-            "The alternate allele notation 'xT' is invalid."
-            == caplog.records[-1].message
-        )
+        init_readonly_dbm.create_profile_cases(["A417xT"])
+        assert "Invalid alternate allele notation 'xT'." == caplog.records[-1].message
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
 
@@ -359,11 +348,8 @@ def test_query_profile_failcase(init_readonly_dbm, logger, caplog):
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        init_readonly_dbm.create_profile_sql(["K417X~"])
-        assert (
-            "The alternate allele notation 'X~' is invalid."
-            == caplog.records[-1].message
-        )
+        init_readonly_dbm.create_profile_cases(["K417X~"])
+        assert "Invalid alternate allele notation 'X~'." == caplog.records[-1].message
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
 
