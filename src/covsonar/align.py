@@ -70,7 +70,7 @@ class sonarAligner(object):
                                   aligned query sequence, and CIGAR string.
         """
         result = parasail.sg_trace_striped_32(
-            qryseq, refseq, gapopen, gapextend, parasail.blosum62
+            qryseq, refseq, gapopen, gapextend, parasail.dnafull
         )
 
         # Extract the aligned sequences and CIGAR string from the parasail result
