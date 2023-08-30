@@ -2679,7 +2679,9 @@ class sonarDbManager:
         )
 
         # assemble sql
-        props_str = "rows." + ", rows.".join(sorted(self.properties.keys()))
+        props_str = "rows." + ", rows.".join(
+            sorted([s.lstrip(".") for s in self.properties.keys()])
+        )
         sql = f"""SELECT
                 name AS SAMPLE_NAME,
                 {props_str},

@@ -69,8 +69,8 @@ class sonarAligner(object):
             Tuple[str, str, str]: Tuple containing the aligned reference sequence,
                                   aligned query sequence, and CIGAR string.
         """
-        result = parasail.sg_trace(
-            qryseq, refseq, gapopen, gapextend, parasail.blosum62
+        result = parasail.sg_trace_striped_32(
+            qryseq, refseq, gapopen, gapextend, parasail.dnafull
         )
 
         # Extract the aligned sequences and CIGAR string from the parasail result
