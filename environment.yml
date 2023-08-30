@@ -4,8 +4,6 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - emboss=6.6.0
-  - fortran-compiler
   - nox=2023.4.22
   - poetry=1.5.1
   - pre-commit
