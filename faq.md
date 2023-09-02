@@ -31,7 +31,7 @@ Left-aligned (covSonar2):       ATGCCAT---NNNNNNTTCTGA
 **A:** The way deletions are formatted has undergone a significant transformation from `del:1021:9` in `covSonar` to the more intuitive `del:1021-1030` in `covSonar2` where the deletion length is replaced by the end coordinate. 
 This shift represents a move towards a clearer and more informative style that explicitly includes both the start and end positions to meet standard DNA sequence representation conventions and to minimize any confusion.
 
-**Q: Why are insertions following a SNP notated differently in covSonar2 compared to covSonar?**
+**Q: Why are insertions following a SNP notated differently in `covSonar2` compared to `covSonar`?**
 
 **A:** In covSonar2, the notation for insertions following a single nucleotide polymorphism (SNP) has been refined to accurately reflect their position within the genomic coordinate system, providing improved clarity and specificity. Unlike covSonar, which previously used a condensed mutation notation, covSonar2 employs a more explicit approach.
 
@@ -54,3 +54,17 @@ Sequence with Insertion: ATGCCATGATAGTTTAAGGAATTCTGA
 ```
 
 In such cases, covSonar2 addresses the complexity more explicitly. While covSonar used to express this as a single mutation (`T11AGTTTA`), which might not accurately represent both independent mutation events, covSonar2 dissects the mutations into separate notations. This approach references both independent mutational events as `T11A` and `T11TGTTTA` in the genomic profile. This distinction  also ensures accurate matching and interpretation of the mutations independently from each other.
+
+**Q: Why are some deletions very close to one of the sequence termini missing in the genomic profile of `covSonar2`?**
+
+**A:** The omission of certain deletions located near both the start and end of the sequence in the `covSonar2` genomic profile is a result of transitioning from global to semi-global alignment. Semi-global alignment prioritizes aligning subsequences without introducing penalties for gaps at the beginning or end of the reference sequence. This alignment approach aligns well with amplicon sequencing limitations, as sequence ends often have no coverage due to experimental constraints. Consequently, deletions situated very close to the sequence termini might not be included in the profile to maintain alignment accuracy. Consider the following scenario:
+
+**Example:**
+
+```plaintex
+Reference Sequence:             ATGCCATGATTAGGTGAAATTCTGA
+Globally aligned Sequence:      ATGCCATGATTAGG--------TGA
+Semi-globally aligned Sequence: ATGCCATGATTAGGTGA--------
+```
+
+In the covSonar2 genomic profile, the deletion at the right end of the sequence is not be displayed by default due to its proximity to the terminus. Similarly, deletions close to the left terminus might also be omitted. Semi-global alignment considers both ends of the sequence, allowing for accurate representation of coverage limitations.
