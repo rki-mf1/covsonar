@@ -49,8 +49,8 @@ In rare cases, the anchor base itself might be mutated, leading to scenarios lik
 
 **Example:**
 ```plaintex
-Reference Sequence:      ATGCCATGATT-----AGGAATTCTGA
-Sequence with Insertion: ATGCCATGATAGTTTAAGGAATTCTGA
+Reference Sequence:                    ATGCCATGATT-----AGGAATTCTGA
+Sequence with SNP preceding Insertion: ATGCCATGATAGTTTAAGGAATTCTGA
 ```
 
 In such cases, covSonar2 addresses the complexity more explicitly. While covSonar used to express this as a single mutation (`T11AGTTTA`), which might not accurately represent both independent mutation events, covSonar2 dissects the mutations into separate notations. This approach references both independent mutational events as `T11A` and `T11TGTTTA` in the genomic profile. This distinction  also ensures accurate matching and interpretation of the mutations independently from each other.
