@@ -67,4 +67,6 @@ Globally aligned Sequence:      ATGCCATGATTAGG--------TGA
 Semi-globally aligned Sequence: ATGCCATGATTAGGTGA--------
 ```
 
-In the covSonar2 genomic profile, the deletion at the right end of the sequence is not be displayed by default due to its proximity to the terminus. Similarly, deletions close to the left terminus might also be omitted. Semi-global alignment considers both ends of the sequence, allowing for accurate representation of coverage limitations.
+**Q: Why does covSonar2, by default, display inserted N (stretches) in the genomic profile?**
+
+**A:** In covSonar2, the default inclusion of inserted N or N stretches in the genomic profile stems from the recognition that these stretches hold informative value. Unlike uniformative mutations (N SNPs), inserted N (stretche)s provide information about the inserted sequence's specific length. This rationale sets the stage for a distinction from covSonar's approach, where only N SNPs are hidden from the default profile due to their uninformative nature.
