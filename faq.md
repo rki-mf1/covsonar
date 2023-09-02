@@ -69,4 +69,4 @@ Semi-globally aligned Sequence: ATGCCATGATTAGGTGA--------
 
 **Q: Why does covSonar2, by default, display inserted N (stretches) in the genomic profile?**
 
-**A:** In covSonar2, the default inclusion of inserted N or N stretches in the genomic profile stems from the recognition that these stretches hold informative value. Unlike uniformative mutations (N SNPs), inserted N (stretche)s provide information about the inserted sequence's specific length. This rationale sets the stage for a distinction from covSonar's approach, where only N SNPs are hidden from the default profile due to their uninformative nature.
+**A:** In `covSonar2`, the default inclusion of inserted N or N stretches in the genomic profile stems from the recognition that these stretches hold informative value. Unlike uniformative mutations (N SNPs), inserted N (stretche)s provide information about the inserted sequence's specific length. This rationale sets the stage for a distinction from `covSonar`'s approach, where only N SNPs are hidden from the default profile due to their uninformative nature.
