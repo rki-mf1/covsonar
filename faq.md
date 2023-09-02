@@ -1,6 +1,6 @@
 # Frequently Asked Questions
 
-## What are the differences between covSonar and covSonar2?
+## What are the differences between `covSonar` and `covSonar2`?
 
 In comparing `covSonar` and `covSonar2`, several differences become evident, particularly regarding the alignment and representation of deletions in genomic profiles.
 
