@@ -17,7 +17,7 @@ Right-aligned (covSonar):       ATGCCATGATT-------CTGA
 Left-aligned (covSonar2):       ATGCCATGA-------TTCTGA
 ```
 
-In situations where a deletion is immediately adjactend to a stretch of "N" characters, indicating ambiguous or unknown bases, the deletion itself might undergo additional shifts, potentially spanning multiple bases. This behavior is demonstrated in the following examples:
+In situations where a deletion is adjactend to a stretch of "N" characters, indicating ambiguous or unknown bases, the deletion itself might undergo additional shifts, potentially spanning multiple bases. This behavior is demonstrated in the following examples:
 
 **Example:**
 ```plaintext
