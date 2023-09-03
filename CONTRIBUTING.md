@@ -9,7 +9,7 @@ Use the table of contents icon on the top left corner of this document to get to
 Clone the repo, and the you can run these commands from within the `covsonar/` directory:
 
 ```sh
-mamba create -n covsonar-dev python=3.9 poetry=1.3.2 fortran-compiler nox=2022.11.21 pre-commit emboss=6.6.0
+mamba env create -n covsonar-dev -f environment.yml
 mamba activate covsonar-dev  # needs to be activated for the following commands to work
 git config blame.ignoreRevsFile .git-blame-ignore-revs  # ignore black reformatting when doing git blame
 pre-commit install  # install pre-commit hooks for formatting and linting
@@ -32,7 +32,7 @@ covsonar is written in Python and tries to follow the excellent packaging guidel
 Some tooling needs to be set up before you can work on covsonar. To install this we use mamba, a faster replacement for the conda package manager, and place them in their own environment:
 
 ```sh
-mamba create -n covsonar-dev python=3.9 poetry=1.3.2 fortran-compiler nox=2022.11.21 pre-commit emboss=6.6.0
+mamba env create -n covsonar-dev -f environment.yml
 ```
 
 Then when you want to work on the project, or at the very least if you want to use poetry commands or run tests, you need to switch to this environment:

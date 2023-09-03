@@ -1,0 +1,11 @@
+name: sonar2
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - nox=2023.4.22
+  - poetry=1.5.1
+  - pre-commit
+  - python=3.9
+  - sqlite>=3.38.0
