@@ -74,7 +74,7 @@ Semi-globally aligned Sequence: ATGCCATGATTAGGTGA--------
 
 ## Troubleshooting
 
-**Q**:  `covSonar2` crashes with: sqlite3.OperationalError: attempt to write a readonly databas
+**Q:  `covSonar2` crashes with: `sqlite3.OperationalError: attempt to write a readonly database`**
 
 **A**: You're encountering the SQLite error attempt to write a readonly database, even though your file permissions appear to be correct. 
 
