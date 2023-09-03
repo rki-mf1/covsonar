@@ -26,7 +26,7 @@ Right-aligned (covSonar):       ATGCCATNNNNNN---TTCTGA
 Left-aligned (covSonar2):       ATGCCAT---NNNNNNTTCTGA
 ```
 
-**Q:** Why has the formatting of deletions changed between `covSonar` and `covSonar2`?
+**Q: Why has the formatting of deletions changed between `covSonar` and `covSonar2`?**
 
 **A:** The way deletions are formatted has undergone a significant transformation from `del:1021:9` in `covSonar` to the more intuitive `del:1021-1030` in `covSonar2` where the deletion length is replaced by the end coordinate. 
 This shift represents a move towards a clearer and more informative style that explicitly includes both the start and end positions to meet standard DNA sequence representation conventions and to minimize any confusion.
