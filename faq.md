@@ -70,3 +70,26 @@ Semi-globally aligned Sequence: ATGCCATGATTAGGTGA--------
 **Q: Why does `covSonar2`, by default, display inserted N (stretches) in the genomic profile?**
 
 **A:** In `covSonar2`, the default inclusion of inserted N base or N stretch in the genomic profile stems from the recognition that these stretches hold informative value. Unlike uniformative mutations (N SNPs), inserted N (stretches) provide information about the inserted sequence's specific length. This rationale sets the stage for a distinction from `covSonar`'s approach, where only N SNPs are hidden from the default profile due to their uninformative nature.
+
+
+## Troubleshooting
+
+**Q**:  `covSonar2` crashes with: sqlite3.OperationalError: attempt to write a readonly databas
+
+**A**: You're encountering the SQLite error attempt to write a readonly database, even though your file permissions appear to be correct. 
+
+SQLite uses locking to prevent concurrent access to the database by multiple processes. Typically, these locks are released once a transaction is completed. However, under certain circumstances, a lock might not be properly released. This can occur for a variety of reasons, including a process crashing before it can release its lock, or multiple threads within a process trying to acquire a lock concurrently. If another process or thread tries to access the database while it's locked, SQLite will return an error.
+
+In `covSonar2`, the database establishes a write connection only during the data import process. To minimize issues such as database locks, concurrent write connections are explicitly disallowed. However, if a system crash occurs during the data import, while the integrity of the data is preserved, the lock on the database may persist. In such cases, a persistent journal file would likely be present in the same directory as the database, contributing to the `sqlite3.OperationalError: attempt to write a readonly database` error.
+
+SQLite creates a journal file as part of its ACID compliance to ensure data consistency, even in the event of an interruption during a write operation. If a journal file isn't cleaned up properly after the write operation, it can cause persistent database lock and other issues with subsequent attempts to write to the database.
+
+Here's what you can do:
+
+* **Check for the Journal File:** Look for a file in the same directory as your database file with the same name and a `-journal` extension. For example, if your database is `gisaid.db`, the journal file will be `gisaid.db-journal`.
+
+* **Safe Removal of the Journal File:** If the `-journal` file exists, it could be locking your database. You might want to delete this file, but proceed with caution. Only remove it if you're certain that no other processes are accessing the database, as deleting the journal file while a process is still using it can lead to data corruption. Ensure that you have a backup of your database before deleting the journal file.
+
+* **Try executing the sonar `optimize` command:** This command rebuilds the database, repacking it into a minimal amount of disk space. Note that this operation can take a while on large databases and locks the database file for the duration.
+
+Please exercise caution when handling database and journal files. Always maintain backups and ensure your actions won't interrupt an active process or lead to data loss.
