@@ -57,7 +57,7 @@ In such cases, `covSonar2` addresses the complexity more explicitly. While covSo
 
 **Q: Why are some deletions very close to one of the sequence termini missing in the genomic profile of `covSonar2`?**
 
-**A:** The omission of certain deletions located near both the start and end of the sequence in the `covSonar2` genomic profile is a result of transitioning from global to semi-global alignment. Semi-global alignment prioritizes aligning subsequences without introducing penalties for gaps at the beginning or end of the reference sequence. This alignment approach aligns well with amplicon sequencing limitations, as sequence ends often have no coverage due to experimental constraints. Consequently, deletions situated very close to the sequence termini might not be included in the profile to maintain alignment accuracy. Consider the following scenario:
+**A:** The omission of certain deletions located near both the start and end of the sequence in the `covSonar2` genomic profile is a result of transitioning from global to semi-global alignment. Semi-global alignment prioritizes aligning subsequences without introducing penalties for gaps at the beginning or end of the reference sequence. This alignment approach aligns well with amplicon sequencing limitations, as sequence ends often have no coverage due to experimental constraints. Deletions located near the sequence's beginning or end, when globally aligned, can undergo shifts towards the sequence termini in a semi-global alignment (see example below). To ensure alignment accuracy, `covSonar2`, by default, excludes these deletions from the profile. Consider the following scenario:
 
 **Example:**
 
