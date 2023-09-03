@@ -33,7 +33,7 @@ This shift represents a move towards a clearer and more informative style that e
 
 **Q: Why are insertions following a SNP notated differently in `covSonar2` compared to `covSonar`?**
 
-**A:** In `covSonar2`, the notation for insertions following a single nucleotide polymorphism (SNP) has been refined to accurately reflect their position within the genomic coordinate system, providing improved clarity and specificity. Unlike covSonar, which previously used a condensed mutation notation, covSonar2 employs a more explicit approach.
+**A:** In `covSonar2`, the notation for insertions following a single nucleotide polymorphism (SNP) has been refined to accurately reflect their position within the genomic coordinate system, providing improved clarity and specificity. Unlike `covSonar`, which previously used a condensed mutation notation, `covSonar2` employs a more explicit approach.
 
 In the case of insertions the base directly before the insertion, known as the anchor base, is used to reference the insertion's location. Let's consider the following example:
 
