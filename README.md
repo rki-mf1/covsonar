@@ -14,7 +14,7 @@ What's new in covSonar v.2
     * Support of multiple pathogens
     * Support of segmenten genomes
     * Support of user-defined meta information
-* Extended query lanquage 
+* Extended query lanquage
     * more powerful and complex queries
     * greedy and ungreedy deletion handling
 
@@ -30,7 +30,7 @@ What's new in covSonar v.2
 ## 1. Installation
 
 covSonar2 now can be easily installed by using `pip`, `conda` or `mamba`
- 
+
 ### Stable version 🔖
 Proceed as follows to install covSonar2 via pip
 
@@ -180,7 +180,7 @@ IMS-00114	2021-04-21		BA.5
 
 The required argument for the `import` command are listed as follows.
 
-* `--fasta`, a fasta file containing genome sequences to be imported. 
+* `--fasta`, a fasta file containing genome sequences to be imported.
 * `--tsv`, a tab-delimited file containing sample properties to be imported.
 * `--cols`, define column names for sample properties if a file containing meta information is provided
 
@@ -188,7 +188,7 @@ The required argument for the `import` command are listed as follows.
 sonar import --db test.db --fasta valid.fasta --tsv day.tsv --threads 10  --cols sample=IMS_ID
 ```
 > NOTE 📌: When providing meta information, the corresponding file must contain a column containing the sequence IDs to be linked. This column must be defined as sample name column by using `--cols sample=IMS_ID` in our example.
- 
+
 > TIP 🕯️: Use `--threads` to define threads to use which increases the performance.
 
 To update meta information only, we can use the same `import` command without referencing any fasta file, for example:
@@ -198,7 +198,7 @@ sonar import --db test.db --tsv meta.passed.tsv --cols sample=IMS_ID
 
 ### 2.4 Query genome sequences based on mutation profiles and/or meta information (`match`)
 
-Stored genomes can be queried based on their mutation profiles and sample properties. 
+Stored genomes can be queried based on their mutation profiles and sample properties.
 We follow the scientific notation for mutations. In the following table *REF* stands for the reference allele, *ALT* for the variant allele, *pos* for the affected reference position (1-based) or *start* and *end* for the affected reference range (1-based). *PROT* stands for symbol of the respective gene product.
 
 | mutation type     | nucleotide level                         | amino acid level                                     |
@@ -214,23 +214,23 @@ We follow the scientific notation for mutations. In the following table *REF* st
 
 > NOTE 📌: Any mutation can be negated by prefixing the notation with an **caret (^)**. For example, *^A1345ATGC* only matches target genomes that do not carry this insertion.
 
-> NOTE 📌: By default, the IUPAC characters N (nucleotide level) and X (amino acid level) are interpreted as any polymorphism at the respective reference position. To explicitly search for N or X at specific ones, they use n or x (e.g. *T306n*). 
+> NOTE 📌: By default, the IUPAC characters N (nucleotide level) and X (amino acid level) are interpreted as any polymorphism at the respective reference position. To explicitly search for N or X at specific ones, they use n or x (e.g. *T306n*).
 
-> NOTE 📌: To include non-informative variant alleles (N resp. X) in the returned genome profiles, use the `--showNX` option. 
+> NOTE 📌: To include non-informative variant alleles (N resp. X) in the returned genome profiles, use the `--showNX` option.
 
 Mutation profiles consist of one or multiple mutations and can be queried by `--profile`. Multiple mutations following this argument mean that all notations must be satisfied by the target genome (**AND** logic). Multiple `--profile` arguments can be used to define alternate mutation profiles that are searched simulaatively (**OR** logic). The following examples will illustrate this.
 
 ```sh
-# querying genomes carrying "Erik" (S:E484K) mutation 
+# querying genomes carrying "Erik" (S:E484K) mutation
 sonar match --profile S:E484K --db test.db
 
-# querying genomes carrying "Erik" (S:E484K) AND "Nelly" (S:N501Y) mutation 
+# querying genomes carrying "Erik" (S:E484K) AND "Nelly" (S:N501Y) mutation
 sonar match --profile S:E484K S:N501Y --db test.db
 
-# querying genomes carrying "Erik" (S:E484K) OR "Nelly" (S:N501Y) mutation 
+# querying genomes carrying "Erik" (S:E484K) OR "Nelly" (S:N501Y) mutation
 sonar match --profile S:E484K --profile S:N501Y --db test.db
 
-# querying genomes carrying "Erik" (S:E484K) BUT NOT "Nelly" (S:N501Y) mutation 
+# querying genomes carrying "Erik" (S:E484K) BUT NOT "Nelly" (S:N501Y) mutation
 sonar match --profile S:E484K ^S:N501Y --db test.db
 
 # querying genomes where reference positions 99 to 102 are deleted
@@ -253,7 +253,7 @@ Additionally, target genomes can be queried based on linked meta information (pr
 | !=       | different than (e.g. !=1)                              | integer, float       |
 | :        | range, *from*:*to* (e.g. 2021-01-01:2021-12-31)       | integer, float, date |
 | ^        | not the same as (e.g. ^B.1.1.7)                       | text                |
-| %        | wildcard standing for any character(s) (e.g. %human%) | text                | 
+| %        | wildcard standing for any character(s) (e.g. %human%) | text                |
 
 > NOTE 📌: The zip data type is interpreted hierarchically. This means that the search value 106 matches all zip codes starting with 106.
 
@@ -262,9 +262,9 @@ Additionally, target genomes can be queried based on linked meta information (pr
 ```sh
 # query genomes collected 2021 and later
 sonar match --SAMPLING >=2021-01-01 --db test.db
-# query genomes in carrying "Erik" (S:E484K) mutation and NOT classified as B.1.1.7 
+# query genomes in carrying "Erik" (S:E484K) mutation and NOT classified as B.1.1.7
 sonar match --profile S:E484K --LINEAGE ^B.1.1.7 --db test.db
-# query genomes in carrying "Erik" (S:E484K) mutation and classified as B.1.1.7 or any sub-lineage of B.1.1.7 
+# query genomes in carrying "Erik" (S:E484K) mutation and classified as B.1.1.7 or any sub-lineage of B.1.1.7
 sonar match --profile S:E484K --LINEAGE B.1.1.7 --db test.db --with-sublineage LINEAGE
 # query genomes with any SNP at referebnce genome position 11022
 sonar match --profile A11022N --db test.db
@@ -342,7 +342,7 @@ Database now version: 4
 Success: Database upgrade was successfully completed
 
 ```
-> WARNING ⚠️: Backup the db file before upgrade. 
+> WARNING ⚠️: Backup the db file before upgrade.
 
 > WARNING ⚠️: Due to the change in the alignment algorithm used, it is not recommended to upgrade databases from covsonar v.1.x to v.2.x.
 
@@ -353,6 +353,10 @@ As shown by the follwing example, genome sequences can be deleted from the datab
 ```sh
 sonar delete --db test.db --sample ID_1 ID_2 ID_3
 ```
+
+## Frequently asked questions
+
+There is a separate document with some additional frequently asked questions, especially for people coming from covSonar 1.x. Read the [FAQ here](faq.md).
 
 ## How to contribute 🏗️
 
