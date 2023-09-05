@@ -662,7 +662,7 @@ class sonarUtils:
         file_tuples = [(x, ",") for x in csv_files] + [(x, "\t") for x in tsv_files]
         for fname, delim in file_tuples:
             if not quiet:
-                LOGGER.info("linking data from" + fname + "...")
+                LOGGER.info(f"Linking data from: {fname}...")
             col_names = sonarUtils._get_csv_colnames(fname, delim)
             col_to_prop_links = sonarUtils._link_columns_to_props(
                 col_names, prop_names, quiet

@@ -273,7 +273,7 @@ def create_subparser_import(
         help="file containing genome sequences to import",
         type=str,
         nargs="+",
-        default=None,
+        default=[],
     )
     parser.add_argument(
         "--tsv",
