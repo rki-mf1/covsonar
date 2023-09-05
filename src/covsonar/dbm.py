@@ -2390,9 +2390,9 @@ class sonarDbManager:
             pid += 1
             case, val = self.build_sample_property_condition(pname.lstrip("."), *vals)
             property_cases.append(
-                f"CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END AS property_{pid}"
+                f"SUM(CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END) AS property_{pid}"
             )
-            property_conditions.append(f"property_{pid} = 1")
+            property_conditions.append(f"property_{pid} >= 1")
             property_vals.extend(val)
 
         return property_cases, property_conditions, property_vals
@@ -2442,7 +2442,7 @@ class sonarDbManager:
                         if match:
                             case, val = processing_funcs[mutation_type](match)
                             cases.append(
-                                f"CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END AS mutation_{ids[mutation]}"
+                                f"SUM(CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END) AS mutation_{ids[mutation]}"
                             )
                             vals.extend(val)
                             break
@@ -2450,7 +2450,10 @@ class sonarDbManager:
                         LOGGER.error(f"Invalid mutation notation '{mutation}'.")
                         sys.exit(1)
 
-                where_conditions.append(f"mutation_{ids[mutation]} = {count}")
+                if count == 0:
+                    where_conditions.append(f"mutation_{ids[mutation]} = {count}")
+                else:
+                    where_conditions.append(f"mutation_{ids[mutation]} >= {count}")
 
                 if len(where_conditions) == 1:
                     wheres.extend(where_conditions)
@@ -2551,7 +2554,7 @@ class sonarDbManager:
 
         if conditions:
             conditions = " AND ".join(conditions)
-            sql += f" WHERE {conditions}"
+            sql += f" GROUP BY s.id HAVING {conditions}"
 
         sql += ") AS sub"
 
