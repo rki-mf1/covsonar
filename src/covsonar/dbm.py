@@ -2016,7 +2016,6 @@ class sonarDbManager:
             )
 
             # Add the value to the corresponding operator set
-            val = sonarDbManager.custom_strip(val, "%")
             data[operator].append(val)
 
         # Assemble query conditions and values
