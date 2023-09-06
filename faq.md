@@ -6,8 +6,8 @@ In comparing `covSonar` and `covSonar2`, several differences become evident, par
 
 **Q: Why do some deletions appear shifted when comparing genomic profiles of `covSonar` and `covSonar2`?**
 
-**A:** The observed shifts in deletion positions result from a deliberate design decision in `covSonar2`. In contrast to `covSonar`, where deletions were right-aligned, `covSonar2` adopts a left-aligned approach for displaying deletions. 
-While there isn't a universal standard for the alignment direction of deletions in DNA sequences, the shift to left-aligned gaps offers advantages such as preserving gene reading frames and ensuring a more consistent representation of deletions. 
+**A:** The observed shifts in deletion positions result from a deliberate design decision in `covSonar2`. In contrast to `covSonar`, where deletions were right-aligned, `covSonar2` adopts a left-aligned approach for displaying deletions.
+While there isn't a universal standard for the alignment direction of deletions in DNA sequences, the shift to left-aligned gaps offers advantages such as preserving gene reading frames and ensuring a more consistent representation of deletions.
 This shift can lead to the repositioning of deletions by one or more bases due to changes in alignment direction, as illustrated below:
 
 **Example:**
@@ -28,7 +28,7 @@ Left-aligned (covSonar2):       ATGCCAT---NNNNNNTTCTGA
 
 **Q: Why has the formatting of deletions changed between `covSonar` and `covSonar2`?**
 
-**A:** The way deletions are formatted has undergone a significant transformation from `del:1021:9` in `covSonar` to the more intuitive `del:1021-1030` in `covSonar2` where the deletion length is replaced by the end coordinate. 
+**A:** The way deletions are formatted has undergone a significant transformation from `del:1021:9` in `covSonar` to the more intuitive `del:1021-1030` in `covSonar2` where the deletion length is replaced by the end coordinate.
 This shift represents a move towards a clearer and more informative style that explicitly includes both the start and end positions to meet standard DNA sequence representation conventions and to minimize any confusion.
 
 **Q: Why are insertions following a SNP notated differently in `covSonar2` compared to `covSonar`?**
@@ -71,12 +71,31 @@ Semi-globally aligned Sequence: ATGCCATGATTAGGTGA--------
 
 **A:** In `covSonar2`, the default inclusion of inserted N base or N stretch in the genomic profile stems from the recognition that these stretches hold informative value. Unlike uniformative mutations (N SNPs), inserted N (stretches) provide information about the inserted sequence's specific length. This rationale sets the stage for a distinction from `covSonar`'s approach, where only N SNPs are hidden from the default profile due to their uninformative nature.
 
+## Adapting covSonar 1 commands to covSonar 2
+
+|Description                                                                               |covSonar 1 command                                                                                                      |covSonar 2 command                                                                                                   |
+|---                                                                                       |---                                                                                                                     |---                                                                                                                  |
+|Create a new database using default SC2 reference                                         |This is done automatically when you `./sonar.py add` sequences to a non-existent database                               |`sonar setup --db test.db`                                                                                           |
+|Add sequences to a database, forcing existing sequnces to be updated. Use 8 parallel jobs.|`./sonar.py add --noprogress --force --db test.db --file seqs.fasta --cpus 8`                                           |`sonar import --db test.db --fasta seqs.fasta --threads 8 --no-progress` (updating of existing seqs is the default)  |
+|Add/update sequence metadata from a TSV format table                                      |`./sonar.py update --fields accession=covv_accession_id software=covv_assembly_method [...] --tsv metadata.tsv --db $db`|`sonar import --db test.db --tsv metadata.tsv --cols sample=covv_accession_id software=covv_assembly_method [...]`|
+|Do the above two steps at once (add sequnces and metadata simultaneously)                 |(not possible)                                                                                                          |`sonar import --db test.db --fasta seqs.fasta --tsv metadata.tsv --cols prop=col prop2=col2 [...]`                   |
+|Update a single metadata column (e.g. for updating lineage information)                   |`./sonar.py update --db test.db --fields accession=taxon lineage=lineage --csv pangolin.csv`                            |`sonar import --db test.db --csv pangolin.csv --cols sample=taxon LINEAGE=lineage`                              |
+|Update Pangolin lineage parent-child relationships                                        |`./sonar.py update-lineage-info --db test.db`                                                                           |`sonar update-lineages --db test.db`                                                                             |
+|Optimize sqlite database                                                                  |`./sonar.py optimize --db test.db`                                                                                      |`sonar optimize --db test.db`                                                                                        |
+|Calculate database statistics                                                             |`./sonar.py info --db ${db}`                                                                                            |`sonar info --db test.db`                                                                                            |
+|Remove a set of sequences by ID                                                           |`./sonar.py remove --db test.db  --file sequences-to-delete.ids`                                                        |`sonar delete --db test.db --sample-file sequences-to-delete.ids`                                                    |
+|Identify sequences with a given lineage or any of its sublineages                         |`./sonar.py match --lineage B.1.1.7 --with-sublineage --db test.db --tsv`                                               |`sonar match --db test.db --LINEAGE "B.1.1.7*"` (see NOTE1 below!)                            |
+|Output all sequences, including purely ambiguous variations in profiles (e.g. N stretches)|`./sonar.py match --ambig --tsv --db test.db`                                                                           |`sonar match --db test.db --showNX`                                                                                  |
+|Output all sequences that contain frameshift mutations                                    |`./sonar.py match --only_frameshifts --db test.db`                                                                      |`sonar match --db test.db --frameshifts-only`                                                                        |
+|Output all sequences that do not belong to a given lineage, in a date range               |`./sonar.py match --lineage ^B.1.1.529 --lineage ^BA.% --date 2021-12-01:2021-12-31  --db test.db --tsv`                |`sonar match --db test.db --LINEAGE "^B.1.1.529" "^BA%" --DATE 2021-12-01:2021-12-31`                          |
+
+NOTE1: Sublineage queries will not work if you have never run the `update-lineages` command on your database. Without that command, covSonar doesn't know the relationships between children and parent Pangolin lineages.
 
 ## Troubleshooting
 
 **Q:  `covSonar2` crashes with: `sqlite3.OperationalError: attempt to write a readonly database`**
 
-**A**: You're encountering the SQLite error attempt to write a readonly database, even though your file permissions appear to be correct. 
+**A**: You're encountering the SQLite error attempt to write a readonly database, even though your file permissions appear to be correct.
 
 SQLite uses locking to prevent concurrent access to the database by multiple processes. Typically, these locks are released once a transaction is completed. However, under certain circumstances, a lock might not be properly released. This can occur for a variety of reasons, including a process crashing before it can release its lock, or multiple threads within a process trying to acquire a lock concurrently. If another process or thread tries to access the database while it's locked, SQLite will return an error.
 
