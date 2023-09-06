@@ -1389,21 +1389,21 @@ class sonarDBManager():
 		"""
 		sql = "SELECT seqhash FROM genome WHERE accession = ?;"
 		row = self.cursor.execute(sql, [acc]).fetchone()
+		seqhash =  row["seqhash"]
 		sql = "DELETE FROM genome WHERE accession = ?;"
 		self.cursor.execute(sql, [acc])
-		if row:
-			selected_seqhash = row["seqhash"]
-			# delete profile
+		sql = "SELECT count(accession) AS count FROM genome WHERE seqhash = ?;"
+		row = self.cursor.execute(sql, [seqhash]).fetchone()
+		if row["count"] == 0:
+			# delete sequence and profiles
 			sql = "DELETE FROM profile WHERE seqhash = ?;"
-			self.cursor.execute(sql, [selected_seqhash])
-			# delete seq seq2dna 2prpt
+			self.cursor.execute(sql, [seqhash])
 			sql = "DELETE FROM sequence WHERE seqhash = ?;"
-			self.cursor.execute(sql, [selected_seqhash])
+			self.cursor.execute(sql, [seqhash])
 			sql = "DELETE FROM sequence2dna WHERE seqhash = ?;"
-			self.cursor.execute(sql, [selected_seqhash])
+			self.cursor.execute(sql, [seqhash])
 			sql = "DELETE FROM sequence2prot WHERE seqhash = ?;"
-			self.cursor.execute(sql, [selected_seqhash])
-
+			self.cursor.execute(sql, [seqhash])
 
 	# SELECTING DATA
 
