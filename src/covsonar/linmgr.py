@@ -13,6 +13,12 @@ from typing import Optional
 import pandas as pd
 import requests
 
+from covsonar.logging import LoggingConfigurator
+
+
+# Initialize logger
+LOGGER = LoggingConfigurator.get_logger()
+
 
 class Aliasor:
     """
@@ -113,11 +119,17 @@ class sonarLinmgr:
         Download lineage and alias data.
         """
         # Download and write the lineage file
+        LOGGER.info(f"Downloading lineage info from: {self._linurl}")
         url_content = requests.get(self._linurl)
         with open(self.lineage_file, "wb") as handle:
             handle.write(url_content.content)
 
+    def download_alias_data(self):
+        """
+        Download alias data.
+        """
         # Download and write the alias file
+        LOGGER.info(f"Downloading lineage aliases info from: {self._aliurl}")
         items = requests.get(self._aliurl)
         with open(self.alias_file, "w") as handle:
             json.dump(items.json(), handle)
@@ -187,13 +199,22 @@ class sonarLinmgr:
 
         return df.sort_values(by=["lineage"])
 
-    def update_lineage_data(self) -> pd.DataFrame:
+    def update_lineage_data(self, alias_key: str, lineages: str) -> pd.DataFrame:
         """
         Update the lineage data.
 
         Returns:
             pd.DataFrame: The dataframe with updated data.
         """
-        self.download_lineage_data()
+        if alias_key:
+            self.alias_file = alias_key
+        else:
+            self.download_alias_data()
+
+        if lineages:
+            self.lineage_file = lineages
+        else:
+            self.download_lineage_data()
+
         df = self.process_lineage_data()
         return df

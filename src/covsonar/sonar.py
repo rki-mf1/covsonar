@@ -619,6 +619,18 @@ def create_subparser_update_pangolin(
         help="download latest pangolin information",
         parents=parent_parsers,
     )
+    parser.add_argument(
+        "--alias-key",
+        help="Pangolin alias_key.json file (default: auto download from GitHub)",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--lineages",
+        help="Pangolin lineages.csv file (default: auto download from GitHub)",
+        type=str,
+        default=None,
+    )
     return subparsers, parser
 
 
@@ -930,7 +942,9 @@ def handle_update_pangolin(args: argparse.Namespace):
         FileNotFoundError: If any required files are not found.
     """
     with sonarLinmgr() as lineage_manager:
-        lineage_data = lineage_manager.update_lineage_data()
+        lineage_data = lineage_manager.update_lineage_data(
+            args.alias_key, args.lineages
+        )
 
     with sonarDbManager(args.db, readonly=False) as db_manager:
         db_manager.add_update_lineage(lineage_data)
