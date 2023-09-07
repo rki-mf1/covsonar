@@ -1389,10 +1389,19 @@ class sonarDBManager():
 		"""
 		sql = "SELECT seqhash FROM genome WHERE accession = ?;"
 		row = self.cursor.execute(sql, [acc]).fetchone()
+		# If there is no matching accession, return immediately
+		if not row:
+			return
+		# If the accession exists, delete it
 		sql = "DELETE FROM genome WHERE accession = ?;"
 		self.cursor.execute(sql, [acc])
-		if row:
-			selected_seqhash = row["seqhash"]
+		# Check to see if there are any remaining sequences with the same
+		# seqhash as the sequence we just deleted. If not, clean up other tables
+		# with that seqhash's data.
+		sql = "SELECT COUNT(*) FROM genome WHERE seqhash = ?;"
+		selected_seqhash = row["seqhash"]
+		row = self.cursor.execute(sql, [selected_seqhash]).fetchone()
+		if row['COUNT(*)'] == 0:
 			# delete profile
 			sql = "DELETE FROM profile WHERE seqhash = ?;"
 			self.cursor.execute(sql, [selected_seqhash])
