@@ -4,7 +4,7 @@
 
 covSonar is a database-driven system for handling genomic sequences of SARS-CoV-2 and screening genomic profiles.
 
-<img src="https://img.shields.io/badge/covSonar-1.1.7-pink" />
+<img src="https://img.shields.io/badge/covSonar-1.1.9-pink" />
 
 
 ## 1. Prerequisites
