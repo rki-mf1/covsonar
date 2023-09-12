@@ -407,3 +407,24 @@ def test_edit_sample(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("builtins.input", lambda _: "YES")
     run_cli(f"delete-prop --db {db_path}  --name AGE")
+
+
+def test_match_two_props(monkeypatch, capsys):
+    monkeypatch.chdir(Path(__file__).parent)
+    db_path = "data/test-with-seqs.db"
+    parsed_args = sonar.parse_args(
+        [
+            "match",
+            "--db",
+            db_path,
+            "--LINEAGE",
+            "B.1.%",
+            "--DATE",
+            "2021-02-01:2021-03-15",
+            "--count",
+        ]
+    )
+    result = sonar.main(parsed_args)
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out.strip() == "1"
