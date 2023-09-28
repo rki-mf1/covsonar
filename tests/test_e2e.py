@@ -42,39 +42,23 @@ def test_valid_beginning(tmp_path, monkeypatch):
 
     db_path = str(tmp_path / "test.db")
     run_cli(f"setup --db {db_path}")
-    run_cli(f"add-prop --db {db_path} --name SENDING_LAB --dtype integer --descr descr")
     run_cli(f"add-prop --db {db_path} --name DATE_DRAW --dtype date --descr descr")
     run_cli(f"add-prop --db {db_path} --name SEQ_TYPE --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name SEQ_REASON --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name SAMPLE_TYPE --dtype text --descr descr")
     run_cli(f"add-prop --db {db_path} --name OWN_FASTA_ID --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name DOWNLOAD_ID --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name DEMIS_ID --dtype integer --descr descr")
     run_cli(f"add-prop --db {db_path} --name RECEIVE_DATE --dtype date --descr descr")
     run_cli(
         f"add-prop --db {db_path} --name PROCESSING_DATE --dtype date --descr descr"
     )
-    run_cli(
-        f"add-prop --db {db_path} --name PUBLICATION_STATUS --dtype text --descr descr"
-    )
-    run_cli(
-        f"add-prop --db {db_path} --name HASHED_SEQUENCE --dtype text --descr descr"
-    )
-    run_cli(f"add-prop --db {db_path} --name TIMESTAMP --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name STUDY --dtype text --descr descr")
-    run_cli(
-        f"add-prop --db {db_path} --name DOWNLOADING_TIMESTAMP --dtype text --descr descr"
-    )
     run_cli(f"add-prop --db {db_path} --name SENDING_LAB_PC --dtype zip --descr descr")
-    run_cli(f"add-prop --db {db_path} --name DEMIS_ID_PC --dtype zip --descr descr")
-    run_cli(f"add-prop --db {db_path} --name VERSION --dtype integer --descr descr")
-    run_cli(f"add-prop --db {db_path} --name DESH_QC_PASSED --dtype text --descr descr")
     run_cli(
-        f"add-prop --db {db_path} --name DESH_REJECTION_REASON --dtype text --descr descr"
+        f"add-prop --db {db_path} --name SEQUENCING_LAB_PC --dtype zip --descr descr"
     )
-    run_cli(f"add-prop --db {db_path} --name DUPLICATE_ID --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name LINEAGE --dtype text --descr descr")
-    run_cli(f"add-prop --db {db_path} --name AGE --dtype float --descr for_testing")
+    run_cli(
+        f"add-prop --db {db_path} --name GISAID_ACCESSION --dtype text --descr descr"
+    )
+    run_cli(f"add-prop --db {db_path} --name LINEAGE --dtype pango --descr descr")
 
     run_cli(f"update-lineages --db {db_path}")
 
@@ -203,7 +187,7 @@ def test_valid_end(tmp_path, monkeypatch):
         f"match --db {db_path} --profile S:A67G --profile S:N501Y --debug -o {tmp_path}/temp3.tsv"
     )
     run_cli(
-        f"match --db {db_path} --profile S:A67G --DEMIS_ID 10013 --debug -o {tmp_path}/temp4.tsv"
+        f"match --db {db_path} --profile S:A67G --SEQ_TYPE ION_TORRENT --debug -o {tmp_path}/temp4.tsv"
     )
     run_cli(
         f"match --db {db_path} --DATE_DRAW 2021-03-01:2022-03-15 -o {tmp_path}/temp5.tsv"
@@ -419,7 +403,7 @@ def test_match_two_props(monkeypatch, capsys):
             db_path,
             "--LINEAGE",
             "B.1.%",
-            "--DATE",
+            "--DATE_DRAW",
             "2021-02-01:2021-03-15",
             "--count",
         ]

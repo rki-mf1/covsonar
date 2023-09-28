@@ -121,7 +121,7 @@ class sonarUtils:
             dbm (sonarDbManager): Database manager instance.
         """
         dbm.add_property(
-            ".IMPORTED",
+            "DATE_IMPORTED",
             "date",
             "date",
             "date sample has been imported to the database",

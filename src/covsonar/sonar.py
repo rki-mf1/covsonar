@@ -862,7 +862,7 @@ def handle_delete_prop(args: argparse.Namespace):
                     "Do you really want to delete this property? [YES/no]: "
                 )
 
-        if decision.lower() == "YES":
+        if decision.lower() == "yes":
             db_manager.delete_property(args.name)
             LOGGER.info("Property deleted.")
         else:

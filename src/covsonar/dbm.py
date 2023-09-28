@@ -26,7 +26,7 @@ from covsonar.logging import LoggingConfigurator
 
 
 # Constants
-SUPPORTED_DB_VERSION = 5  # supprted sonar database scheme version
+SUPPORTED_DB_VERSION = 6  # supprted sonar database scheme version
 
 # Initialize logger
 LOGGER = LoggingConfigurator.get_logger()
@@ -203,28 +203,6 @@ class sonarDbManager:
         ).fetchone()["count"]
 
     @property
-    def prop_count(self) -> int:
-        """Provides the count of the properties in the 'property' table.
-
-        Returns:
-            int: Count of properties in the 'property' table.
-        """
-        return self.cursor.execute("SELECT COUNT(*) as count FROM property").fetchone()[
-            "count"
-        ]
-
-    @property
-    def sample_prop_count(self) -> int:
-        """Provides the count of the sample properties in the 'sample2property' table.
-
-        Returns:
-            int: Count of sample properties in the 'sample2property' table.
-        """
-        return self.cursor.execute(
-            "SELECT COUNT(*) as count FROM sample2property"
-        ).fetchone()["count"]
-
-    @property
     def variant_count(self) -> int:
         """Provides the count of the variants in the 'variant' table.
 
@@ -234,17 +212,6 @@ class sonarDbManager:
         return self.cursor.execute("SELECT COUNT(*) as count FROM variant").fetchone()[
             "count"
         ]
-
-    @property
-    def variant_prop_count(self) -> int:
-        """Provides the count of the variant properties in the 'variant2property' table.
-
-        Returns:
-            int: Count of variant properties in the 'variant2property' table.
-        """
-        return self.cursor.execute(
-            "SELECT COUNT(*) as count FROM variant2property"
-        ).fetchone()["count"]
 
     @property
     def reference_count(self) -> int:
@@ -268,7 +235,7 @@ class sonarDbManager:
             and corresponding property data as values.
         """
         if not self.__properties:
-            sql = "SELECT * FROM property"
+            sql = "SELECT * FROM property_metadata;"
             rows = self.cursor.execute(sql).fetchall()
             self.__properties = {} if not rows else {row["name"]: row for row in rows}
         return self.__properties
@@ -439,8 +406,6 @@ class sonarDbManager:
         # SQL queries for cleanup
         cleanup_queries = [
             "DELETE FROM sequence WHERE NOT EXISTS(SELECT NULL FROM sample WHERE sample.seqhash = seqhash)",
-            "DELETE FROM sample2property WHERE NOT EXISTS(SELECT NULL FROM sample WHERE sample.id = sample_id) OR NOT EXISTS(SELECT NULL FROM property WHERE property.id = property_id)",
-            "DELETE FROM variant2property WHERE NOT EXISTS(SELECT NULL FROM variant WHERE variant.id = variant_id) OR NOT EXISTS(SELECT NULL FROM property WHERE property.id = property_id)",
             "DELETE FROM translation WHERE NOT EXISTS(SELECT NULL FROM reference WHERE reference.translation_id = id)",
             "DELETE FROM molecule WHERE NOT EXISTS(SELECT NULL FROM reference WHERE reference.id = reference_id)",
             "DELETE FROM element WHERE NOT EXISTS(SELECT NULL FROM molecule WHERE molecule.id = molecule_id)",
@@ -714,17 +679,19 @@ class sonarDbManager:
             sys.exit(1)
 
         try:
-            sql = "INSERT INTO property (name, datatype, querytype, description, target, standard) VALUES(?, ?, ?, ?, ?, ?);"
+            # TODO: set default if it is defined
+            sql = f"ALTER TABLE property ADD {name} {datatype};"
+            self.cursor.execute(sql)
+            sql = f"CREATE INDEX IF NOT EXISTS idx_property_{name} ON property({name});"
+            self.cursor.execute(sql)
+            sql = "INSERT INTO property_metadata (name, datatype, querytype, description, target, standard) VALUES(?, ?, ?, ?, ?, ?);"
             self.cursor.execute(
                 sql, [name, datatype, querytype, description, subject, standard]
             )
+            # FIXME: Not sure if we need this id anymore
+            pid = 1
             self.__properties = False
-            pid = self.properties[name]["id"]
 
-            if standard is not None:
-                sql = f"INSERT INTO {self.properties[name]['target']}2property (property_id, value_{self.properties[name]['datatype']}, sample_id) SELECT ?, ?, id FROM sample WHERE 1"
-                vals = [pid, standard]
-                self.cursor.execute(sql, vals)
         except sqlite3.Error as error:
             LOGGER.error(f"Failed to insert data into sqlite table ({str(error)}).")
             sys.exit(1)
@@ -836,16 +803,12 @@ class sonarDbManager:
         if property_name in illegal:
             LOGGER.error("This proprty name is reserved and cannot be used.")
             sys.exit(1)
-        sql = (
-            "INSERT OR REPLACE INTO "
-            + self.properties[property_name]["target"]
-            + "2property (sample_id, property_id, value_"
-            + self.properties[property_name]["datatype"]
-            + ") VALUES(?, ?, ?);"
-        )
-        self.cursor.execute(
-            sql, [sample_id, self.properties[property_name]["id"], property_value]
-        )
+        # Make sure a row with this sample_id exists in the property table
+        sql = f"INSERT INTO property(sample_id,{property_name}) VALUES ({sample_id},'{property_value}') ON CONFLICT(sample_id) DO UPDATE SET {property_name}='{property_value}';"
+        self.cursor.execute(sql)
+        # self.cursor.execute(
+        #     sql, [property_name, property_value, sample_id]
+        # )
 
     def insert_sequence(self, seqhash: str) -> None:
         """
@@ -886,9 +849,6 @@ class sonarDbManager:
         self.cursor.execute(sql, [sample_name, seqhash, ""])
         sql = "SELECT id FROM sample WHERE name = ?;"
         sid = self.cursor.execute(sql, [sample_name]).fetchone()["id"]
-        for pname in self.properties:
-            if self.properties[pname]["standard"] is not None:
-                self.insert_property(sid, pname, self.properties[pname]["standard"])
         self.insert_sequence(seqhash)
         return sid
 
@@ -1155,20 +1115,14 @@ class sonarDbManager:
 
         Raises:
             sqlite3.Error: If an error occurs while interacting with the database.
-
-        Example usage:
-            >>> dbm = getfixture('init_writeable_dbm')
-            >>> dbm.delete_property("NEW_PROP")
         """
         if property_name in self.properties:
-            sql = (
-                "DELETE FROM "
-                + self.properties[property_name]["target"]
-                + "2property WHERE property_id = ?;"
-            )
-            self.cursor.execute(sql, [self.properties[property_name]["id"]])
-            sql = "DELETE FROM property WHERE name = ?;"
-            self.cursor.execute(sql, [property_name])
+            sql = f"DROP INDEX idx_property_{property_name};"
+            self.cursor.execute(sql)
+            sql = f"ALTER TABLE property DROP COLUMN {property_name};"
+            self.cursor.execute(sql)
+            sql = f"DELETE FROM property_metadata WHERE name='{property_name}';"
+            self.cursor.execute(sql)
             self.__properties = False
             self.clean()
 
@@ -1675,19 +1629,12 @@ class sonarDbManager:
         """
         # Form the SQL query based on the given arguments
         distinct_flag = "DISTINCT " if distinct else ""
-        conditions = "WHERE property_id = ?"
-        vals = [self.properties[property_name]["id"]]
-
-        # Add condition to ignore standard values if requested
-        if ignore_standard and self.properties[property_name]["standard"] is not None:
-            conditions += (
-                " AND value_" + self.properties[property_name]["datatype"] + " != ?"
-            )
-            vals.append(self.properties[property_name]["standard"])
+        conditions = f"WHERE {property_name} != ?" if ignore_standard else ""
+        vals = [self.properties[property_name]["standard"]] if ignore_standard else []
 
         sql = (
-            f"SELECT COUNT({distinct_flag}value_{self.properties[property_name]['datatype']}) "
-            f"as count FROM {self.properties[property_name]['target']}2property {conditions};"
+            f"SELECT COUNT({distinct_flag} {property_name}) "
+            f"as count FROM property {conditions};"
         )
 
         return self.cursor.execute(sql, vals).fetchone()["count"]
@@ -2331,9 +2278,9 @@ class sonarDbManager:
             LOGGER.error(f"Property '{name}' is unkown.")
             sys.exit(1)
 
-        conditions = ["sample2property.property_id = ?"]
-        values = [self.properties[name]["id"]]
-        data_field = "sample2property.value_" + self.properties[name]["datatype"]
+        conditions = []
+        values = []
+        data_field = name
         query_type = self.properties[name]["querytype"]
 
         # map between the query type and the corresponding method
@@ -2388,11 +2335,11 @@ class sonarDbManager:
                 continue
             pid += 1
             case, val = self.build_sample_property_condition(pname.lstrip("."), *vals)
+            property_vals.extend(val)
             property_cases.append(
                 f"SUM(CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END) AS property_{pid}"
             )
             property_conditions.append(f"property_{pid} >= 1")
-            property_vals.extend(val)
 
         return property_cases, property_conditions, property_vals
 
@@ -2522,7 +2469,7 @@ class sonarDbManager:
 
         # add joins and cases for sample propetries
         if property_cases:
-            joins += """JOIN sample2property ON s.id = sample2property.sample_id\n
+            joins += """JOIN property ON s.id = property.sample_id\n
                      """
             cases.extend(property_cases)
             conditions.extend(property_conditions)
@@ -2574,8 +2521,8 @@ class sonarDbManager:
 
         Args:
             reference_accession (str): The reference accession to create genomic element conditions.
-            element_alias: ALisas used for element table
-            molecule_alias: ALisas used for molecule table
+            element_alias: Alias used for element table
+            molecule_alias: Alias used for molecule table
 
         Returns:
             Tuple[str, str]: A tuple containing the genomic element condition and the molecule prefix.
@@ -2642,21 +2589,12 @@ class sonarDbManager:
         Returns:
             List[Dict[str, str]]: List of dictionaries where each dictionary represents a row in the resulting csv/tsv file.
         """
-        # process property ouptu
+        # process property output
         property_cols = []
-        property_joins = []
-        pid = 0
         for prop_name, prop_data in self.properties.items():
-            pid += 1
             prop_name = prop_name.lstrip(".")
-            property_cols.append(
-                f"sp{pid}.value_{prop_data['datatype']} AS {prop_name}"
-            )
-            property_joins.append(
-                f"LEFT JOIN sample2property sp{pid} ON fs.sample_id = sp{pid}.sample_id AND sp{pid}.property_id = {prop_data['id']}"
-            )
+            property_cols.append("p." + prop_name)
         property_cols_str = "\n, ".join(property_cols)
-        property_joins_str = "\n".join(property_joins)
 
         # process mutation display filters
         nuc_filter, aa_filter = self.create_special_variant_filter_conditions(
@@ -2684,6 +2622,7 @@ class sonarDbManager:
         props_str = "rows." + ", rows.".join(
             sorted([s.lstrip(".") for s in self.properties.keys()])
         )
+
         sql = f"""SELECT
                 name AS SAMPLE_NAME,
                 {props_str},
@@ -2709,7 +2648,7 @@ class sonarDbManager:
                     FROM (
                         {sample_selection_query}
                     ) AS fs
-                    {property_joins_str}
+                    LEFT JOIN property p ON fs.sample_id = p.sample_id
                     LEFT JOIN alignment a ON fs.seqhash = a.seqhash
                     LEFT JOIN alignment2variant a2v ON a.id = a2v.alignment_id
                     LEFT JOIN variant v ON a2v.variant_id = v.id
@@ -2720,6 +2659,8 @@ class sonarDbManager:
                 GROUP BY SAMPLE_NAME
                 ORDER BY SAMPLE_NAME
                 """
+        print(sqlparse.format(sql, reindent=True, keyword_case="upper"))
+        # print(sample_selection_values)
         return self.cursor.execute(sql, sample_selection_values).fetchall()
 
     def handle_count_format(

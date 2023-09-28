@@ -1,4 +1,4 @@
-PRAGMA user_version = 5;
+PRAGMA user_version = 6;
 PRAGMA foreign_keys = OFF;
 PRAGMA analysis_limit=1000;
 
@@ -30,6 +30,16 @@ CREATE INDEX IF NOT EXISTS idx_sample_seqhash ON sample(seqhash);
 --
 
 CREATE TABLE IF NOT EXISTS property (
+	sample_id INTEGER NOT NULL UNIQUE,
+	FOREIGN KEY(sample_id) REFERENCES sample(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_property_sid ON property(sample_id);
+
+--
+-- property_metadata SECTION
+--
+
+CREATE TABLE IF NOT EXISTS property_metadata (
 	id INTEGER PRIMARY KEY,
 	name VARCHAR NOT NULL UNIQUE,
 	datatype VARCHAR NOT NULL,
@@ -38,52 +48,6 @@ CREATE TABLE IF NOT EXISTS property (
 	target VARCHAR NOT NULL,
 	standard VARCHAR
 );
-
-CREATE TABLE IF NOT EXISTS sample2property (
-	property_id INTEGER NOT NULL,
-	sample_id INTEGER NOT NULL,
-	value_integer INTEGER,
-	value_float NUMERIC,
-	value_text TEXT,
-	value_varchar VARCHAR,
-	value_blob BLOB,
-	value_date DATE,
-	value_zip TEXT,
-	PRIMARY KEY(property_id, sample_id),
-	FOREIGN KEY(sample_id) REFERENCES sample(id) ON DELETE CASCADE,
-	FOREIGN KEY(property_id) REFERENCES property(id) ON DELETE CASCADE
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS idx_sample2property_pid ON sample2property(property_id);
-CREATE INDEX IF NOT EXISTS idx_sample2property_int ON sample2property(value_integer);
-CREATE INDEX IF NOT EXISTS idx_sample2property_float ON sample2property(value_float);
-CREATE INDEX IF NOT EXISTS idx_sample2property_text ON sample2property(value_text);
-CREATE INDEX IF NOT EXISTS idx_sample2property_vchar ON sample2property(value_varchar);
-CREATE INDEX IF NOT EXISTS idx_sample2property_blob ON sample2property(value_blob);
-CREATE INDEX IF NOT EXISTS idx_sample2property_date ON sample2property(value_date);
-CREATE INDEX IF NOT EXISTS idx_sample2property_zip ON sample2property(value_zip);
-
-CREATE TABLE IF NOT EXISTS variant2property (
-	property_id INTEGER NOT NULL,
-	variant_id INTEGER NOT NULL,
-	value_integer INTEGER,
-	value_float NUMERIC,
-	value_text TEXT,
-	value_varchar VARCHAR,
-	value_blob BLOB,
-	value_date DATE,
-	value_zip TEXT,
-	PRIMARY KEY(property_id, variant_id),
-	FOREIGN KEY(variant_id) REFERENCES variant(id) ON DELETE CASCADE,
-	FOREIGN KEY(property_id) REFERENCES property(id) ON DELETE CASCADE
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS idx_variant2property_pid ON variant2property(property_id);
-CREATE INDEX IF NOT EXISTS idx_variant2property_int ON variant2property(value_integer);
-CREATE INDEX IF NOT EXISTS idx_variant2property_float ON variant2property(value_float);
-CREATE INDEX IF NOT EXISTS idx_variant2property_text ON variant2property(value_text);
-CREATE INDEX IF NOT EXISTS idx_variant2property_vchar ON variant2property(value_varchar);
-CREATE INDEX IF NOT EXISTS idx_variant2property_blob ON variant2property(value_blob);
-CREATE INDEX IF NOT EXISTS idx_variant2property_date ON variant2property(value_date);
-CREATE INDEX IF NOT EXISTS idx_variant2property_zip ON variant2property(value_zip);
 
 --
 -- REFERENCE SECTION
@@ -245,28 +209,6 @@ LEFT JOIN molecule ON reference.id = molecule.reference_id
 LEFT JOIN element ON molecule.id = element.molecule_id
 LEFT JOIN elempart ON element.id = elempart.element_id;
 
-CREATE VIEW IF NOT EXISTS propertyView
-AS
-SELECT
-	sample.id as "sample.id",
-	sample.name as "sample.name",
-	property.id as "property.id",
-	property.name as "property.name",
-	property.querytype as "propery.querytype",
-	property.datatype as "property.datatype",
-	property.standard as "property.standard",
-	sample2property.value_integer as "value_integer",
-	sample2property.value_float as "value_float",
-	sample2property.value_text as "value_text",
-	sample2property.value_zip as "value_zip",
-	sample2property.value_varchar as "value_varchar",
-	sample2property.value_blob as "value_blob",
-	sample2property.value_date as "value_date"
-FROM
-	sample
-LEFT JOIN sample2property ON sample.id = sample2property.sample_id
-LEFT JOIN property ON sample2property.property_id = property.id;
-
 CREATE VIEW IF NOT EXISTS sequenceView
 AS
 SELECT
@@ -337,22 +279,13 @@ SELECT
   variant.alt as "variant.alt",
   variant.label as "variant.label",
   variant.frameshift as "variant.frameshift",
-  variant.parent_id as "variant.parent_id",
-  variant2property.property_id as "property_id",
-  variant2property.value_integer as "value_integer",
-  variant2property.value_float as "value_float",
-  variant2property.value_text as "value_text",
-  variant2property.value_zip as "value_zip",
-  variant2property.value_varchar as "value_varchar",
-  variant2property.value_blob as "value_blob",
-  variant2property.value_date as "value_date"
+  variant.parent_id as "variant.parent_id"
 FROM
 	sample
 LEFT JOIN sequence ON sample.seqhash = sequence.seqhash
 LEFT JOIN alignment ON sequence.seqhash = alignment.seqhash
 LEFT JOIN alignment2variant ON alignment.id = alignment2variant.alignment_id
 LEFT JOIN variant ON alignment2variant.variant_id = variant.id
-LEFT JOIN variant2property ON variant2property.variant_id = variant.id
 LEFT JOIN element ON variant.element_id = element.id
 LEFT JOIN molecule ON element.molecule_id = molecule.id
 LEFT JOIN reference ON molecule.reference_id = reference.id;
@@ -383,15 +316,7 @@ SELECT
   variant.alt as "variant.alt",
   variant.label as "variant.label",
   variant.frameshift as "variant.frameshift",
-  variant.parent_id as "variant.parent_id",
-  variant2property.property_id as "property_id",
-  variant2property.value_integer as "value_integer",
-  variant2property.value_float as "value_float",
-  variant2property.value_text as "value_text",
-  variant2property.value_zip as "value_zip",
-  variant2property.value_varchar as "value_varchar",
-  variant2property.value_blob as "value_blob",
-  variant2property.value_date as "value_date"
+  variant.parent_id as "variant.parent_id"
 FROM
   reference
 LEFT JOIN molecule ON molecule.reference_id = reference.id
@@ -399,8 +324,7 @@ LEFT JOIN element ON element.molecule_id = molecule.id
 LEFT JOIN sequence ON sequence.seqhash = alignment.seqhash
 LEFT JOIN sample ON sample.seqhash = sequence.seqhash
 LEFT JOIN alignment ON alignment.element_id = element.id
-LEFT JOIN variant ON variant.element_id = element.id
-LEFT JOIN variant2property ON variant2property.variant_id = variant.id;
+LEFT JOIN variant ON variant.element_id = element.id;
 
 --
 -- TRIGGER

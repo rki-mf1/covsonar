@@ -764,9 +764,6 @@ class sonarCache:
             OSError: If there is an error while reading or writing the cache files.
             ValueError: If the sample refers to an unknown reference molecule.
         """
-        default_properties = {
-            x: self.properties[x]["standard"] for x in self.properties
-        }
         with sonarDbManager(self.db, readonly=False) as dbm:
             for fname in fnames:
                 for data in self.iter_fasta(fname):
@@ -776,8 +773,7 @@ class sonarCache:
 
                     # check properties
                     if data["sampleid"] is None:
-                        props = default_properties.copy()
-                        props.update(data["properties"])
+                        props = data["properties"]
                         props.update(properties[data["sampleid"]])
                         data["properties"] = props
                     elif not self.allow_updates:
