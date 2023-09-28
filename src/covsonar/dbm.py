@@ -2659,7 +2659,7 @@ class sonarDbManager:
                 GROUP BY SAMPLE_NAME
                 ORDER BY SAMPLE_NAME
                 """
-        print(sqlparse.format(sql, reindent=True, keyword_case="upper"))
+        # print(sqlparse.format(sql, reindent=True, keyword_case="upper"))
         # print(sample_selection_values)
         return self.cursor.execute(sql, sample_selection_values).fetchall()
 
