@@ -76,7 +76,7 @@ def test_import_update_delete_restore(tmp_path, monkeypatch):
     run_cli(
         f"import --db {db_path} --fasta data/test.fasta --cols sample=IMS_ID --threads 2"
     )
-    run_cli(f"match --db {db_path} --showNX -o {tmp_path}/test.import.csv")
+    run_cli(f"match --db {db_path} --format csv --showNX -o {tmp_path}/test.import.csv")
     assert filecmp.cmp(f"{tmp_path}/test.import.csv", "data/test.import.csv")
 
     # test delete
@@ -92,7 +92,7 @@ def test_import_update_delete_restore(tmp_path, monkeypatch):
         f"import --db {db_path} --fasta data/test.seq03.fasta --cols sample=IMS_ID --threads 2"
     )
     run_cli(
-        f"match --profile T26504TATGC --db {db_path} -o {tmp_path}/test.import2.csv"
+        f"match --profile T26504TATGC --format csv --db {db_path} -o {tmp_path}/test.import2.csv"
     )
     assert filecmp.cmp(f"{tmp_path}/test.import2.csv", "data/test.import2.csv")
 
@@ -101,7 +101,7 @@ def test_import_update_delete_restore(tmp_path, monkeypatch):
         f"import --db {db_path} --fasta data/test.fasta --cols sample=IMS_ID --threads 2 --no-update"
     )
     run_cli(
-        f"match --profile T26504TATGC --db {db_path} -o {tmp_path}/test.no-update.csv"
+        f"match --profile T26504TATGC --format csv --db {db_path} -o {tmp_path}/test.no-update.csv"
     )
     assert filecmp.cmp(f"{tmp_path}/test.no-update.csv", "data/test.import2.csv")
 
@@ -109,7 +109,7 @@ def test_import_update_delete_restore(tmp_path, monkeypatch):
     run_cli(
         f"import --db {db_path} --fasta data/test.fasta --cols sample=IMS_ID --threads 2"
     )
-    run_cli(f"match --db {db_path} --showNX -o {tmp_path}/test.update.csv")
+    run_cli(f"match --db {db_path} --format csv --showNX -o {tmp_path}/test.update.csv")
     assert filecmp.cmp(f"{tmp_path}/test.update.csv", "data/test.import.csv")
     # test restore
     run_cli(f"restore --db {db_path} --sample seq04 -o {tmp_path}/test.restore.fasta")
@@ -146,7 +146,7 @@ def test_direct_query(tmp_path, monkeypatch):
 
     # test import
     run_cli(
-        f'direct-query --db {db_path} --sql "SELECT * FROM variant WHERE variant.start >= 25000 ORDER BY id" -o {tmp_path}/test.direct-query.csv'
+        f'direct-query --db {db_path} --sql "SELECT element_id,ref,alt,start,end,parent_id,label,frameshift FROM variant WHERE variant.start >= 25000 ORDER BY start,end,ref,alt" -o {tmp_path}/test.direct-query.csv'
     )
     assert filecmp.cmp(
         f"{tmp_path}/test.direct-query.csv", "data/test.direct-query.csv"
