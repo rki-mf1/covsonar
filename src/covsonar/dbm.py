@@ -2428,6 +2428,7 @@ class sonarDbManager:
             Tuple[str, List[str]]: A SQL query to retrieve matching sample IDs and a list of property and profile values.
         """
 
+        # breakpoint()
         conditions = []
         vals = []
 
@@ -2659,8 +2660,7 @@ class sonarDbManager:
                 GROUP BY SAMPLE_NAME
                 ORDER BY SAMPLE_NAME
                 """
-        # print(sqlparse.format(sql, reindent=True, keyword_case="upper"))
-        # print(sample_selection_values)
+        sql = sqlparse.format(sql, reindent=True, keyword_case="upper")
         return self.cursor.execute(sql, sample_selection_values).fetchall()
 
     def handle_count_format(

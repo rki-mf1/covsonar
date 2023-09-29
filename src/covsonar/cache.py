@@ -405,7 +405,7 @@ class sonarCache:
             LOGGER.critical(
                 "Seqhash collision: sequences differ for seqhash " + seqhash + "."
             )
-            sys.exit(1)
+            # sys.exit(1)
 
         os.makedirs(os.path.dirname(fname), exist_ok=True)
         with open(fname, "w") as handle:
@@ -1017,7 +1017,7 @@ class sonarCache:
                 + cigar
             )
             LOGGER.error("Paranoid test failed.")
-            sys.exit(1)
+            return False
         return True
 
 
