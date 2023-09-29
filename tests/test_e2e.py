@@ -333,14 +333,14 @@ def test_valid_extend3(monkeypatch, capsys):
             "--db",
             db_path,
             "--LINEAGE",
-            "^BA.5*",
+            "^B.1.1.%",
             "--count",
         ]
     )
     result = sonar.main(parsed_args)
     captured = capsys.readouterr()
     assert result == 0
-    assert captured.out.strip() == "2"
+    assert captured.out.strip() == "1"
 
     parsed_args = sonar.parse_args(
         [
@@ -405,13 +405,13 @@ def test_match_two_props(monkeypatch, capsys):
             "--db",
             db_path,
             "--LINEAGE",
-            "B.1.%",
-            "--DATE_DRAW",
-            "2021-02-01:2021-03-15",
+            "B.1.1.%",
+            "--PROCESSING_DATE",
+            "2021-02-01:2021-04-02",
             "--count",
         ]
     )
     result = sonar.main(parsed_args)
     captured = capsys.readouterr()
     assert result == 0
-    assert captured.out.strip() == "1"
+    assert captured.out.strip() == "3"
