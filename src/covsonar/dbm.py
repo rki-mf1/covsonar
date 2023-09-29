@@ -2095,7 +2095,7 @@ class sonarDbManager:
                     )
                 )
             else:
-                lineage_pool.add(lineage)
+                lineage_pool.add(op + lineage)
 
         return lineage_pool
 
