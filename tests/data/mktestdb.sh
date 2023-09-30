@@ -6,6 +6,7 @@
 
 set -x
 
+mkdir -p cache-test/cache
 # setting database up
 rm -f test.db
 sonar setup --db test.db --debug
@@ -25,6 +26,6 @@ cp test.db test-with-seqs.db
 # Do these two steps together in one go
 #sonar import --db test-with-seqs.db --fasta seqs.fasta.gz --cache cache --threads 4
 #sonar import --db test-with-seqs.db --tsv meta.tsv --cols sample=IMS_ID --auto-link --cache cache --threads 4 --debug
-sonar import --db test-with-seqs.db --fasta seqs.fasta.gz --tsv meta.tsv --cols sample=IMS_ID --auto-link --cache cache --threads 4 --debug
-sonar import --db test-with-seqs.db --tsv pango.tsv --cols sample=IMS_ID LINEAGE=lineage --cache cache
-rm -rf cache import.log
+sonar import --db test-with-seqs.db --fasta seqs.fasta.gz --tsv meta.tsv --cols sample=IMS_ID --auto-link --cache cache-test/cache --debug
+sonar import --db test-with-seqs.db --tsv pango.tsv --cols sample=IMS_ID LINEAGE=lineage --cache cache-test/cache
+rm -rf import.log

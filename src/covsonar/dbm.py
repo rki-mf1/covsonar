@@ -2744,6 +2744,7 @@ class sonarDbManager:
                     LEFT JOIN element e ON v.element_id = e.id
                     LEFT JOIN molecule m ON e.molecule_id = m.id
                     WHERE {genome_condition}{nuc_filter}
+                    ORDER BY fs.name
                 ) as rows
                 GROUP BY
                     "molecule.accession", "variant.start", "variant.ref", "variant.alt"

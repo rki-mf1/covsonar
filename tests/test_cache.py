@@ -162,14 +162,14 @@ def test_cache_sequence(testdb, monkeypatch, logger, caplog):
     # fail case
     monkeypatch.chdir(Path(__file__).parent)
 
-    seqhash = "84nCd4KD+0OVpmoZCSDTnc/mn08"
+    seqhash = "9d0d969f286cfc0c011afd51c750c273a436413acce6c938562245d155db6d7e"
     sequence = "test"
     with caplog.at_level(logging.ERROR, logger=logger.name), pytest.raises(
         SystemExit
     ) as pytest_wrapped_e:
-        sonarCache(db=testdb, outdir="data/cache-test").cache_sequence(
+        sonarCache(db=testdb, outdir="data/cache-test/cache").cache_sequence(
             seqhash, sequence
         )
-        assert "ERROR: Sequences differ for seqhash" == caplog.records[-1].message
+        assert "Seqhash collision" in caplog.records[-1].message
         assert pytest_wrapped_e.type == SystemExit
         assert pytest_wrapped_e.value.code == 1
