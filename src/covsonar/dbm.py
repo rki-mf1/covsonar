@@ -2337,9 +2337,9 @@ class sonarDbManager:
             case, val = self.build_sample_property_condition(pname.lstrip("."), *vals)
             property_vals.extend(val)
             property_cases.append(
-                f"SUM(CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END) AS property_{pid}"
+                f"CASE WHEN {' AND '.join(case)} THEN 1 ELSE 0 END AS property_{pid}"
             )
-            property_conditions.append(f"property_{pid} >= 1")
+            property_conditions.append(f"property_{pid} = 1")
 
         return property_cases, property_conditions, property_vals
 
@@ -2501,7 +2501,7 @@ class sonarDbManager:
 
         if conditions:
             conditions = " AND ".join(conditions)
-            sql += f" GROUP BY s.id HAVING {conditions}"
+            sql += f" WHERE {conditions}"
 
         sql += ") AS sub"
 
