@@ -2650,6 +2650,8 @@ class sonarDB(object):
 		str
 			valid variant profile
 		"""
+		if profile is None:
+			return ""
 		out = []
 		keep = set(keep) if keep else set()
 		for mutation in list(filter(None, profile.split(" "))):
