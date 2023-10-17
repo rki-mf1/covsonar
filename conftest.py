@@ -2,8 +2,9 @@ import os
 import tempfile
 
 import pytest
-from src.covsonar.utils import sonarUtils
 from src.covsonar.dbm import sonarDbManager
+from src.covsonar.utils import sonarUtils
+
 from covsonar.logging import LoggingConfigurator
 
 

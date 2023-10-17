@@ -2296,7 +2296,7 @@ class sonarDbManager:
             conditions.append("variant.start = ?")
             values.append(int(start[1:]) - 1)
         else:
-            conditions.append("variant.start <= ?")
+            conditions.append("variant.start >= ?")
             values.append(int(start) - 1)
 
         # set deletion end
@@ -2304,7 +2304,7 @@ class sonarDbManager:
             conditions.append("variant.end = ?")
             end = int(end[1:])
         else:
-            conditions.append("variant.end >= ?")
+            conditions.append("variant.end <= ?")
         values.append(int(end))
 
         conditions.append("variant.alt = ?")
@@ -2454,11 +2454,11 @@ class sonarDbManager:
                 else:
                     where_conditions.append(f"mutation_{ids[mutation]} >= {count}")
 
-                if len(where_conditions) == 1:
-                    wheres.extend(where_conditions)
-                elif len(where_conditions) > 1:
-                    wheres.append("(" + " AND ".join(where_conditions) + ")")
-
+            if len(where_conditions) == 1:
+                wheres.extend(where_conditions)
+            elif len(where_conditions) > 1:
+                wheres.append("(" + " AND ".join(where_conditions) + ")")
+        print(wheres)
         return cases, wheres, vals
 
     def create_sample_selection_sql(
