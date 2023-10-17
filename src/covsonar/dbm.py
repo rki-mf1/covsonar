@@ -2458,7 +2458,6 @@ class sonarDbManager:
                 wheres.extend(where_conditions)
             elif len(where_conditions) > 1:
                 wheres.append("(" + " AND ".join(where_conditions) + ")")
-        print(wheres)
         return cases, wheres, vals
 
     def create_sample_selection_sql(
