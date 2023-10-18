@@ -186,10 +186,11 @@ def test_import(tmp_path, monkeypatch):
         f"import --db {db_path} --fasta data/seqs.fasta.gz --tsv data/meta.tsv --cache {tmp_path} --cols sample=IMS_ID --threads 2 --no-update --auto-link"
     )
 
+
 def test_match_AND_OR_mutation(monkeypatch, capsys):
     monkeypatch.chdir(Path(__file__).parent)
     db_path = "data/test-with-seqs.db"
-    # Get only 69-70 
+    # Get only 69-70
     # --> HAVING mutation_1 >= 1
     parsed_args = sonar.parse_args(
         [
@@ -205,8 +206,8 @@ def test_match_AND_OR_mutation(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert result == 0
     assert captured.out.strip() == "4"
-    
-    # Combine with AND: "S:S255F AND S:del:69-70" 
+
+    # Combine with AND: "S:S255F AND S:del:69-70"
     # --> HAVING mutation_1 >= 1 AND mutation_2 >= 1
     parsed_args = sonar.parse_args(
         [
@@ -224,7 +225,7 @@ def test_match_AND_OR_mutation(monkeypatch, capsys):
     assert result == 0
     assert captured.out.strip() == "1"
 
-    # Combine with AND OR 
+    # Combine with AND OR
     # We just want to include one more sample (IMS-10013-CVDP-69DF29F4-D7E3-4954-94F4-65C20BE7B850) from previous test.
     # (S:S255F AND S:del:69-70) OR del:6849-6849
     # (mutation_1 >= 1 AND mutation_2 >= 1) OR mutation_3 >= 1
@@ -245,6 +246,7 @@ def test_match_AND_OR_mutation(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert result == 0
     assert captured.out.strip() == "2"
+
 
 def test_valid_end(tmp_path, monkeypatch):
     """The test example provided by other devs, after the import command"""
