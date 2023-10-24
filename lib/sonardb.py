@@ -1614,6 +1614,8 @@ class sonarDBManager():
 			  exclude_software_version=None,
   			  min_ct=None,
   			  max_ct=None,
+  			  include_seqhash=[],
+  			  exclude_seqhash=[],
 			  count = False,
 			  frameshifts = 0):
 
@@ -1733,6 +1735,14 @@ class sonarDBManager():
 			where_clause.append(self.get_metadata_date_condition("submission_date", *include_submission_dates))
 		if exclude_submission_dates:
 			where_clause.append(self.get_metadata_date_condition("submission_date", *exclude_submission_dates, negate=True))
+
+		## seqhash
+		if include_seqhash:
+			where_clause.append(self.get_metadata_in_condition("seqhash", *include_seqhash))
+			where_vals.extend(include_seqhash)
+		if exclude_seqhash:
+			where_clause.append(self.get_metadata_in_condition("seqhash", *exclude_seqhash, negate=True))
+			where_vals.extend(exclude_seqhash)
 
 		## profiles
 		if include_profiles:
@@ -2779,6 +2789,7 @@ class sonarDB(object):
 		software_version=None,
 		min_ct=None,
 		max_ct=None,
+		seqhashes=[],
 		ambig=False,
 		count=False,
 		frameshifts=0,
@@ -2947,6 +2958,9 @@ class sonarDB(object):
 		include_material = [x for x in materials if not str(x).startswith("^")]
 		exclude_material = [x[1:] for x in materials if str(x).startswith("^")]
 
+		include_seqhash = [x for x in seqhashes if not x.startswith("^")]
+		exclude_seqhash = [x[1:] for x in seqhashes if x.startswith("^")]
+
 		if software:
 			if not software.startswith("^"):
 				include_software = software
@@ -3070,6 +3084,8 @@ class sonarDB(object):
 					  exclude_software_version,
 		  			  min_ct,
 		  			  max_ct,
+					  include_seqhash,
+					  exclude_seqhash,
 					  count,
 					  frameshifts)
 

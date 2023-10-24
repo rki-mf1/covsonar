@@ -77,6 +77,7 @@ def parse_args():
 	parser_match.add_argument('--material', metavar="STR", help="match genomes of the given sequencing chemistry only", type=str, nargs="+", default=[])
 	parser_match.add_argument('--min_ct', metavar="STR", help="minimal ct value of samples resulting genomes are matched to", type=float, default=None)
 	parser_match.add_argument('--max_ct', metavar="STR", help="maximal ct value of samples resulting genomes are matched to", type=float, default=None)
+	parser_match.add_argument('--seqhash', metavar="STR", help="match specific genomes with the given seqhash(es)", type=str, nargs="+", default=[])
 	parser_match_g1 = parser_match.add_mutually_exclusive_group()
 	parser_match_g1.add_argument('--count', help="count instead of listing matching genomes", action="store_true")
 	parser_match_g1.add_argument('--ambig', help="include ambiguos sites when reporting profiles (no effect when --count is used)", action="store_true")
@@ -297,8 +298,8 @@ class sonar():
 			g_after = dbm.count_genomes()
 		print(str(g_before-g_after) + " genomic entrie(s) deleted.")
 
-	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, with_sublineage, zips, dates, submission_dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, ambig, count=False, frameshifts=0, tsv=False):
-		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, submission_dates=submission_dates, labs=labs, sources=sources, collections=collections, technologies=technologies, platforms=platforms, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
+	def match_genomes(self, include_profiles, exclude_profiles, accessions, lineages, with_sublineage, zips, dates, submission_dates, labs, sources, collections, technologies, platforms, chemistries, software, software_version, materials, min_ct, max_ct, seqhash, ambig, count=False, frameshifts=0, tsv=False):
+		rows = self.db.match(include_profiles=include_profiles, exclude_profiles=exclude_profiles, accessions=accessions, lineages=lineages, with_sublineage=with_sublineage, zips=zips, dates=dates, submission_dates=submission_dates, labs=labs, sources=sources, collections=collections, technologies=technologies, platforms=platforms, chemistries=chemistries, software=software, software_version=software_version, materials=materials, min_ct=min_ct, max_ct=max_ct, seqhashes=seqhash, ambig=ambig, count=count, frameshifts=frameshifts, debug=debug)
 		if count:
 			print(rows)
 		else:
@@ -527,7 +528,7 @@ if __name__ == "__main__":
 		if args.material:
 			args.material = [x.upper() for x in args.material]
 
-		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, with_sublineage=args.with_sublineage, zips=args.zip, dates=args.date, submission_dates=args.submission_date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
+		snr.match_genomes(include_profiles=args.include, exclude_profiles=args.exclude, accessions=args.acc, lineages=args.lineage, with_sublineage=args.with_sublineage, zips=args.zip, dates=args.date, submission_dates=args.submission_date, labs=args.lab, sources=args.source, collections=args.collection, technologies=args.technology, platforms=args.platform, chemistries=args.chemistry, software=args.software, software_version=args.version, materials=args.material, min_ct=args.min_ct, max_ct=args.max_ct, seqhash=args.seqhash, ambig=args.ambig, count=args.count, frameshifts=frameshifts, tsv=args.tsv)
 
 	# update
 	if args.tool == "update":
