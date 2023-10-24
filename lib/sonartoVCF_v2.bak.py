@@ -113,7 +113,6 @@ def calculate_AC_AN(final_df):
 
 
 def create_vcf(rows_grouped, tmp_dirname, refdescr):
-
     process_id = str(getpid())
     # print(process_id+" Start")
     # iterate over each group

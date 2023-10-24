@@ -1001,7 +1001,6 @@ if __name__ == "__main__":
 
     # add
     if args.tool == "add":
-
         # sanity check
         if not args.file and not args.cache:
             sys.exit("nothing to add.")

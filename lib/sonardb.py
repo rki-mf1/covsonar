@@ -1606,7 +1606,6 @@ class sonarDBManager:
 
     ## extra features
     def get_list_of_lineages(self, lineage):
-
         sql = (
             "SELECT DISTINCT lineage FROM genome WHERE lineage LIKE '" + lineage + "';"
         )
@@ -1719,7 +1718,6 @@ class sonarDBManager:
         count=False,
         frameshifts=0,
     ):
-
         # creating where condition
         where_clause = []
         where_vals = []

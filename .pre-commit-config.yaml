@@ -18,7 +18,7 @@ repos:
         - --keep-unused-type-checking
         - --black-line-length=79
 
--   repo: https://github.com/python/black
-    rev: 22.3.0
+-   repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 23.10.1
     hooks:
     -   id: black

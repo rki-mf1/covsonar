@@ -119,7 +119,6 @@ def calculate_AC_AN(final_df):
 
 
 def _check_variant_type(ref, alt):
-
     if len(ref) == len(alt) and len(alt) == 1:  # SNP
         return "SNP"
     elif len(ref) < len(alt) and len(alt) > 0:  # INS
@@ -191,7 +190,6 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                 # final_snp_df[group_name] = "." # init value
                 # final_indel_df[group_name] = "." # init value
                 for row in df_.itertuples():
-
                     _id = (
                         getattr(row, "ref")
                         + str(getattr(row, "start"))
@@ -208,7 +206,6 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                             index_start_postion
                         ]  # return scalar instead DF
                         if selected_row.ID == ".":  # A
-
                             final_snp_df.at[index_start_postion, "ID"] = _id
                             final_snp_df.at[index_start_postion, group_name] = "1"
                             final_snp_df.at[index_start_postion, "REF"] = getattr(
@@ -225,7 +222,6 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                             ):  # only one ID exists and just update GT of a sample
                                 final_snp_df.at[index_start_postion, group_name] = "1"
                             else:
-
                                 splited_final_id_list = selected_row.ID.split(";")
                                 totel_len = len(splited_final_id_list)
                                 for new_GT, splited_final_id in enumerate(
@@ -264,7 +260,6 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                     elif (
                         _type == "INS" or _type == "INDEL" or _type == "DEL"
                     ):  # C      or _type == 'DEL'
-
                         selected_row = final_indel_df[
                             (final_indel_df["POS"] == getattr(row, "start"))
                             & (final_indel_df["TYPE"] == _type)

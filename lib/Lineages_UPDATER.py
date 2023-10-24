@@ -19,6 +19,7 @@ import requests
 #    print("Dependency `pango_aliasor` missing, please install using `pip install pango_aliasor`")
 #    raise e
 
+
 # In covSonar 1 we will copy the class from https://github.com/corneliusroemer/pango_aliasor/blob/main/src/pango_aliasor/aliasor.py
 # but for V.2 we will switch using the package to "pip install pango_aliasor"
 class Aliasor:
