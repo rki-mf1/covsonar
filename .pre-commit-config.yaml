@@ -1,0 +1,24 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.2.0
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+        exclude_types: [csv, tsv]
+        exclude: \.(fna|fasta|fa|gff|gff3)$
+    -   id: trailing-whitespace
+        exclude_types: [csv, tsv]
+        exclude: \.(fna|fasta|fa|gff|gff3)$
+
+-   repo: https://github.com/sqlalchemyorg/zimports
+    rev: v0.4.5
+    hooks:
+    -   id: zimports
+        args:
+        - --keep-unused-type-checking
+        - --black-line-length=79
+
+-   repo: https://github.com/python/black
+    rev: 22.3.0
+    hooks:
+    -   id: black
