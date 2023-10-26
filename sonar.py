@@ -179,7 +179,6 @@ def parse_args():
         help="recursively get all sublineages from a given lineage (--lineage) (only child) ",
         action="store_true",
     )
-    # parser_match.add_argument('--recursion',  help="recursively get all sublineages of a given lineage (--lineage). this will work only if '--with-sublineage' is used",action="store_true")
     parser_match.add_argument(
         "--lineage",
         metavar="STR",
@@ -335,6 +334,11 @@ def parse_args():
     )
     parser_match.add_argument(
         "--debug", help="show database query for debugging", action="store_true"
+    )
+    parser_match.add_argument(
+        "--no-lineage-update",
+        help="do not automatically update parent-child lineage relationship information",
+        action="store_true",
     )
 
     # create the parser for the "restore" command
@@ -975,13 +979,16 @@ if __name__ == "__main__":
     else:
         debug = False
     # update-lineage-info
-    if args.tool == "update-lineage-info":
+    if args.tool == "update-lineage-info" or (
+        args.tool == "match" and args.with_sublineage and not args.no_lineage_update
+    ):
         tmp_dirname = mkdtemp(prefix=".tmp_")
         alias_key, lineage = Lineages_UPDATER.download_source(tmp_dirname)
         Lineages_UPDATER.process_lineage(alias_key, lineage, "lib/lineage.all.tsv")
         if os.path.isdir(tmp_dirname):
             shutil.rmtree(tmp_dirname)
-        sys.exit("Complete!")
+        if args.tool == "update-lineage-info":
+            sys.exit("Complete!")
 
     if not args.db is None and args.tool != "add" and not os.path.isfile(args.db):
         sys.exit("input error: database does not exist.")

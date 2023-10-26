@@ -5,6 +5,7 @@
 # We just adapt and change some parts to be used in covsonar, vocal etc.
 import json
 import os
+import sys
 
 import pandas as pd
 import requests
@@ -88,12 +89,12 @@ def download_source(tmp_dir):
     alias_key_url = "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json"
     lineag = os.path.join(tmp_dir, "lineags.csv")
     alias_key = os.path.join(tmp_dir, "alias_key.json")
-    print("Download lineages")
+    print("Download lineages", file=sys.stderr)
     url_content = requests.get(lineages_url).content
     csv_file = open(lineag, "wb")
     csv_file.write(url_content)
     csv_file.close()
-    print("Download alias_key")
+    print("Download alias_key", file=sys.stderr)
     items = requests.get(alias_key_url)
     data = items.json()
     with open(alias_key, "w") as f:
@@ -115,7 +116,7 @@ def process_lineage(alias_key_path, lineages_path, output):
     with open(alias_key_path ,'w') as nf:
         json.dump(data_dict, nf)
     """
-    print("Create all lineages")
+    print("Create all lineages", file=sys.stderr)
     aliasor = Aliasor(alias_key_path)
     df_lineages = pd.read_csv(lineages_path)
     lineages = df_lineages.lineage.unique()
@@ -127,7 +128,7 @@ def process_lineage(alias_key_path, lineages_path, output):
     uncompressed_lineages.sort(key=lts)
 
     sorted_lineages = list(map(aliasor.compress, uncompressed_lineages))
-    print("Calculate parent-child relationship")
+    print("Calculate parent-child relationship", file=sys.stderr)
     # -- Fill the sub child --
     # the current method is working, but it is not good in term of performance
     # the algoritm use 3 loops
@@ -157,7 +158,7 @@ def process_lineage(alias_key_path, lineages_path, output):
             row_dict["lineage"] = _id
             row_dict["sublineage"] = "none"
         _final_list.append(row_dict)
-    print("Write output:", output)
+    print("Write output:", output, file=sys.stderr)
     df = pd.DataFrame.from_dict(_final_list, orient="columns")
     df = df[df.lineage != ""]
     df.sort_values(by=["lineage"]).to_csv(output, sep="\t", index=False)
