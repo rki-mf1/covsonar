@@ -130,6 +130,7 @@ def parse_args():
         "remove",
         parents=[general_parser],
         help="remove genome sequences to the database.",
+        fromfile_prefix_chars="@",
     )
     parser_remove = parser_remove.add_mutually_exclusive_group()
     parser_remove.add_argument(
@@ -347,6 +348,7 @@ def parse_args():
         "restore",
         parents=[general_parser],
         help="restore sequence(s) from the database.",
+        fromfile_prefix_chars="@",
     )
     parser_restore.add_argument(
         "--acc",
@@ -370,6 +372,7 @@ def parse_args():
         "var2vcf",
         parents=[general_parser],
         help="export variants from the database to vcf format.",
+        fromfile_prefix_chars="@",
     )
     parser_var2vcf.add_argument(
         "--acc",
