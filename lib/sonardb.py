@@ -1999,7 +1999,11 @@ class sonarDBManager:
             print("query: " + sql)
             print("vals: ", where_vals)
 
-        return self.cursor.execute(sql, where_vals).fetchall()
+        cursor = self.cursor.execute(sql, where_vals)
+        column_names = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+
+        return rows, column_names
 
     # UPDATE DATA
 
@@ -3423,7 +3427,7 @@ class sonarDB(object):
             # print(include_lin)
 
             ########################
-            rows = dbm.match(
+            rows, column_names = dbm.match(
                 include_profiles,
                 exclude_profiles,
                 include_acc,
@@ -3477,9 +3481,9 @@ class sonarDB(object):
                     rows[i]["aa_profile"], self.iupac_explicit_aa_code, keep
                 )
         elif count:
-            return rows[0]["count"]
+            return rows[0]["count"], "count"
 
-        return rows
+        return rows, column_names
 
     # VALIDATION
 
@@ -3761,7 +3765,7 @@ class sonarDB(object):
                 )
 
             # frameshift checks
-            row = self.match(accessions=[acc], ambig=True, dbm=dbm)[0]
+            row = self.match(accessions=[acc], ambig=True, dbm=dbm)[0][0]
             fs = set()
             for dna_var in row["dna_profile"].split(" "):
                 if dna_var.strip() == "":
