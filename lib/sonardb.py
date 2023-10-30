@@ -2001,7 +2001,9 @@ class sonarDBManager:
 
         cursor = self.cursor.execute(sql, where_vals)
         column_names = [description[0] for description in cursor.description]
-        return cursor.fetchall(), column_names
+        rows = cursor.fetchall()
+
+        return rows, column_names
 
     # UPDATE DATA
 
@@ -3479,7 +3481,7 @@ class sonarDB(object):
                     rows[i]["aa_profile"], self.iupac_explicit_aa_code, keep
                 )
         elif count:
-            return rows[0]["count"]
+            return rows[0]["count"], "count"
 
         return rows, column_names
 
