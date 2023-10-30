@@ -732,7 +732,7 @@ class sonar:
         frameshifts=0,
         tsv=False,
     ):
-        rows = self.db.match(
+        rows, column_names = self.db.match(
             include_profiles=include_profiles,
             exclude_profiles=exclude_profiles,
             accessions=accessions,
@@ -761,7 +761,7 @@ class sonar:
         if count:
             print(rows)
         else:
-            self.rows_to_csv(rows, na="*** no match ***", tsv=tsv)
+            self.rows_to_csv(rows, column_names, na="*** no match ***", tsv=tsv)
 
     def update_metadata(
         self,
@@ -917,17 +917,14 @@ class sonar:
                 spacer = " " * (maxlen - len(field))
                 print("   " + field + " information:" + spacer, f"{c} ({p:.{2}f}%)")
 
-    def rows_to_csv(self, rows, file=None, na="*** no data ***", tsv=False):
+    def rows_to_csv(self, rows, header, file=None, na="*** no data ***", tsv=False):
         if len(rows) == 0:
             print(na, file=sys.stderr)
-        else:
-            file = sys.stdout if file is None else open(file, "w")
-            sep = "\t" if tsv else ","
-            writer = csv.DictWriter(
-                file, rows[0].keys(), delimiter=sep, lineterminator=os.linesep
-            )
-            writer.writeheader()
-            writer.writerows(rows)
+        file = sys.stdout if file is None else open(file, "w")
+        sep = "\t" if tsv else ","
+        writer = csv.DictWriter(file, header, delimiter=sep, lineterminator=os.linesep)
+        writer.writeheader()
+        writer.writerows(rows)
 
     def get_db_size(self, decimal_places=3):
         size = os.path.getsize(self.dbfile)
