@@ -153,6 +153,7 @@ def parse_args():
         "match",
         parents=[general_parser],
         help="get mutations profiles for given accessions.",
+        fromfile_prefix_chars="@",
     )
     parser_match.add_argument(
         "--include",
