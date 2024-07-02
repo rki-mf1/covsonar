@@ -163,9 +163,9 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                                 splited_final_id_list, start=1
                             ):
                                 if splited_final_id == id:  # find the exist one
-                                    final_df.at[
-                                        index_start_postion, group_name
-                                    ] = new_GT
+                                    final_df.at[index_start_postion, group_name] = (
+                                        new_GT
+                                    )
                                     break
                                 elif (
                                     totel_len == new_GT
