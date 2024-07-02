@@ -154,9 +154,9 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
         index=np.arange(1, 29904),
     )
     final_snp_df["POS"] = np.arange(1, 29904)
-    final_snp_df[
-        "#CHROM"
-    ] = refdescr  # duplicated line here did a trick for assigning the value
+    final_snp_df["#CHROM"] = (
+        refdescr  # duplicated line here did a trick for assigning the value
+    )
     final_snp_df["ID"] = "."
     final_snp_df["REF"] = "."
     final_snp_df["ALT"] = "."
@@ -294,9 +294,9 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                                     # print('index',index_postion,'test', splited_ID, _E_new_GT)
                                     if splited_ID == _id:  # Found the exist one
                                         # print('Found the exist one', splited_final_id)
-                                        final_indel_df.at[
-                                            index_postion, group_name
-                                        ] = str(_E_new_GT)
+                                        final_indel_df.at[index_postion, group_name] = (
+                                            str(_E_new_GT)
+                                        )
                                         break
                                     elif (
                                         totel_len == _E_new_GT
@@ -307,9 +307,9 @@ def create_vcf(rows_grouped, tmp_dirname, refdescr):
                                             + _id
                                         )
                                         # with new GT number
-                                        final_indel_df.at[
-                                            index_postion, group_name
-                                        ] = str(_E_new_GT + 1)
+                                        final_indel_df.at[index_postion, group_name] = (
+                                            str(_E_new_GT + 1)
+                                        )
                                         # appends new alt
                                         final_indel_df.at[index_postion, "ALT"] = (
                                             final_indel_df.at[index_postion, "ALT"]
