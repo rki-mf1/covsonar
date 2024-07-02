@@ -8,7 +8,7 @@ CWD=$(pwd)
 DIR=$(cd "$(dirname "$0")"; pwd)
 
 #conda env
-conda env create --name covsonar_ci --force --file $DIR/sonar.env.yml
+conda env create --name covsonar_ci --file $DIR/sonar.env.yml
 source $(conda info --root)/etc/profile.d/conda.sh
 set +u
 conda activate covsonar_ci
